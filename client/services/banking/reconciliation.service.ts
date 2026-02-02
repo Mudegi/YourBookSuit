@@ -314,7 +314,7 @@ export class ReconciliationService {
   ): Promise<any> {
     const bankAccount = await prisma.bankAccount.findUnique({
       where: { id: bankAccountId },
-      select: { glAccountId: true },
+      select: { glAccountId: true, currency: true },
     });
 
     if (!bankAccount?.glAccountId) {
@@ -346,13 +346,39 @@ export class ReconciliationService {
       journalDate: adjustment.transactionDate,
       referenceNumber: await JournalEntryService.generateReferenceNumber(organizationId),
       journalType: 'Adjustment',
-      currency: 'UGX', // Should come from bank account
+      currency: bankAccount.currency,
       exchangeRate: 1,
       description: `Bank Reconciliation Adjustment: ${adjustment.description}`,
       notes: `Reconciliation ID: ${reconciliationId}`,
       isReversal: false,
       reversalDate: null,
       entries,
+    });
+
+    // Track the adjustment in the reconciliation record
+    const reconciliation = await prisma.bankReconciliation.findUnique({
+      where: { id: reconciliationId },
+      select: { adjustmentEntries: true },
+    });
+
+    const existingAdjustments = (reconciliation?.adjustmentEntries as any[]) || [];
+    const newAdjustment = {
+      journalEntryId: result.id,
+      transactionNumber: result.transactionNumber,
+      date: adjustment.transactionDate,
+      type: adjustment.adjustmentType,
+      amount: adjustment.amount,
+      description: adjustment.description,
+      accountId: adjustment.accountId,
+      createdAt: new Date(),
+      createdBy: userId,
+    };
+
+    await prisma.bankReconciliation.update({
+      where: { id: reconciliationId },
+      data: {
+        adjustmentEntries: [...existingAdjustments, newAdjustment],
+      },
     });
 
     return result;
@@ -376,6 +402,7 @@ export class ReconciliationService {
     const bookBalance = bankAccount ? parseFloat(bankAccount.currentBalance.toString()) : 0;
 
     // Get deposits in transit (payments recorded but not cleared)
+    // Include all incoming payments (customer payments, refunds, etc.)
     const depositsInTransit = await prisma.payment.findMany({
       where: {
         organizationId,
@@ -384,6 +411,9 @@ export class ReconciliationService {
         paymentType: 'CUSTOMER_PAYMENT',
         paymentDate: {
           lte: statementDate,
+        },
+        amount: {
+          gt: 0, // Only positive amounts (deposits)
         },
       },
     });
@@ -394,6 +424,7 @@ export class ReconciliationService {
     );
 
     // Get outstanding checks (payments recorded but not cleared)
+    // Include all outgoing payments (vendor payments, withdrawals, etc.)
     const outstandingChecks = await prisma.payment.findMany({
       where: {
         organizationId,
@@ -402,6 +433,9 @@ export class ReconciliationService {
         paymentType: 'VENDOR_PAYMENT',
         paymentDate: {
           lte: statementDate,
+        },
+        amount: {
+          gt: 0, // Positive amounts represent outgoing funds
         },
       },
     });
@@ -412,10 +446,12 @@ export class ReconciliationService {
     );
 
     // Calculate adjusted book balance
-    // Formula: Statement Balance + Deposits in Transit - Outstanding Checks = Adjusted Book Balance
-    const adjustedBookBalance = statementBalance + depositsTotal - checksTotal;
+    // Correct Formula: Book Balance + Deposits in Transit - Outstanding Checks = Adjusted Book Balance
+    // This represents what the book balance SHOULD be once all outstanding items clear
+    const adjustedBookBalance = bookBalance + depositsTotal - checksTotal;
 
-    const difference = adjustedBookBalance - bookBalance;
+    // Difference is what needs adjustment (should match statement balance when reconciled)
+    const difference = statementBalance - adjustedBookBalance;
 
     return {
       statementBalance,
@@ -465,7 +501,14 @@ export class ReconciliationService {
       );
     }
 
-    // Update reconciliation status
+    // Generate static reconciliation report for auditors
+    const report = await this.generateReconciliationReport(
+      reconciliation,
+      summary,
+      userId
+    );
+
+    // Update reconciliation status with report
     await prisma.bankReconciliation.update({
       where: { id: reconciliationId },
       data: {
@@ -477,10 +520,106 @@ export class ReconciliationService {
         outstandingChecks: summary.outstandingChecks,
         adjustedBookBalance: summary.adjustedBookBalance,
         difference: summary.difference,
+        reconciliationReport: JSON.stringify(report),
+      },
+    });
+  }
+
+  /**
+   * Generate comprehensive reconciliation report for audit trail
+   */
+  private static async generateReconciliationReport(
+    reconciliation: any,
+    summary: ReconciliationSummary,
+    userId: string
+  ): Promise<any> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { firstName: true, lastName: true, email: true },
+    });
+
+    const clearedTransactions = await prisma.bankTransaction.findMany({
+      where: { reconciliationId: reconciliation.id },
+      select: {
+        id: true,
+        transactionDate: true,
+        amount: true,
+        description: true,
+        referenceNo: true,
+        clearedDate: true,
       },
     });
 
-    // TODO: Generate static reconciliation report for auditors
+    const clearedPayments = await prisma.payment.findMany({
+      where: { reconciliationId: reconciliation.id },
+      select: {
+        id: true,
+        paymentNumber: true,
+        paymentDate: true,
+        amount: true,
+        paymentType: true,
+        referenceNumber: true,
+        reconciledDate: true,
+      },
+    });
+
+    const adjustments = (reconciliation.adjustmentEntries as any[]) || [];
+
+    return {
+      reportId: `RECON-${reconciliation.id}`,
+      generatedAt: new Date().toISOString(),
+      generatedBy: {
+        name: `${user?.firstName} ${user?.lastName}`,
+        email: user?.email,
+      },
+      bankAccount: {
+        name: reconciliation.bankAccount.accountName,
+        number: reconciliation.bankAccount.accountNumber,
+        currency: reconciliation.bankAccount.currency,
+      },
+      period: {
+        statementDate: reconciliation.statementDate,
+        finalizedAt: new Date().toISOString(),
+      },
+      balances: {
+        statementBalance: summary.statementBalance,
+        bookBalance: summary.bookBalance,
+        depositsInTransit: summary.depositsInTransit,
+        outstandingChecks: summary.outstandingChecks,
+        adjustedBookBalance: summary.adjustedBookBalance,
+        difference: summary.difference,
+        isBalanced: summary.isBalanced,
+      },
+      clearedItems: {
+        transactions: clearedTransactions.length,
+        payments: clearedPayments.length,
+        totalTransactionAmount: clearedTransactions.reduce(
+          (sum, t) => sum + parseFloat(t.amount.toString()),
+          0
+        ),
+        totalPaymentAmount: clearedPayments.reduce(
+          (sum, p) => sum + parseFloat(p.amount.toString()),
+          0
+        ),
+      },
+      adjustments: {
+        count: adjustments.length,
+        totalAmount: adjustments.reduce((sum, a) => sum + a.amount, 0),
+        entries: adjustments.map((a) => ({
+          type: a.type,
+          amount: a.amount,
+          description: a.description,
+          transactionNumber: a.transactionNumber,
+          date: a.date,
+        })),
+      },
+      auditTrail: {
+        status: 'FINALIZED',
+        locked: true,
+        message:
+          'This reconciliation is finalized and locked. No further changes can be made to the cleared transactions.',
+      },
+    };
   }
 
   /**
@@ -528,6 +667,126 @@ export class ReconciliationService {
           matchedPaymentId: null,
         },
       });
+    });
+  }
+
+  /**
+   * Calculate and post realized exchange gain/loss for cross-currency reconciliation
+   * This is called when matching a payment in one currency with a bank transaction in another
+   */
+  static async calculateAndPostExchangeGainLoss(
+    organizationId: string,
+    userId: string,
+    payment: {
+      id: string;
+      amount: number;
+      currency: string;
+      exchangeRate: number;
+    },
+    bankTransaction: {
+      id: string;
+      amount: number;
+      currency: string;
+    },
+    reconciliationId: string
+  ): Promise<void> {
+    // Only process if currencies differ
+    if (payment.currency === bankTransaction.currency) {
+      return;
+    }
+
+    // Calculate amounts in base currency (payment's original currency)
+    const paymentBaseAmount = payment.amount; // Already in base currency
+    const bankActualAmount = Math.abs(bankTransaction.amount);
+
+    // If payment was in foreign currency, convert it to what it SHOULD have been
+    // based on the actual bank transaction amount
+    const expectedBaseAmount = paymentBaseAmount;
+    const actualBaseAmount = bankActualAmount;
+
+    // Calculate realized gain/loss
+    const gainLoss = actualBaseAmount - expectedBaseAmount;
+
+    // Skip if difference is negligible (less than 0.01)
+    if (Math.abs(gainLoss) < 0.01) {
+      return;
+    }
+
+    // Get FX gain/loss accounts from chart of accounts
+    // Look for accounts with names containing "Exchange Gain" or "Exchange Loss"
+    const fxGainAccount = await prisma.chartOfAccount.findFirst({
+      where: {
+        organizationId,
+        accountName: { contains: 'Exchange Gain', mode: 'insensitive' },
+        accountType: 'REVENUE',
+      },
+    });
+
+    const fxLossAccount = await prisma.chartOfAccount.findFirst({
+      where: {
+        organizationId,
+        accountName: { contains: 'Exchange Loss', mode: 'insensitive' },
+        accountType: 'EXPENSE',
+      },
+    });
+
+    if (!fxGainAccount || !fxLossAccount) {
+      console.warn(
+        'FX Gain/Loss accounts not found in chart of accounts. Please create accounts named "Exchange Gain" (Revenue) and "Exchange Loss" (Expense). Skipping exchange difference posting.'
+      );
+      return;
+    }
+
+    // Determine if it's a gain or loss
+    const isGain = gainLoss > 0;
+    const fxAmount = Math.abs(gainLoss);
+    const fxAccountId = isGain ? fxGainAccount.id : fxLossAccount.id;
+
+    // Get bank account's GL account for the offsetting entry
+    const payment_record = await prisma.payment.findUnique({
+      where: { id: payment.id },
+      include: {
+        bankAccount: {
+          select: { glAccountId: true },
+        },
+      },
+    });
+
+    if (!payment_record?.bankAccount?.glAccountId) {
+      throw new Error('Bank account not linked to GL account');
+    }
+
+    const bankGLAccountId = payment_record.bankAccount.glAccountId;
+
+    // Create journal entry for realized FX gain/loss
+    const entries = [
+      {
+        accountId: isGain ? bankGLAccountId : fxAccountId,
+        entryType: 'DEBIT' as const,
+        amount: fxAmount,
+        description: `Realized FX ${isGain ? 'Gain' : 'Loss'} on reconciliation`,
+      },
+      {
+        accountId: isGain ? fxAccountId : bankGLAccountId,
+        entryType: 'CREDIT' as const,
+        amount: fxAmount,
+        description: `Realized FX ${isGain ? 'Gain' : 'Loss'} on reconciliation`,
+      },
+    ];
+
+    await JournalEntryService.createJournalEntry({
+      organizationId,
+      userId,
+      journalDate: new Date(),
+      referenceNumber: await JournalEntryService.generateReferenceNumber(organizationId),
+      journalType: 'FX Adjustment',
+      currency: payment.currency,
+      exchangeRate: 1,
+      description: `Realized Exchange ${isGain ? 'Gain' : 'Loss'} - Reconciliation ${reconciliationId}`,
+      notes: `Payment ${payment.id} vs Bank Transaction ${bankTransaction.id}. Expected: ${expectedBaseAmount}, Actual: ${actualBaseAmount}, Difference: ${gainLoss}`,
+      isReversal: false,
+      reversalDate: null,
+      entries,
     });
   }
 }

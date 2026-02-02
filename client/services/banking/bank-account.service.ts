@@ -41,7 +41,7 @@ export class BankAccountService {
    */
   async createBankAccount(input: CreateBankAccountInput) {
     // Validate the chart of accounts account exists and is ASSET type
-    const account = await prisma.account.findUnique({
+    const account = await prisma.chartOfAccount.findUnique({
       where: { id: input.accountId },
     });
 
@@ -60,7 +60,7 @@ export class BankAccountService {
     // Check if account is already linked to another bank account
     const existingBankAccount = await prisma.bankAccount.findFirst({
       where: {
-        accountId: input.accountId,
+        glAccountId: input.accountId,
         organizationId: input.organizationId,
       },
     });
@@ -86,19 +86,16 @@ export class BankAccountService {
     const bankAccount = await prisma.bankAccount.create({
       data: {
         organizationId: input.organizationId,
-        accountId: input.accountId,
+        glAccountId: input.accountId,
+        accountName: account.accountName,
         bankName: input.bankName,
         accountNumber: input.accountNumber,
         accountType: input.accountType,
         routingNumber: input.routingNumber || null,
         currency: input.currency || 'USD',
         currentBalance: 0, // Will be calculated from ledger entries
+        openingBalance: 0,
         isActive: input.isActive !== undefined ? input.isActive : true,
-        lastReconciledDate: null,
-        lastReconciledBalance: null,
-      },
-      include: {
-        account: true,
       },
     });
 
@@ -145,9 +142,6 @@ export class BankAccountService {
     const updatedBankAccount = await prisma.bankAccount.update({
       where: { id },
       data: input,
-      include: {
-        account: true,
-      },
     });
 
     return updatedBankAccount;
@@ -162,8 +156,6 @@ export class BankAccountService {
       where: { id },
       include: {
         payments: true,
-        bankTransfersFrom: true,
-        bankTransfersTo: true,
       },
     });
 
@@ -175,14 +167,10 @@ export class BankAccountService {
       throw new Error('Bank account does not belong to this organization');
     }
 
-    // Prevent deletion if there are payments or transfers
-    if (
-      bankAccount.payments.length > 0 ||
-      bankAccount.bankTransfersFrom.length > 0 ||
-      bankAccount.bankTransfersTo.length > 0
-    ) {
+    // Prevent deletion if there are payments
+    if (bankAccount.payments.length > 0) {
       throw new Error(
-        'Cannot delete bank account with existing payments or transfers. Consider marking it as inactive instead.'
+        'Cannot delete bank account with existing payments. Consider marking it as inactive instead.'
       );
     }
 
@@ -235,7 +223,6 @@ export class BankAccountService {
     // Validate from account
     const fromBankAccount = await prisma.bankAccount.findUnique({
       where: { id: input.fromAccountId },
-      include: { account: true },
     });
 
     if (!fromBankAccount) {
@@ -253,7 +240,6 @@ export class BankAccountService {
     // Validate to account
     const toBankAccount = await prisma.bankAccount.findUnique({
       where: { id: input.toAccountId },
-      include: { account: true },
     });
 
     if (!toBankAccount) {
@@ -279,7 +265,7 @@ export class BankAccountService {
     }
 
     // Check if from account has sufficient balance
-    const fromBalance = await this.getBankAccountBalance(fromBankAccount.accountId);
+    const fromBalance = await this.getBankAccountBalance(fromBankAccount.glAccountId);
     if (fromBalance < input.amount) {
       throw new Error(
         `Insufficient balance in source account. Available: ${fromBalance.toFixed(2)}, Required: ${input.amount.toFixed(2)}`
@@ -291,13 +277,13 @@ export class BankAccountService {
     // CR: From Account (decrease source bank account)
     const entries = [
       {
-        accountId: toBankAccount.accountId,
+        accountId: toBankAccount.glAccountId,
         debit: input.amount,
         credit: 0,
         description: `Transfer from ${fromBankAccount.bankName} ${fromBankAccount.accountNumber}`,
       },
       {
-        accountId: fromBankAccount.accountId,
+        accountId: fromBankAccount.glAccountId,
         debit: 0,
         credit: input.amount,
         description: `Transfer to ${toBankAccount.bankName} ${toBankAccount.accountNumber}`,
@@ -365,7 +351,16 @@ export class BankAccountService {
       throw new Error('Bank account not found');
     }
 
-    const balance = await this.getBankAccountBalance(bankAccount.accountId);
+    if (!bankAccount.glAccountId) {
+      // If no GL account is linked, set balance to 0
+      await prisma.bankAccount.update({
+        where: { id: bankAccountId },
+        data: { currentBalance: 0 },
+      });
+      return;
+    }
+
+    const balance = await this.getBankAccountBalance(bankAccount.glAccountId);
 
     await prisma.bankAccount.update({
       where: { id: bankAccountId },
@@ -387,18 +382,17 @@ export class BankAccountService {
 
     const bankAccounts = await prisma.bankAccount.findMany({
       where: whereClause,
-      include: {
-        account: true,
-      },
       orderBy: [{ isActive: 'desc' }, { bankName: 'asc' }],
     });
 
     // Update balances for each account
     const accountsWithBalances = await Promise.all(
-      bankAccounts.map(async (account) => {
-        const balance = await this.getBankAccountBalance(account.accountId);
+      bankAccounts.map(async (bankAcct) => {
+        const balance = bankAcct.glAccountId 
+          ? await this.getBankAccountBalance(bankAcct.glAccountId)
+          : 0;
         return {
-          ...account,
+          ...bankAcct,
           currentBalance: balance,
         };
       })
@@ -413,9 +407,6 @@ export class BankAccountService {
   async getBankAccountById(id: string, organizationId: string) {
     const bankAccount = await prisma.bankAccount.findUnique({
       where: { id },
-      include: {
-        account: true,
-      },
     });
 
     if (!bankAccount) {
@@ -448,7 +439,7 @@ export class BankAccountService {
     const bankAccount = await this.getBankAccountById(bankAccountId, organizationId);
 
     const whereClause: any = {
-      accountId: bankAccount.accountId,
+      accountId: bankAccount.glAccountId,
       transaction: {
         status: 'POSTED',
       },

@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   AlertCircle,
   ArrowLeftRight,
+  ArrowLeft,
   Plus,
   FileText,
   Lock,
@@ -100,9 +101,21 @@ export default function BankReconciliationPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  
+  // Adjustment modal state
+  const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
+  const [adjustmentData, setAdjustmentData] = useState({
+    transactionDate: new Date().toISOString().split('T')[0],
+    amount: '',
+    description: '',
+    accountId: '',
+    adjustmentType: 'FEE' as 'FEE' | 'INTEREST' | 'WHT' | 'OTHER',
+  });
+  const [expenseAccounts, setExpenseAccounts] = useState<any[]>([]);
 
   useEffect(() => {
     loadAccounts();
+    loadExpenseAccounts();
     if (reconciliationId) {
       loadReconciliation(reconciliationId);
     }
@@ -110,13 +123,44 @@ export default function BankReconciliationPage() {
 
   const loadAccounts = async () => {
     try {
-      const response = await fetch(`/api/orgs/${orgSlug}/banking/accounts`);
+      console.log('[DEBUG] Fetching bank accounts from:', `/api/orgs/${orgSlug}/bank-accounts`);
+      const response = await fetch(`/api/orgs/${orgSlug}/bank-accounts`);
       const data = await response.json();
-      if (data.success) {
-        setAccounts(data.data || []);
+      console.log('[DEBUG] Bank accounts API response:', data);
+      console.log('[DEBUG] Accounts found:', data.bankAccounts?.length || 0);
+      
+      // API returns { bankAccounts: [...], stats: {...} }
+      if (data.bankAccounts) {
+        console.log('[DEBUG] Setting accounts from data.bankAccounts');
+        setAccounts(data.bankAccounts);
+      } else if (data.success && data.data) {
+        console.log('[DEBUG] Setting accounts from data.data');
+        setAccounts(data.data);
+      } else {
+        console.log('[DEBUG] No accounts found in response');
       }
     } catch (error) {
-      console.error('Error loading accounts:', error);
+      console.error('[ERROR] Error loading accounts:', error);
+    } finally {
+      console.log('[DEBUG] Setting loading to false');
+      setLoading(false);
+    }
+  };
+
+  const loadExpenseAccounts = async () => {
+    try {
+      const response = await fetch(`/api/orgs/${orgSlug}/chart-of-accounts?type=EXPENSE`);
+      const data = await response.json();
+      console.log('Expense accounts response:', data);
+      
+      // API returns { success: true, data: [...] }
+      if (data.success && data.data) {
+        setExpenseAccounts(data.data);
+      } else if (data.accounts) {
+        setExpenseAccounts(data.accounts);
+      }
+    } catch (error) {
+      console.error('Error loading expense accounts:', error);
     }
   };
 
@@ -138,6 +182,18 @@ export default function BankReconciliationPage() {
       setError('Failed to load reconciliation');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCancel = () => {
+    router.push(`/${orgSlug}/banking/accounts`);
+  };
+
+  const handleCancelReconciliation = async () => {
+    if (!reconciliation) return;
+    
+    if (confirm('Are you sure you want to cancel this reconciliation? All unmatched transactions will remain unreconciled.')) {
+      router.push(`/${orgSlug}/banking/accounts`);
     }
   };
 
@@ -267,6 +323,46 @@ export default function BankReconciliationPage() {
     }
   };
 
+  const createAdjustment = async () => {
+    if (!reconciliation || !adjustmentData.amount || !adjustmentData.accountId) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `/api/orgs/${orgSlug}/banking/reconciliation/${reconciliation.id}/adjustment`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...adjustmentData,
+            bankAccountId: reconciliation.bankAccountId,
+          }),
+        }
+      );
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setSuccess(`Adjustment created: ${adjustmentData.description}`);
+        setShowAdjustmentModal(false);
+        setAdjustmentData({
+          transactionDate: new Date().toISOString().split('T')[0],
+          amount: '',
+          description: '',
+          accountId: '',
+          adjustmentType: 'FEE',
+        });
+        loadReconciliation(reconciliation.id);
+      } else {
+        setError(data.error || 'Failed to create adjustment');
+      }
+    } catch (error) {
+      setError('Failed to create adjustment');
+    }
+  };
+
   // Render reconciliation header
   const renderHeader = () => {
     if (!reconciliation) {
@@ -283,10 +379,10 @@ export default function BankReconciliationPage() {
                 value={selectedAccountId}
                 onChange={(e) => setSelectedAccountId(e.target.value)}
               >
-                <option value="">-- Select Account --</option>
+                <option value="">-- Select Account ({accounts.length} available) --</option>
                 {accounts.map((account) => (
                   <option key={account.id} value={account.id}>
-                    {account.bankName} - {account.accountNumber}
+                    {account.accountName || account.bankName} - ****{account.accountNumber.slice(-4)}
                   </option>
                 ))}
               </select>
@@ -316,7 +412,13 @@ export default function BankReconciliationPage() {
               />
             </div>
           </div>
-          <div className="mt-4">
+          <div className="mt-4 flex space-x-3">
+            <button
+              onClick={handleCancel}
+              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+            >
+              Cancel
+            </button>
             <button
               onClick={startReconciliation}
               disabled={loading}
@@ -338,17 +440,26 @@ export default function BankReconciliationPage() {
               Statement Date: {new Date(reconciliation.statementDate).toLocaleDateString()}
             </p>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-3">
             {reconciliation.status === 'FINALIZED' ? (
               <div className="flex items-center px-4 py-2 bg-green-500 rounded-lg">
                 <Lock className="h-5 w-5 mr-2" />
                 <span className="font-semibold">FINALIZED</span>
               </div>
             ) : (
-              <div className="flex items-center px-4 py-2 bg-yellow-500 rounded-lg text-gray-900">
-                <AlertCircle className="h-5 w-5 mr-2" />
-                <span className="font-semibold">IN PROGRESS</span>
-              </div>
+              <>
+                <button
+                  onClick={handleCancelReconciliation}
+                  className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 flex items-center"
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Cancel Reconciliation
+                </button>
+                <div className="flex items-center px-4 py-2 bg-yellow-500 rounded-lg text-gray-900">
+                  <AlertCircle className="h-5 w-5 mr-2" />
+                  <span className="font-semibold">IN PROGRESS</span>
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -399,9 +510,20 @@ export default function BankReconciliationPage() {
   return (
     <div className="space-y-6">
       {/* Page Title */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Bank Reconciliation</h1>
-        <p className="text-gray-600 mt-1">The Truth Filter - Match your books with actual bank statements</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => router.push(`/${orgSlug}/banking/accounts`)}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Back to Bank Accounts"
+            >
+              <ArrowLeft className="h-6 w-6 text-gray-600" />
+            </button>
+            <h1 className="text-3xl font-bold text-gray-900">Bank Reconciliation</h1>
+          </div>
+          <p className="text-gray-600 mt-1 ml-14">The Truth Filter - Match your books with actual bank statements</p>
+        </div>
       </div>
 
       {/* Alerts */}
@@ -441,6 +563,14 @@ export default function BankReconciliationPage() {
               >
                 <Sparkles className="h-4 w-4 mr-2" />
                 Auto-Match ({matchSuggestions.filter((s) => s.confidenceScore >= 80).length})
+              </button>
+              <button
+                onClick={() => setShowAdjustmentModal(true)}
+                disabled={reconciliation.status === 'FINALIZED'}
+                className="flex items-center px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Quick Adjust
               </button>
             </div>
             <div className="flex items-center space-x-4">
@@ -584,6 +714,142 @@ export default function BankReconciliationPage() {
               </div>
             </div>
           </div>
+
+          {/* Quick Adjustment Modal */}
+          {showAdjustmentModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold text-gray-900">Quick Adjustment</h3>
+                  <button
+                    onClick={() => setShowAdjustmentModal(false)}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <p className="text-sm text-gray-600 mb-4">
+                  Record bank charges, interest income, or withholding tax that appears on the statement but isn't in your books.
+                </p>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Adjustment Type
+                    </label>
+                    <select
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                      value={adjustmentData.adjustmentType}
+                      onChange={(e) =>
+                        setAdjustmentData({
+                          ...adjustmentData,
+                          adjustmentType: e.target.value as any,
+                        })
+                      }
+                    >
+                      <option value="FEE">Bank Fee/Charge</option>
+                      <option value="INTEREST">Interest Income</option>
+                      <option value="WHT">Withholding Tax (WHT)</option>
+                      <option value="OTHER">Other Adjustment</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Date
+                    </label>
+                    <input
+                      type="date"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                      value={adjustmentData.transactionDate}
+                      onChange={(e) =>
+                        setAdjustmentData({
+                          ...adjustmentData,
+                          transactionDate: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Amount
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                      value={adjustmentData.amount}
+                      onChange={(e) =>
+                        setAdjustmentData({
+                          ...adjustmentData,
+                          amount: e.target.value,
+                        })
+                      }
+                      placeholder="0.00"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Expense Account
+                    </label>
+                    <select
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                      value={adjustmentData.accountId}
+                      onChange={(e) =>
+                        setAdjustmentData({
+                          ...adjustmentData,
+                          accountId: e.target.value,
+                        })
+                      }
+                    >
+                      <option value="">-- Select Account --</option>
+                      {expenseAccounts.map((account) => (
+                        <option key={account.id} value={account.id}>
+                          {account.accountCode} - {account.accountName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Description
+                    </label>
+                    <textarea
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                      rows={3}
+                      value={adjustmentData.description}
+                      onChange={(e) =>
+                        setAdjustmentData({
+                          ...adjustmentData,
+                          description: e.target.value,
+                        })
+                      }
+                      placeholder="Enter description..."
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end space-x-3 mt-6">
+                  <button
+                    onClick={() => setShowAdjustmentModal(false)}
+                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={createAdjustment}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    Create Adjustment
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

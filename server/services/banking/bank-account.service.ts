@@ -41,7 +41,7 @@ export class BankAccountService {
    */
   async createBankAccount(input: CreateBankAccountInput) {
     // Validate the chart of accounts account exists and is ASSET type
-    const account = await prisma.account.findUnique({
+    const account = await prisma.chartOfAccount.findUnique({
       where: { id: input.accountId },
     });
 
@@ -60,7 +60,7 @@ export class BankAccountService {
     // Check if account is already linked to another bank account
     const existingBankAccount = await prisma.bankAccount.findFirst({
       where: {
-        accountId: input.accountId,
+        glAccountId: input.accountId,
         organizationId: input.organizationId,
       },
     });
@@ -86,16 +86,16 @@ export class BankAccountService {
     const bankAccount = await prisma.bankAccount.create({
       data: {
         organizationId: input.organizationId,
-        accountId: input.accountId,
+        glAccountId: input.accountId,
+        accountName: account.accountName,
         bankName: input.bankName,
         accountNumber: input.accountNumber,
         accountType: input.accountType,
         routingNumber: input.routingNumber || null,
         currency: input.currency || 'USD',
         currentBalance: 0, // Will be calculated from ledger entries
+        openingBalance: 0,
         isActive: input.isActive !== undefined ? input.isActive : true,
-        lastReconciledDate: null,
-        lastReconciledBalance: null,
       },
       include: {
         account: true,
@@ -279,7 +279,7 @@ export class BankAccountService {
     }
 
     // Check if from account has sufficient balance
-    const fromBalance = await this.getBankAccountBalance(fromBankAccount.accountId);
+    const fromBalance = await this.getBankAccountBalance(fromBankAccount.glAccountId);
     if (fromBalance < input.amount) {
       throw new Error(
         `Insufficient balance in source account. Available: ${fromBalance.toFixed(2)}, Required: ${input.amount.toFixed(2)}`
@@ -291,13 +291,13 @@ export class BankAccountService {
     // CR: From Account (decrease source bank account)
     const entries = [
       {
-        accountId: toBankAccount.accountId,
+        accountId: toBankAccount.glAccountId,
         debit: input.amount,
         credit: 0,
         description: `Transfer from ${fromBankAccount.bankName} ${fromBankAccount.accountNumber}`,
       },
       {
-        accountId: fromBankAccount.accountId,
+        accountId: fromBankAccount.glAccountId,
         debit: 0,
         credit: input.amount,
         description: `Transfer to ${toBankAccount.bankName} ${toBankAccount.accountNumber}`,
@@ -365,7 +365,16 @@ export class BankAccountService {
       throw new Error('Bank account not found');
     }
 
-    const balance = await this.getBankAccountBalance(bankAccount.accountId);
+    if (!bankAccount.glAccountId) {
+      // If no GL account is linked, set balance to 0
+      await prisma.bankAccount.update({
+        where: { id: bankAccountId },
+        data: { currentBalance: 0 },
+      });
+      return;
+    }
+
+    const balance = await this.getBankAccountBalance(bankAccount.glAccountId);
 
     await prisma.bankAccount.update({
       where: { id: bankAccountId },
@@ -396,7 +405,9 @@ export class BankAccountService {
     // Update balances for each account
     const accountsWithBalances = await Promise.all(
       bankAccounts.map(async (account) => {
-        const balance = await this.getBankAccountBalance(account.accountId);
+        const balance = bankAcct.glAccountId 
+          ? await this.getBankAccountBalance(bankAcct.glAccountId)
+          : 0;
         return {
           ...account,
           currentBalance: balance,
@@ -427,7 +438,7 @@ export class BankAccountService {
     }
 
     // Get current balance
-    const balance = await this.getBankAccountBalance(bankAccount.accountId);
+    const balance = await this.getBankAccountBalance(bankAccount.glAccountId);
 
     return {
       ...bankAccount,
@@ -448,7 +459,7 @@ export class BankAccountService {
     const bankAccount = await this.getBankAccountById(bankAccountId, organizationId);
 
     const whereClause: any = {
-      accountId: bankAccount.accountId,
+      accountId: bankAccount.glAccountId,
       transaction: {
         status: 'POSTED',
       },

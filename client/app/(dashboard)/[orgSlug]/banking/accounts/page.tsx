@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useOrganization } from '@/hooks/useOrganization';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
@@ -10,7 +11,6 @@ import Loading from '@/components/ui/loading';
 import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select } from '@/components/ui/select';
 
 interface Account {
   id: string;
@@ -30,7 +30,7 @@ interface BankAccount {
   isActive: boolean;
   lastReconciledDate: string | null;
   lastReconciledBalance: number | null;
-  account: Account;
+  glAccountId: string | null;
 }
 
 interface Stats {
@@ -43,6 +43,7 @@ export default function BankAccountsPage() {
   const params = useParams();
   const router = useRouter();
   const orgSlug = params.orgSlug as string;
+  const { organization, currency } = useOrganization();
 
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [stats, setStats] = useState<Stats>({ totalAccounts: 0, activeAccounts: 0, totalBalance: 0 });
@@ -83,9 +84,21 @@ export default function BankAccountsPage() {
       const accountsData = await accountsResponse.json();
       const coaData = await coaResponse.json();
 
+      console.log('=== FETCH DATA DEBUG ===');
+      console.log('COA Response:', coaData);
+      console.log('COA Data field:', coaData.data);
+      console.log('COA Accounts field:', coaData.accounts);
+      const accounts = coaData.data || coaData.accounts || [];
+      console.log('Final accounts array:', accounts);
+      console.log('Accounts length:', accounts.length);
+
       setBankAccounts(accountsData.bankAccounts);
       setStats(accountsData.stats);
-      setChartOfAccounts(coaData.accounts || []);
+      setChartOfAccounts(accounts);
+      
+      console.log('Chart of Accounts loaded:', accounts.length, 'accounts');
+      console.log('Organization currency from hook:', currency);
+      console.log('Sample accounts:', accounts.slice(0, 3));
     } catch (err) {
       setError('Failed to load bank accounts');
       console.error(err);
@@ -103,7 +116,7 @@ export default function BankAccountsPage() {
       accountNumber: '',
       accountType: 'CHECKING',
       routingNumber: '',
-      currency: 'USD',
+      currency: currency || 'USD',
       isActive: true,
     });
     setShowModal(true);
@@ -113,7 +126,7 @@ export default function BankAccountsPage() {
     setIsEditing(true);
     setEditingId(account.id);
     setFormData({
-      accountId: account.account.id,
+      accountId: account.glAccountId || '',
       bankName: account.bankName,
       accountNumber: account.accountNumber,
       accountType: account.accountType,
@@ -270,8 +283,10 @@ export default function BankAccountsPage() {
 
       {/* Bank Accounts Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {bankAccounts.map((account) => (
-          <Card key={account.id} className={!account.isActive ? 'opacity-60' : ''}>
+        {bankAccounts.map((account) => {
+          const glAccount = chartOfAccounts.find(coa => coa.id === account.glAccountId);
+          return (
+            <Card key={account.id} className={!account.isActive ? 'opacity-60' : ''}>
             <CardHeader>
               <div className="flex justify-between items-start">
                 <div>
@@ -303,15 +318,17 @@ export default function BankAccountsPage() {
                   </div>
                 )}
 
-                <div>
-                  <p className="text-xs text-gray-600">GL Account</p>
-                  <Link
-                    href={`/${orgSlug}/general-ledger/chart-of-accounts/${account.account.id}`}
-                    className="text-sm text-blue-600 hover:underline"
-                  >
-                    {account.account.code} - {account.account.name}
-                  </Link>
-                </div>
+                {glAccount && (
+                  <div>
+                    <p className="text-xs text-gray-600">GL Account</p>
+                    <Link
+                      href={`/${orgSlug}/general-ledger/chart-of-accounts/${glAccount.id}`}
+                      className="text-sm text-blue-600 hover:underline"
+                    >
+                      {glAccount.code} - {glAccount.name}
+                    </Link>
+                  </div>
+                )}
 
                 <div className="pt-3 border-t">
                   <p className="text-xs text-gray-600">Current Balance</p>
@@ -353,7 +370,8 @@ export default function BankAccountsPage() {
               </div>
             </CardContent>
           </Card>
-        ))}
+        );
+        })}
       </div>
 
       {bankAccounts.length === 0 && (
@@ -375,22 +393,30 @@ export default function BankAccountsPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <Label htmlFor="accountId">Chart of Accounts *</Label>
-            <Select
+            {chartOfAccounts.length === 0 && (
+              <p className="text-xs text-red-600 mb-2">No accounts loaded. Total in state: {chartOfAccounts.length}</p>
+            )}
+            <select
               id="accountId"
               value={formData.accountId}
               onChange={(e) => setFormData({ ...formData, accountId: e.target.value })}
               required
               disabled={isEditing}
+              className="flex h-10 w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <option value="">Select GL Account...</option>
-              {chartOfAccounts
-                .filter((acc) => acc.code.startsWith('1') && !acc.code.startsWith('12'))
-                .map((account) => (
+              <option value="">Select GL Account... (Total: {chartOfAccounts.length})</option>
+              {(() => {
+                const filtered = chartOfAccounts.filter((acc) => 
+                  acc.code.startsWith('1') && !acc.code.startsWith('12')
+                );
+                console.log('Filtered bank accounts:', filtered.length, 'out of', chartOfAccounts.length);
+                return filtered.map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.code} - {account.name}
                   </option>
-                ))}
-            </Select>
+                ));
+              })()}
+            </select>
             <p className="text-xs text-gray-600 mt-1">
               Bank/Cash accounts only (excludes Accounts Receivable)
             </p>
@@ -410,18 +436,19 @@ export default function BankAccountsPage() {
 
             <div>
               <Label htmlFor="accountType">Account Type *</Label>
-              <Select
+              <select
                 id="accountType"
                 value={formData.accountType}
                 onChange={(e) => setFormData({ ...formData, accountType: e.target.value })}
                 required
+                className="flex h-10 w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="CHECKING">Checking</option>
                 <option value="SAVINGS">Savings</option>
                 <option value="MONEY_MARKET">Money Market</option>
                 <option value="CREDIT_CARD">Credit Card</option>
                 <option value="OTHER">Other</option>
-              </Select>
+              </select>
             </div>
           </div>
 
@@ -454,31 +481,44 @@ export default function BankAccountsPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="currency">Currency</Label>
-              <Select
+              <Label htmlFor="currency">Currency (Org default: {currency || 'USD'})</Label>
+              <select
                 id="currency"
                 value={formData.currency}
                 onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
+                className="flex h-10 w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
+                <option value="UGX">UGX - Uganda Shilling</option>
                 <option value="USD">USD - US Dollar</option>
                 <option value="EUR">EUR - Euro</option>
                 <option value="GBP">GBP - British Pound</option>
                 <option value="CAD">CAD - Canadian Dollar</option>
-              </Select>
+                <option value="KES">KES - Kenyan Shilling</option>
+                <option value="TZS">TZS - Tanzanian Shilling</option>
+                <option value="ZAR">ZAR - South African Rand</option>
+                <option value="NGN">NGN - Nigerian Naira</option>
+                <option value="GHS">GHS - Ghanaian Cedi</option>
+                <option value="RWF">RWF - Rwandan Franc</option>
+                <option value="JPY">JPY - Japanese Yen</option>
+                <option value="CNY">CNY - Chinese Yuan</option>
+                <option value="INR">INR - Indian Rupee</option>
+                <option value="AUD">AUD - Australian Dollar</option>
+              </select>
             </div>
 
             <div>
               <Label htmlFor="isActive">Status</Label>
-              <Select
+              <select
                 id="isActive"
                 value={formData.isActive ? 'true' : 'false'}
                 onChange={(e) =>
                   setFormData({ ...formData, isActive: e.target.value === 'true' })
                 }
+                className="flex h-10 w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="true">Active</option>
                 <option value="false">Inactive</option>
-              </Select>
+              </select>
             </div>
           </div>
 

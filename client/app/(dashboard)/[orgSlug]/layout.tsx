@@ -272,6 +272,7 @@ export default function DashboardLayout({
         { name: 'Banking', href: `/${orgSlug}/banking/accounts` },
         { name: 'Bank Feeds', href: `/${orgSlug}/bank-feeds` },
         { name: 'Reconciliation', href: `/${orgSlug}/banking/reconciliation` },
+        { name: 'Expenses', href: `/${orgSlug}/expenses` },
         { name: 'All Payments', href: `/${orgSlug}/payments` },
         { name: 'Chart of Accounts', href: `/${orgSlug}/general-ledger/chart-of-accounts` },
         { name: 'Journal Entries', href: `/${orgSlug}/general-ledger/journal-entries/list` },
@@ -621,6 +622,7 @@ export default function DashboardLayout({
                       <div className="p-4">
                         <h3 className="font-semibold text-gray-900 text-sm mb-3">Other</h3>
                         <div className="space-y-1">
+                          <button onClick={() => { setCreateMenuOpen(false); window.location.href = `/${orgSlug}/expenses/new`; }} className="w-full text-left block px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-md transition-colors">Record expense</button>
                           <button onClick={() => { setCreateMenuOpen(false); window.location.href = `/${orgSlug}/tasks/new`; }} className="w-full text-left block px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-md transition-colors">Task</button>
                           <button onClick={() => { setCreateMenuOpen(false); window.location.href = `/${orgSlug}/banking/deposits/new`; }} className="w-full text-left block px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-md transition-colors">Bank deposit</button>
                           <button onClick={() => { setCreateMenuOpen(false); window.location.href = `/${orgSlug}/banking/transfers/new`; }} className="w-full text-left block px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 rounded-md transition-colors">Transfer</button>

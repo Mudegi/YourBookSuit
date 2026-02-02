@@ -14,8 +14,17 @@ export interface CurrencyFormatOptions {
  */
 export function formatCurrency(
   amount: number | string | null | undefined,
-  options: CurrencyFormatOptions = {}
+  currencyOrOptions?: string | CurrencyFormatOptions
 ): string {
+  // Handle second parameter - can be string (currency code) or options object
+  let options: CurrencyFormatOptions = {};
+  
+  if (typeof currencyOrOptions === 'string') {
+    options = { currency: currencyOrOptions };
+  } else if (currencyOrOptions) {
+    options = currencyOrOptions;
+  }
+  
   const {
     currency = 'USD',
     locale = 'en-US',
