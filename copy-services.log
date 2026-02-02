@@ -1,0 +1,40 @@
+
+-------------------------------------------------------------------------------
+   ROBOCOPY     ::     Robust File Copy for Windows                              
+-------------------------------------------------------------------------------
+
+  Started : Thursday, January 29, 2026 4:44:44 PM
+   Source : D:\BOOKKEEPING\YourBooks\server\services\
+     Dest : D:\BOOKKEEPING\server\services\
+
+    Files : *.*
+	    
+  Options : *.* /S /E /DCOPY:DA /COPY:DAT /NP /XO /R:0 /W:0 
+
+------------------------------------------------------------------------------
+
+	                   7	D:\BOOKKEEPING\YourBooks\server\services\
+	                   3	D:\BOOKKEEPING\YourBooks\server\services\accounting\
+	                   1	D:\BOOKKEEPING\YourBooks\server\services\accounts-payable\
+	                   1	D:\BOOKKEEPING\YourBooks\server\services\accounts-receivable\
+	                   1	D:\BOOKKEEPING\YourBooks\server\services\ar\
+	                   1	D:\BOOKKEEPING\YourBooks\server\services\banking\
+	                   6	D:\BOOKKEEPING\YourBooks\server\services\costing\
+	                   2	D:\BOOKKEEPING\YourBooks\server\services\gl\
+	                   2	D:\BOOKKEEPING\YourBooks\server\services\manufacturing\
+	                   2	D:\BOOKKEEPING\YourBooks\server\services\payments\
+	                  12	D:\BOOKKEEPING\YourBooks\server\services\planning\
+	                   1	D:\BOOKKEEPING\YourBooks\server\services\procurement\
+	                   1	D:\BOOKKEEPING\YourBooks\server\services\recurring\
+	                   1	D:\BOOKKEEPING\YourBooks\server\services\reports\
+	                   3	D:\BOOKKEEPING\YourBooks\server\services\tax\
+
+------------------------------------------------------------------------------
+
+               Total    Copied   Skipped  Mismatch    FAILED    Extras
+    Dirs :        15         0        15         0         0         0
+   Files :        44         0        44         0         0         0
+   Bytes :   649.9 k         0   649.9 k         0         0         0
+   Times :   0:00:00   0:00:00                       0:00:00   0:00:00
+   Ended : Thursday, January 29, 2026 4:44:44 PM
+

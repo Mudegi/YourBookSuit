@@ -1,0 +1,27 @@
+
+-------------------------------------------------------------------------------
+   ROBOCOPY     ::     Robust File Copy for Windows                              
+-------------------------------------------------------------------------------
+
+  Started : Thursday, January 29, 2026 4:44:36 PM
+   Source : D:\BOOKKEEPING\YourBooks\client\hooks\
+     Dest : D:\BOOKKEEPING\client\hooks\
+
+    Files : *.*
+	    
+  Options : *.* /S /E /DCOPY:DA /COPY:DAT /NP /XO /R:0 /W:0 
+
+------------------------------------------------------------------------------
+
+	                   2	D:\BOOKKEEPING\YourBooks\client\hooks\
+	  *EXTRA File 		    2473	useAuth.tsx
+
+------------------------------------------------------------------------------
+
+               Total    Copied   Skipped  Mismatch    FAILED    Extras
+    Dirs :         1         0         1         0         0         0
+   Files :         2         0         2         0         0         1
+   Bytes :     9.1 k         0     9.1 k         0         0     2.4 k
+   Times :   0:00:00   0:00:00                       0:00:00   0:00:00
+   Ended : Thursday, January 29, 2026 4:44:36 PM
+

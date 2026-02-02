@@ -1,0 +1,236 @@
+// ============================================================================
+// BANK FEEDS INTEGRATION
+// ============================================================================
+
+model BankFeed {
+  id             String   @id @default(cuid())
+  organizationId String
+  bankAccountId  String?
+  feedName       String
+  feedType       String // "OFX", "CSV", "API"
+  externalId     String? // Bank feed ID from provider
+  status         String   @default("ACTIVE")
+  lastSyncAt     DateTime?
+  nextSyncAt     DateTime?
+  metadata       Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization  Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bankAccount   BankAccount?         @relation(fields: [bankAccountId], references: [id])
+  transactions  BankTransaction[]
+
+  @@index([organizationId, status])
+}
+
+model BankTransaction {
+  id             String   @id @default(cuid())
+  organizationId String
+  bankFeedId     String
+  externalId     String? // Unique ID from bank
+  transactionDate DateTime
+  amount         Decimal  @db.Decimal(19, 4)
+  description    String
+  payee          String?
+  referenceNo    String?
+  transactionType String // DEBIT, CREDIT
+  status         String   @default("PENDING") // PENDING, MATCHED, RECONCILED, DUPLICATE
+  matchedPaymentId String?
+  matchedTransactionId String?
+  confidenceScore Decimal? @db.Decimal(5, 2)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bankFeed     BankFeed     @relation(fields: [bankFeedId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, transactionDate])
+  @@index([status, matchedPaymentId])
+}
+
+// ============================================================================
+// DOCUMENT MANAGEMENT WITH OCR
+// ============================================================================
+
+model Document {
+  id             String   @id @default(cuid())
+  organizationId String
+  fileName       String
+  fileType       String
+  fileSize       Int
+  fileUrl        String
+  status         String   @default("UPLOADED") // UPLOADED, PROCESSING, EXTRACTED
+  // OCR Data
+  extractedText  String?
+  ocrConfidence  Decimal? @db.Decimal(5, 2)
+  // Links to entities
+  transactionId  String?
+  invoiceId      String?
+  billId         String?
+  linkedEntities Json? // Array of {entityType, entityId}
+  // Metadata
+  uploadedBy     String
+  uploadedAt     DateTime @default(now())
+  tags           String[]
+  notes          String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  uploadedByUser User        @relation(fields: [uploadedBy], references: [id])
+
+  @@index([organizationId, status])
+  @@index([transactionId, invoiceId, billId])
+}
+
+// ============================================================================
+// PROJECT COSTING
+// ============================================================================
+
+model Project {
+  id             String   @id @default(cuid())
+  organizationId String
+  code           String
+  name           String
+  description    String?
+  status         String   @default("ACTIVE") // ACTIVE, ON_HOLD, COMPLETED, CANCELLED
+  startDate      DateTime
+  endDate        DateTime?
+  budget         Decimal? @db.Decimal(19, 4)
+  currency       String   @default("USD")
+  managerId      String?
+  customerId     String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  manager       User?        @relation(fields: [managerId], references: [id])
+  customer      Customer?    @relation(fields: [customerId], references: [id])
+  tasks         ProjectTask[]
+  costs         ProjectCost[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+}
+
+model ProjectTask {
+  id           String   @id @default(cuid())
+  projectId    String
+  name         String
+  description  String?
+  status       String   @default("TODO") // TODO, IN_PROGRESS, COMPLETED
+  startDate    DateTime?
+  endDate      DateTime?
+  assignedTo   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project  Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  owner    User?   @relation(fields: [assignedTo], references: [id])
+
+  @@index([projectId, status])
+}
+
+model ProjectCost {
+  id             String   @id @default(cuid())
+  projectId      String
+  description    String
+  amount         Decimal  @db.Decimal(19, 4)
+  category       String? // "Labor", "Materials", "Overhead", etc.
+  transactionId  String?
+  billId         String?
+  invoiceId      String?
+  createdAt      DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+// ============================================================================
+// CRM FEATURES
+// ============================================================================
+
+model Company {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  type           String // "CLIENT", "VENDOR", "PARTNER", "PROSPECT"
+  industry       String?
+  website        String?
+  email          String?
+  phone          String?
+  address        String?
+  city           String?
+  country        String?
+  taxId          String?
+  status         String   @default("ACTIVE")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contacts     Contact[]
+  opportunities Opportunity[]
+  activities   Activity[]
+
+  @@index([organizationId, type])
+}
+
+model Contact {
+  id             String   @id @default(cuid())
+  organizationId String
+  companyId      String
+  firstName      String
+  lastName       String
+  email          String?
+  phone          String?
+  title          String?
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  activities   Activity[]
+
+  @@index([organizationId, companyId])
+}
+
+model Opportunity {
+  id             String   @id @default(cuid())
+  organizationId String
+  companyId      String
+  name           String
+  value          Decimal? @db.Decimal(19, 4)
+  currency       String   @default("USD")
+  stage          String // "PROSPECT", "QUALIFIED", "PROPOSAL", "NEGOTIATION", "WON", "LOST"
+  probability    Decimal  @default(50) @db.Decimal(5, 2)
+  closedDate     DateTime?
+  reason         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, stage])
+}
+
+model Activity {
+  id             String   @id @default(cuid())
+  organizationId String
+  companyId      String
+  contactId      String?
+  type           String // "CALL", "EMAIL", "MEETING", "NOTE", "TASK"
+  subject        String
+  description    String?
+  dueDate        DateTime?
+  completedAt    DateTime?
+  createdBy      String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  createdByUser User        @relation(fields: [createdBy], references: [id])
+
+  @@index([organizationId, companyId])
+}

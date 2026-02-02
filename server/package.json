@@ -1,0 +1,50 @@
+{
+  "name": "yourbooks-server",
+  "version": "1.0.0",
+  "description": "YourBooks ERP - Backend Server",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "prisma:seed": "tsx prisma/seed.ts",
+    "scheduler": "tsx scripts/scheduler.ts",
+    "scheduler:worker": "tsx scripts/recurring-worker.ts",
+    "notifications:worker": "tsx scripts/notification-worker.ts",
+    "dev": "nodemon index.js",
+    "start": "node index.js",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "bcryptjs": "^2.4.3",
+    "bullmq": "^5.11.0",
+    "cors": "^2.8.5",
+    "csv-parse": "^6.1.0",
+    "date-fns": "^3.6.0",
+    "date-fns-tz": "^3.2.0",
+    "decimal.js": "^10.4.3",
+    "express": "^4.18.2",
+    "ioredis": "^5.4.1",
+    "jose": "^5.2.0",
+    "nodemon": "^3.1.11",
+    "xlsx": "^0.18.5",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.19.27",
+    "@typescript-eslint/eslint-plugin": "^7.1.0",
+    "@typescript-eslint/parser": "^7.1.0",
+    "prisma": "^5.22.0",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.7.0",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}

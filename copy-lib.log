@@ -1,0 +1,35 @@
+
+-------------------------------------------------------------------------------
+   ROBOCOPY     ::     Robust File Copy for Windows                              
+-------------------------------------------------------------------------------
+
+  Started : Thursday, January 29, 2026 4:44:53 PM
+   Source : D:\BOOKKEEPING\YourBooks\server\lib\
+     Dest : D:\BOOKKEEPING\server\lib\
+
+    Files : *.*
+	    
+  Options : *.* /S /E /DCOPY:DA /COPY:DAT /NP /XO /R:0 /W:0 
+
+------------------------------------------------------------------------------
+
+	                  23	D:\BOOKKEEPING\YourBooks\server\lib\
+	                   5	D:\BOOKKEEPING\YourBooks\server\lib\localization\
+	                   4	D:\BOOKKEEPING\YourBooks\server\lib\localization\drivers\
+	                   0	D:\BOOKKEEPING\YourBooks\server\lib\services\
+	                   1	D:\BOOKKEEPING\YourBooks\server\lib\services\efris\
+	                   2	D:\BOOKKEEPING\YourBooks\server\lib\services\invoice\
+	                   1	D:\BOOKKEEPING\YourBooks\server\lib\services\tax\
+	                  10	D:\BOOKKEEPING\YourBooks\server\lib\tax\
+	                   1	D:\BOOKKEEPING\YourBooks\server\lib\utils\
+	                   0	D:\BOOKKEEPING\YourBooks\server\lib\utils\__tests__\
+
+------------------------------------------------------------------------------
+
+               Total    Copied   Skipped  Mismatch    FAILED    Extras
+    Dirs :        10         0        10         0         0         0
+   Files :        47         0        47         0         0         0
+   Bytes :   410.4 k         0   410.4 k         0         0         0
+   Times :   0:00:00   0:00:00                       0:00:00   0:00:00
+   Ended : Thursday, January 29, 2026 4:44:53 PM
+

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Fix Onboarding - YourBooks</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 20px;
+        }
+        button:hover {
+            background: #1d4ed8;
+        }
+        button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+        }
+        .success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #34d399;
+        }
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #f87171;
+        }
+        pre {
+            background: #f3f4f6;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🔧 Fix Onboarding Issue</h1>
+        <p><strong>Problem:</strong> Your organization is missing the <code>legalName</code> field.</p>
+        <p>Click the button below to automatically fix it:</p>
+        
+        <button id="fixBtn" onclick="fixOnboarding()">Fix My Organization Profile</button>
+        
+        <div id="result"></div>
+    </div>
+
+    <script>
+        async function fixOnboarding() {
+            const btn = document.getElementById('fixBtn');
+            const result = document.getElementById('result');
+            
+            btn.disabled = true;
+            btn.textContent = 'Fixing...';
+            result.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/debug/fix-onboarding', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    result.innerHTML = `
+                        <div class="result success">
+                            <h3>✅ Success!</h3>
+                            <p>${data.message}</p>
+                            ${data.updates ? '<p>Updates applied:</p><pre>' + JSON.stringify(data.updates, null, 2) + '</pre>' : ''}
+                            <p><strong>Next step:</strong> ${data.nextStep}</p>
+                            <p><a href="/dashboard">Go to Dashboard →</a></p>
+                        </div>
+                    `;
+                } else {
+                    throw new Error(data.error || 'Unknown error');
+                }
+            } catch (error) {
+                result.innerHTML = `
+                    <div class="result error">
+                        <h3>❌ Error</h3>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+                btn.disabled = false;
+                btn.textContent = 'Try Again';
+            }
+        }
+    </script>
+</body>
+</html>
