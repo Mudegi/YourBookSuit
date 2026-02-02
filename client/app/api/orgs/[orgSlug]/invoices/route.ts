@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { requireAuth } from '@/lib/api-auth';
 import { InvoiceService } from '@/services/accounts-receivable/invoice.service';
 import { InvoiceAnalyticsService } from '@/lib/services/invoice/InvoiceAnalyticsService';
+import { PaymentTermsService } from '@/services/payment-terms.service';
 
 export async function GET(
   request: NextRequest,
@@ -59,18 +60,21 @@ export async function POST(
     const { organizationId, userId } = await requireAuth(params.orgSlug);
 
     // Validate required fields
-    if (!body.customerId || !body.invoiceDate || !body.dueDate || !body.items || body.items.length === 0) {
+    if (!body.customerId || !body.invoiceDate || !body.items || body.items.length === 0) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
-    // Check if customer exists
+    // Check if customer exists and fetch payment term
     const customer = await prisma.customer.findFirst({
       where: {
         id: body.customerId,
         organizationId,
+      },
+      include: {
+        paymentTerm: true,
       },
     });
 
@@ -79,6 +83,33 @@ export async function POST(
         { error: 'Customer not found' },
         { status: 404 }
       );
+    }
+
+    // Calculate due date from payment terms if not provided
+    let dueDate: Date;
+    if (body.dueDate) {
+      dueDate = new Date(body.dueDate);
+    } else {
+      // Use customer's payment term, or organization's default, or fallback to NET30
+      let paymentTerm = customer.paymentTerm;
+      
+      if (!paymentTerm) {
+        // Try to get organization's default payment term
+        paymentTerm = await PaymentTermsService.getDefault(organizationId);
+      }
+      
+      if (paymentTerm) {
+        dueDate = PaymentTermsService.calculateDueDate(
+          new Date(body.invoiceDate),
+          paymentTerm.daysUntilDue
+        );
+      } else {
+        // Fallback to NET30 if no payment terms configured
+        dueDate = PaymentTermsService.calculateDueDate(
+          new Date(body.invoiceDate),
+          30
+        );
+      }
     }
 
     // Fetch tax rates if taxRateId is provided to get the actual rate percentage
@@ -127,7 +158,7 @@ export async function POST(
       organizationId,
       customerId: body.customerId,
       invoiceDate: new Date(body.invoiceDate),
-      dueDate: new Date(body.dueDate),
+      dueDate: dueDate,
       taxCalculationMethod: body.taxCalculationMethod || 'EXCLUSIVE',
       reference: body.reference,
       notes: body.notes,

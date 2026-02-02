@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 const expenseLineSchema = z.object({
   categoryId: z.string().cuid(),
-  description: z.string().min(1),
+  description: z.string().optional().default(''),
   amount: z.number().positive(),
   taxInclusive: z.boolean(),
   taxRateId: z.string().cuid().optional(),
@@ -40,7 +40,7 @@ export async function POST(
   { params }: { params: { orgSlug: string } }
 ) {
   try {
-    const { user, organization } = await requireAuth(request);
+    const { userId, organizationId, role } = await requireAuth(params.orgSlug);
     const body = await request.json();
 
     // Validate input
@@ -67,13 +67,13 @@ export async function POST(
     // Create the expense
     const result = await ExpenseService.createExpense({
       ...validatedData,
-      organizationId: organization.id,
-      userId: user.userId,
+      organizationId: organizationId,
+      userId: userId,
     });
 
     return NextResponse.json(result);
   } catch (error: any) {
-    console.error('Error creating expense:', error);
+    console.error('Error creating expense:', error?.message || String(error));
     
     if (error.name === 'ZodError') {
       return NextResponse.json(
@@ -98,7 +98,7 @@ export async function GET(
   { params }: { params: { orgSlug: string } }
 ) {
   try {
-    const { organization } = await requireAuth(request);
+    const { organizationId } = await requireAuth(params.orgSlug);
     const searchParams = request.nextUrl.searchParams;
 
     const startDate = searchParams.get('startDate');
@@ -107,8 +107,9 @@ export async function GET(
     const isReimbursement = searchParams.get('isReimbursement');
 
     const where: any = {
-      organizationId: organization.id,
-      transactionType: 'EXPENSE',
+      organizationId: organizationId,
+      transactionType: 'JOURNAL_ENTRY',
+      referenceType: 'EXPENSE',
     };
 
     if (startDate || endDate) {
@@ -135,18 +136,17 @@ export async function GET(
     const expenses = await prisma.transaction.findMany({
       where,
       include: {
-        entries: {
+        ledgerEntries: {
           include: {
             account: true,
-            project: true,
-            costCenter: true,
           },
         },
         createdBy: {
           select: {
             id: true,
             email: true,
-            name: true,
+            firstName: true,
+            lastName: true,
           },
         },
       },
@@ -154,7 +154,20 @@ export async function GET(
       take: 100,
     });
 
-    return NextResponse.json({ success: true, expenses });
+    // Transform expenses to include calculated amounts
+    const transformedExpenses = expenses.map((expense) => {
+      // Calculate total from debit entries (expense accounts)
+      const debitTotal = expense.ledgerEntries
+        .filter((entry: any) => entry.entryType === 'DEBIT')
+        .reduce((sum: number, entry: any) => sum + parseFloat(entry.amount.toString()), 0);
+      
+      return {
+        ...expense,
+        calculatedTotal: debitTotal,
+      };
+    });
+
+    return NextResponse.json({ success: true, expenses: transformedExpenses });
   } catch (error: any) {
     console.error('Error fetching expenses:', error);
     return NextResponse.json(

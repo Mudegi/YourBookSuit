@@ -1,19 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireAuth } from '@/lib/api-auth';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { orgSlug: string } }
 ) {
   try {
-    const organizationId = request.headers.get('x-organization-id');
-
-    if (!organizationId) {
-      return NextResponse.json(
-        { error: 'Organization not found' },
-        { status: 404 }
-      );
-    }
+    const user = await requireAuth(params.orgSlug);
 
     // Get query parameters for date filtering
     const { searchParams } = new URL(request.url);
@@ -22,7 +16,7 @@ export async function GET(
     // Fetch all accounts
     const accounts = await prisma.chartOfAccount.findMany({
       where: {
-        organizationId,
+        organizationId: user.organizationId,
         isActive: true,
       },
       orderBy: [
@@ -72,8 +66,8 @@ export async function GET(
           },
         });
 
-        const totalDebits = debits._sum.amount || 0;
-        const totalCredits = credits._sum.amount || 0;
+        const totalDebits = Number(debits._sum.amount || 0);
+        const totalCredits = Number(credits._sum.amount || 0);
 
         // Calculate balance based on account type
         let balance = 0;

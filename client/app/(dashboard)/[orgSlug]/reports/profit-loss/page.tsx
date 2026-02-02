@@ -13,30 +13,32 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 interface ProfitLossAccount {
-  id: string;
-  code: string;
-  name: string;
+  accountId: string;
+  accountCode: string;
+  accountName: string;
   accountType: string;
-  amount: number;
+  balance: string;
+}
+
+interface ReportSection {
+  title: string;
+  accounts: ProfitLossAccount[];
+  subtotal: string;
 }
 
 interface ProfitLossData {
+  organizationId: string;
   startDate: string;
   endDate: string;
-  revenue: {
-    accounts: ProfitLossAccount[];
-    totalRevenue: number;
-  };
-  costOfGoodsSold: {
-    accounts: ProfitLossAccount[];
-    totalCOGS: number;
-  };
-  grossProfit: number;
-  expenses: {
-    operatingExpenses: ProfitLossAccount[];
-    totalExpenses: number;
-  };
-  netIncome: number;
+  basis: string;
+  revenue: ReportSection;
+  costOfGoodsSold: ReportSection;
+  grossProfit: string;
+  operatingExpenses: ReportSection;
+  operatingIncome: string;
+  otherIncome: ReportSection;
+  otherExpenses: ReportSection;
+  netIncome: string;
 }
 
 export default function ProfitLossPage() {
@@ -67,7 +69,11 @@ export default function ProfitLossPage() {
       if (!response.ok) throw new Error('Failed to fetch profit & loss');
       
       const data = await response.json();
-      setProfitLoss(data);
+      if (data.success && data.report) {
+        setProfitLoss(data.report);
+      } else {
+        throw new Error(data.error || 'Failed to load profit & loss');
+      }
     } catch (err) {
       setError('Failed to load profit & loss statement');
       console.error(err);
@@ -153,24 +159,24 @@ export default function ProfitLossPage() {
                 <table className="w-full text-sm">
                   <tbody>
                     {profitLoss.revenue.accounts.map((account) => (
-                      <tr key={account.id}>
+                      <tr key={account.accountId}>
                         <td className="py-1 pl-4">
                           <Link
-                            href={`/${orgSlug}/general-ledger/chart-of-accounts/${account.id}`}
+                            href={`/${orgSlug}/general-ledger/chart-of-accounts/${account.accountId}`}
                             className="text-blue-600 hover:underline"
                           >
-                            {account.code} - {account.name}
+                            {account.accountCode} - {account.accountName}
                           </Link>
                         </td>
                         <td className="py-1 text-right pr-4">
-                          {formatCurrency(account.amount, currency)}
+                          {formatCurrency(account.balance, currency)}
                         </td>
                       </tr>
                     ))}
                     <tr className="border-t-2 font-bold text-lg">
                       <td className="py-2 pl-4">Total Revenue</td>
                       <td className="py-2 text-right pr-4">
-                        {formatCurrency(profitLoss.revenue.totalRevenue, currency)}
+                        {formatCurrency(profitLoss.revenue.subtotal, currency)}
                       </td>
                     </tr>
                   </tbody>
@@ -189,24 +195,24 @@ export default function ProfitLossPage() {
                 <table className="w-full text-sm">
                   <tbody>
                     {profitLoss.costOfGoodsSold.accounts.map((account) => (
-                      <tr key={account.id}>
+                      <tr key={account.accountId}>
                         <td className="py-1 pl-4">
                           <Link
-                            href={`/${orgSlug}/general-ledger/chart-of-accounts/${account.id}`}
+                            href={`/${orgSlug}/general-ledger/chart-of-accounts/${account.accountId}`}
                             className="text-blue-600 hover:underline"
                           >
-                            {account.code} - {account.name}
+                            {account.accountCode} - {account.accountName}
                           </Link>
                         </td>
                         <td className="py-1 text-right pr-4">
-                          {formatCurrency(account.amount, currency)}
+                          {formatCurrency(account.balance, currency)}
                         </td>
                       </tr>
                     ))}
                     <tr className="border-t-2 font-bold">
                       <td className="py-2 pl-4">Total Cost of Goods Sold</td>
                       <td className="py-2 text-right pr-4">
-                        {formatCurrency(profitLoss.costOfGoodsSold.totalCOGS, currency)}
+                        {formatCurrency(profitLoss.costOfGoodsSold.subtotal, currency)}
                       </td>
                     </tr>
                   </tbody>
@@ -241,28 +247,28 @@ export default function ProfitLossPage() {
               <h2 className="text-xl font-bold border-b-2 pb-2 mb-4">
                 OPERATING EXPENSES
               </h2>
-              {profitLoss.expenses.operatingExpenses.length > 0 ? (
+              {profitLoss.operatingExpenses.accounts.length > 0 ? (
                 <table className="w-full text-sm">
                   <tbody>
-                    {profitLoss.expenses.operatingExpenses.map((account) => (
-                      <tr key={account.id}>
+                    {profitLoss.operatingExpenses.accounts.map((account) => (
+                      <tr key={account.accountId}>
                         <td className="py-1 pl-4">
                           <Link
-                            href={`/${orgSlug}/general-ledger/chart-of-accounts/${account.id}`}
+                            href={`/${orgSlug}/general-ledger/chart-of-accounts/${account.accountId}`}
                             className="text-blue-600 hover:underline"
                           >
-                            {account.code} - {account.name}
+                            {account.accountCode} - {account.accountName}
                           </Link>
                         </td>
                         <td className="py-1 text-right pr-4">
-                          {formatCurrency(account.amount, currency)}
+                          {formatCurrency(account.balance, currency)}
                         </td>
                       </tr>
                     ))}
                     <tr className="border-t-2 font-bold">
                       <td className="py-2 pl-4">Total Operating Expenses</td>
                       <td className="py-2 text-right pr-4">
-                        {formatCurrency(profitLoss.expenses.totalExpenses, currency)}
+                        {formatCurrency(profitLoss.operatingExpenses.subtotal, currency)}
                       </td>
                     </tr>
                   </tbody>
@@ -295,10 +301,10 @@ export default function ProfitLossPage() {
               <div className="mt-4 text-sm text-gray-700 text-center">
                 <p>Revenue - COGS = Gross Profit - Expenses = Net Income</p>
                 <p className="mt-1">
-                  {formatCurrency(profitLoss.revenue.totalRevenue, currency)} -{' '}
-                  {formatCurrency(profitLoss.costOfGoodsSold.totalCOGS, currency)} ={' '}
+                  {formatCurrency(profitLoss.revenue.subtotal, currency)} -{' '}
+                  {formatCurrency(profitLoss.costOfGoodsSold.subtotal, currency)} ={' '}
                   {formatCurrency(profitLoss.grossProfit, currency)} -{' '}
-                  {formatCurrency(profitLoss.expenses.totalExpenses, currency)} ={' '}
+                  {formatCurrency(profitLoss.operatingExpenses.subtotal, currency)} ={' '}
                   <span className="font-bold">{formatCurrency(profitLoss.netIncome, currency)}</span>
                 </p>
               </div>
@@ -309,8 +315,8 @@ export default function ProfitLossPage() {
               <div className="text-center p-4 bg-gray-50 rounded">
                 <p className="text-sm text-gray-600">Gross Profit Margin</p>
                 <p className="text-2xl font-bold">
-                  {profitLoss.revenue.totalRevenue > 0
-                    ? ((profitLoss.grossProfit / profitLoss.revenue.totalRevenue) * 100).toFixed(1)
+                  {parseFloat(profitLoss.revenue.subtotal) > 0
+                    ? ((parseFloat(profitLoss.grossProfit) / parseFloat(profitLoss.revenue.subtotal)) * 100).toFixed(1)
                     : '0.0'}
                   %
                 </p>
@@ -318,8 +324,8 @@ export default function ProfitLossPage() {
               <div className="text-center p-4 bg-gray-50 rounded">
                 <p className="text-sm text-gray-600">Operating Margin</p>
                 <p className="text-2xl font-bold">
-                  {profitLoss.revenue.totalRevenue > 0
-                    ? ((profitLoss.netIncome / profitLoss.revenue.totalRevenue) * 100).toFixed(1)
+                  {parseFloat(profitLoss.revenue.subtotal) > 0
+                    ? ((parseFloat(profitLoss.netIncome) / parseFloat(profitLoss.revenue.subtotal)) * 100).toFixed(1)
                     : '0.0'}
                   %
                 </p>
@@ -327,8 +333,8 @@ export default function ProfitLossPage() {
               <div className="text-center p-4 bg-gray-50 rounded">
                 <p className="text-sm text-gray-600">Expense Ratio</p>
                 <p className="text-2xl font-bold">
-                  {profitLoss.revenue.totalRevenue > 0
-                    ? ((profitLoss.expenses.totalExpenses / profitLoss.revenue.totalRevenue) * 100).toFixed(1)
+                  {parseFloat(profitLoss.revenue.subtotal) > 0
+                    ? ((parseFloat(profitLoss.operatingExpenses.subtotal) / parseFloat(profitLoss.revenue.subtotal)) * 100).toFixed(1)
                     : '0.0'}
                   %
                 </p>

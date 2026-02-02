@@ -187,7 +187,9 @@ export default function DashboardLayout({
   // Filter Settings children based on country - EFRIS only for Uganda
   const settingsChildren = [
     { name: 'General', href: `/${orgSlug}/settings` },
+    { name: 'Payment Terms', href: `/${orgSlug}/settings/payment-terms` },
     { name: 'Branches', href: `/${orgSlug}/settings/branches` },
+    { name: 'Currencies', href: `/${orgSlug}/settings/currencies` },
     { name: 'Onboarding', href: '/onboarding' },
     { name: 'Integrations', href: `/${orgSlug}/settings/integrations` },
     { name: 'Webhooks', href: `/${orgSlug}/integrations/webhooks` },
@@ -269,6 +271,7 @@ export default function DashboardLayout({
       featureKey: 'finance',
       children: [
         { name: 'Financial Overview', href: `/${orgSlug}/dashboard/financial` },
+        { name: 'Collections', href: `/${orgSlug}/collections` },
         { name: 'Banking', href: `/${orgSlug}/banking/accounts` },
         { name: 'Bank Feeds', href: `/${orgSlug}/bank-feeds` },
         { name: 'Reconciliation', href: `/${orgSlug}/banking/reconciliation` },
@@ -281,6 +284,8 @@ export default function DashboardLayout({
         { name: 'Profit & Loss', href: `/${orgSlug}/reports/profit-loss` },
         { name: 'Cash Flow', href: `/${orgSlug}/reports/cash-flow` },
         { name: 'Trial Balance', href: `/${orgSlug}/reports/trial-balance` },
+        { name: 'FX Gain/Loss', href: `/${orgSlug}/reports/fx-gain-loss` },
+        { name: 'VAT Return', href: `/${orgSlug}/reports/tax/vat-return` },
         { name: 'Budgets', href: `/${orgSlug}/budgets` },
         { name: 'Tax Agencies', href: `/${orgSlug}/settings/taxes/agencies` },
         { name: 'Tax Rates', href: `/${orgSlug}/settings/taxes/rates` },

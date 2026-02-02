@@ -93,7 +93,7 @@ export class ReportingService {
     asOfDate: Date
   ): Promise<BalanceSheetData> {
     // Get all accounts for the organization
-    const accounts = await prisma.account.findMany({
+    const accounts = await prisma.chartOfAccount.findMany({
       where: {
         organizationId,
         isActive: true,
@@ -181,7 +181,7 @@ export class ReportingService {
     endDate: Date
   ): Promise<ProfitLossData> {
     // Get all revenue and expense accounts
-    const accounts = await prisma.account.findMany({
+    const accounts = await prisma.chartOfAccount.findMany({
       where: {
         organizationId,
         isActive: true,
@@ -254,7 +254,7 @@ export class ReportingService {
     const netIncome = pl.netIncome;
 
     // Get cash accounts
-    const cashAccounts = await prisma.account.findMany({
+    const cashAccounts = await prisma.chartOfAccount.findMany({
       where: {
         organizationId,
         accountType: 'ASSET',
@@ -339,7 +339,7 @@ export class ReportingService {
     });
 
     // Get account type to determine normal balance
-    const account = await prisma.account.findUnique({
+    const account = await prisma.chartOfAccount.findUnique({
       where: { id: accountId },
     });
 
@@ -380,7 +380,7 @@ export class ReportingService {
       },
     });
 
-    const account = await prisma.account.findUnique({
+    const account = await prisma.chartOfAccount.findUnique({
       where: { id: accountId },
     });
 
@@ -451,7 +451,7 @@ export class ReportingService {
     startDate: Date,
     endDate: Date
   ): Promise<number> {
-    const accounts = await prisma.account.findMany({
+    const accounts = await prisma.chartOfAccount.findMany({
       where: {
         organizationId,
         code: {

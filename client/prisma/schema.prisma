@@ -26,6 +26,16 @@ model Organization {
   onboardingCompleted     Boolean                  @default(false)
   industry                String?
   businessModel           String                   @default("GENERAL")
+  
+  // Multi-Currency Settings
+  fxGainAccountId         String?
+  fxLossAccountId         String?
+  unrealizedFxGainAccountId String?
+  unrealizedFxLossAccountId String?
+  defaultExchangeRateProvider String?             @default("MANUAL") // MANUAL, OANDA, XE, ECB
+  enableAutoFetchRates    Boolean                  @default(false)
+  exchangeRateBufferPercent Decimal?               @db.Decimal(5, 2) // Buffer for purchases
+  
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
   activities              Activity[]
@@ -85,6 +95,7 @@ model Organization {
   opportunities           Opportunity[]
   users                   OrganizationUser[]
   paymentEvents           PaymentEvent[]
+  paymentTerms            PaymentTerm[]
   payrollRuns             PayrollRun[]
   positions               Position[]
   priceLists              PriceList[]
@@ -127,6 +138,7 @@ model Organization {
   taxGroups               TaxGroup[]
   taxExemptionReasons     TaxExemptionReason[]
   taxReturns              TaxReturn[]
+  taxPeriodLocks          TaxPeriodLock[]
   taxRules                TaxRule[]
   transactions            Transaction[]
   transferOrders          TransferOrder[]
@@ -138,6 +150,11 @@ model Organization {
   workOrders              WorkOrder[]
   invites                 OrganizationInvite[]
   unitsOfMeasure          UnitOfMeasure[]
+  
+  // Multi-Currency Relations
+  currencies              Currency[]
+  exchangeRates           ExchangeRate[]
+  fxGainLossTransactions  ForeignExchangeGainLoss[]
 
   @@index([slug])
   @@index([homeCountry])
@@ -391,6 +408,7 @@ model User {
   createdGoodsReceipts       GoodsReceipt[]
   paymentsCreated            Payment[]               @relation("PaymentCreatedBy")
   paymentsUpdated            Payment[]               @relation("PaymentUpdatedBy")
+  taxPeriodLocks             TaxPeriodLock[]
 
   @@index([email])
 }
@@ -554,7 +572,8 @@ model Customer {
   phone                   String?
   website                 String?
   taxIdNumber             String?
-  paymentTerms            Int                    @default(30)
+  paymentTerms            Int                    @default(30) // Deprecated: use paymentTermId
+  paymentTermId           String?                // New: Reference to PaymentTerm
   creditLimit             Decimal?               @db.Decimal(19, 4)
   billingAddress          Json?
   shippingAddress         Json?
@@ -571,6 +590,7 @@ model Customer {
   creditNotes             CreditNote[]
   Branch                  Branch?                @relation(fields: [branchId], references: [id])
   organization            Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  paymentTerm             PaymentTerm?           @relation(fields: [paymentTermId], references: [id])
   debitNotes              DebitNote[]
   invoices                Invoice[]
   nonConformanceReports   NonConformanceReport[]
@@ -583,6 +603,7 @@ model Customer {
   @@unique([organizationId, customerNumber])
   @@index([organizationId])
   @@index([email])
+  @@index([paymentTermId])
 }
 
 model Invoice {
@@ -677,6 +698,7 @@ model Invoice {
   debitNotes          DebitNote[]
   recurringExecutions RecurringExecution[]
   serviceWorkOrders   ServiceWorkOrder[]
+  fxGainLoss          ForeignExchangeGainLoss[] // FX gains/losses related to this invoice
 
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId, status])
@@ -778,7 +800,8 @@ model Vendor {
   phone                 String?
   website               String?
   taxIdNumber           String?
-  paymentTerms          Int                    @default(30)
+  paymentTerms          Int                    @default(30) // Deprecated: use paymentTermId
+  paymentTermId         String?                // New: Reference to PaymentTerm
   bankAccount           Json?
   billingAddress        Json?
   notes                 String?
@@ -794,10 +817,12 @@ model Vendor {
   goodsReceipts         GoodsReceipt[]
   Branch                Branch?                @relation(fields: [branchId], references: [id])
   organization          Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  paymentTerm           PaymentTerm?           @relation(fields: [paymentTermId], references: [id])
   whtTransactions       WHTTransaction[]
 
   @@unique([organizationId, vendorNumber])
   @@index([organizationId])
+  @@index([paymentTermId])
 }
 
 model PurchaseOrder {
@@ -947,6 +972,7 @@ model Bill {
   payments            PaymentAllocation[]
   recurringExecutions RecurringExecution[]
   whtTransactions     WHTTransaction[]
+  fxGainLoss          ForeignExchangeGainLoss[] // FX gains/losses related to this bill
 
   @@unique([organizationId, billNumber])
   @@index([organizationId, status])
@@ -994,6 +1020,12 @@ model Payment {
   amount              Decimal              @db.Decimal(19, 4)
   currency            String               @default("USD")
   exchangeRate        Decimal              @default(1) @db.Decimal(12, 6)
+  
+  // FX Gain/Loss Tracking
+  fxGainLossAmount    Decimal?             @db.Decimal(19, 4)
+  fxGainLossAccountId String?
+  baseCurrencyAmount  Decimal?             @db.Decimal(19, 4) // Amount in base currency
+  
   paymentMethod       PaymentMethod
   referenceNumber     String?
   bankAccountId       String?
@@ -1018,6 +1050,7 @@ model Payment {
   paymentEvents       PaymentEvent[]
   recurringExecutions RecurringExecution[]
   debitNotes          DebitNote[]          @relation("DebitNotePayments")
+  fxGainLoss          ForeignExchangeGainLoss?
 
   @@unique([organizationId, paymentNumber])
   @@index([organizationId, paymentDate])
@@ -1026,6 +1059,7 @@ model Payment {
   @@index([createdById])
   @@index([isReconciled])
   @@index([reconciliationId])
+  @@index([currency])
 }
 
 model PaymentEvent {
@@ -1060,6 +1094,29 @@ model PaymentAllocation {
   @@index([paymentId])
   @@index([invoiceId])
   @@index([billId])
+}
+
+model PaymentTerm {
+  id                String       @id @default(cuid())
+  organizationId    String
+  code              String       // e.g., "NET30", "NET15", "COD"
+  name              String       // e.g., "Net 30 Days", "Due on Receipt"
+  description       String?
+  daysUntilDue      Int          // Number of days after invoice date
+  discountPercentage Decimal?    @db.Decimal(5, 2) // e.g., 2.00 for 2%
+  discountDays      Int?         // Days within which discount applies
+  isActive          Boolean      @default(true)
+  isDefault         Boolean      @default(false)
+  displayOrder      Int          @default(0)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customers         Customer[]
+  vendors           Vendor[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([isDefault])
 }
 
 model BankAccount {
@@ -1801,6 +1858,23 @@ model TaxReturn {
   @@unique([organizationId, returnType, taxPeriod])
   @@index([organizationId, status])
   @@index([taxPeriod, returnType])
+}
+
+model TaxPeriodLock {
+  id             String   @id @default(cuid())
+  organizationId String
+  periodStart    DateTime
+  periodEnd      DateTime
+  lockedAt       DateTime @default(now())
+  lockedByUserId String
+  lockedReason   String?  // Optional: "VAT Return Filed", "Annual Closing", etc.
+  
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lockedBy       User         @relation(fields: [lockedByUserId], references: [id])
+  
+  @@unique([organizationId, periodStart, periodEnd])
+  @@index([organizationId])
+  @@index([periodStart, periodEnd])
 }
 
 // ============================================
@@ -5869,4 +5943,96 @@ model Testimonial {
   updatedAt        DateTime       @updatedAt
 
   @@index([systemSettingsId])
+}
+
+// ============================================================================
+// MULTI-CURRENCY MODELS
+// ============================================================================
+
+model Currency {
+  id               String         @id @default(cuid())
+  organizationId   String
+  code             String         // ISO 4217 code (USD, EUR, GBP, UGX, etc.)
+  name             String         // Full name (US Dollar, Ugandan Shilling)
+  symbol           String         // $, €, £, UGX
+  decimalPlaces    Int            @default(2) // Number of decimal places (0 for UGX, 2 for USD)
+  isActive         Boolean        @default(true)
+  isBase           Boolean        @default(false) // True if this is the base currency
+  displayOrder     Int            @default(0)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  exchangeRatesFrom ExchangeRate[] @relation("FromCurrency")
+  exchangeRatesTo   ExchangeRate[] @relation("ToCurrency")
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([isActive])
+}
+
+model ExchangeRate {
+  id                String       @id @default(cuid())
+  organizationId    String
+  fromCurrencyCode  String       // Source currency (e.g., USD)
+  toCurrencyCode    String       // Target currency (e.g., UGX)
+  rate              Decimal      @db.Decimal(18, 6) // Exchange rate
+  effectiveDate     DateTime     // Date this rate is effective
+  source            String       @default("MANUAL") // MANUAL, OANDA, XE, ECB, etc.
+  isManualOverride  Boolean      @default(false) // True if manually entered
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  fromCurrency      Currency     @relation("FromCurrency", fields: [organizationId, fromCurrencyCode], references: [organizationId, code])
+  toCurrency        Currency     @relation("ToCurrency", fields: [organizationId, toCurrencyCode], references: [organizationId, code])
+
+  @@unique([organizationId, fromCurrencyCode, toCurrencyCode, effectiveDate])
+  @@index([organizationId])
+  @@index([effectiveDate])
+  @@index([fromCurrencyCode, toCurrencyCode])
+}
+
+model ForeignExchangeGainLoss {
+  id                  String       @id @default(cuid())
+  organizationId      String
+  transactionId       String?      // Related GL transaction
+  paymentId           String?      @unique // Related payment (for realized gains/losses)
+  invoiceId           String?      // Related invoice
+  billId              String?      // Related bill
+  
+  // FX Calculation Details
+  fxType              String       // REALIZED or UNREALIZED
+  foreignCurrency     String       // Currency code (USD, EUR, etc.)
+  foreignAmount       Decimal      @db.Decimal(19, 4)
+  
+  // Transaction Date (Invoice/Bill Date)
+  transactionDate     DateTime
+  transactionRate     Decimal      @db.Decimal(18, 6)
+  transactionBaseAmount Decimal    @db.Decimal(19, 4)
+  
+  // Settlement/Revaluation Date
+  settlementDate      DateTime
+  settlementRate      Decimal      @db.Decimal(18, 6)
+  settlementBaseAmount Decimal     @db.Decimal(19, 4)
+  
+  // Gain or Loss
+  gainLossAmount      Decimal      @db.Decimal(19, 4) // Positive = Gain, Negative = Loss
+  glAccountId         String       // GL account where gain/loss was posted
+  
+  // References
+  notes               String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payment             Payment?     @relation(fields: [paymentId], references: [id])
+  invoice             Invoice?     @relation(fields: [invoiceId], references: [id])
+  bill                Bill?        @relation(fields: [billId], references: [id])
+
+  @@index([organizationId])
+  @@index([paymentId])
+  @@index([invoiceId])
+  @@index([billId])
+  @@index([fxType])
+  @@index([settlementDate])
+  @@index([foreignCurrency])
 }

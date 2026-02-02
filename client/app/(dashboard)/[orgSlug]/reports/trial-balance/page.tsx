@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
-import { Calendar, Download, Printer, CheckCircle, XCircle } from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
+import { Calendar, Download, Printer, CheckCircle, XCircle, ArrowLeft } from 'lucide-react';
 import { useOrganization } from '@/hooks/useOrganization';
 import { formatCurrency } from '@/lib/currency';
 
@@ -37,12 +37,21 @@ interface TrialBalanceData {
 
 export default function TrialBalancePage() {
   const params = useParams();
+  const router = useRouter();
   const orgSlug = params.orgSlug as string;
   const { currency } = useOrganization();
 
   const [data, setData] = useState<TrialBalanceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [asOfDate, setAsOfDate] = useState(new Date().toISOString().split('T')[0]);
+
+  const getAmountTextSize = (value: string) => {
+    const length = value.length;
+    if (length <= 10) return 'text-2xl';
+    if (length <= 15) return 'text-xl';
+    if (length <= 20) return 'text-lg';
+    return 'text-base';
+  };
 
   useEffect(() => {
     fetchTrialBalance();
@@ -51,7 +60,7 @@ export default function TrialBalancePage() {
   const fetchTrialBalance = async () => {
     try {
       const response = await fetch(
-        `/api/orgs/{formatCurrency(orgSlug, currency)}/reports/trial-balance?asOfDate={formatCurrency(asOfDate, currency)}`
+        `/api/orgs/${orgSlug}/reports/trial-balance?asOfDate=${asOfDate}`
       );
       const result = await response.json();
 
@@ -74,29 +83,29 @@ export default function TrialBalancePage() {
     return (
       <>
         <tr className="bg-gray-100">
-          <td colSpan={3} className="px-6 py-3 text-sm font-bold text-gray-900">
+          <td colSpan={3} className="px-4 py-2 text-sm font-bold text-gray-900">
             {title}
           </td>
-          <td className="px-6 py-3"></td>
-          <td className="px-6 py-3"></td>
+          <td className="px-4 py-2"></td>
+          <td className="px-4 py-2"></td>
         </tr>
         {accounts.map((account) => (
           <tr key={account.id} className="hover:bg-gray-50">
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
               {account.code}
             </td>
-            <td className="px-6 py-4 text-sm text-gray-900">{account.name}</td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+            <td className="px-4 py-2 text-sm text-gray-900">{account.name}</td>
+            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">
               {account.accountType}
             </td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium">
+            <td className="px-4 py-2 whitespace-nowrap text-sm text-right font-medium">
               {account.debit > 0 ? (
                 <span className="text-gray-900">{formatCurrency(account.debit, currency)}</span>
               ) : (
                 <span className="text-gray-400">-</span>
               )}
             </td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium">
+            <td className="px-4 py-2 whitespace-nowrap text-sm text-right font-medium">
               {account.credit > 0 ? (
                 <span className="text-gray-900">{formatCurrency(account.credit, currency)}</span>
               ) : (
@@ -106,13 +115,13 @@ export default function TrialBalancePage() {
           </tr>
         ))}
         <tr className="bg-gray-50 font-semibold">
-          <td colSpan={3} className="px-6 py-3 text-sm text-gray-900">
+          <td colSpan={3} className="px-4 py-2 text-sm text-gray-900">
             {title} Total
           </td>
-          <td className="px-6 py-3 text-sm text-right text-gray-900">
+          <td className="px-4 py-2 text-sm text-right text-gray-900">
             {formatCurrency(groupTotalDebit, currency)}
           </td>
-          <td className="px-6 py-3 text-sm text-right text-gray-900">
+          <td className="px-4 py-2 text-sm text-right text-gray-900">
             {formatCurrency(groupTotalCredit, currency)}
           </td>
         </tr>
@@ -143,11 +152,19 @@ export default function TrialBalancePage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Trial Balance</h1>
-          <p className="text-gray-600 mt-1">
-            Verify accounting equation: Assets = Liabilities + Equity
-          </p>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => router.back()}
+            className="flex items-center px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Trial Balance</h1>
+            <p className="text-gray-600 mt-1">
+              Verify accounting equation: Assets = Liabilities + Equity
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
@@ -164,7 +181,7 @@ export default function TrialBalancePage() {
 
       {/* Balance Status */}
       <div
-        className={`rounded-lg p-6 ${
+        className={`rounded-lg p-4 ${
           data.summary.isBalanced
             ? 'bg-green-50 border-2 border-green-200'
             : 'bg-red-50 border-2 border-red-200'
@@ -198,7 +215,7 @@ export default function TrialBalancePage() {
           </div>
 
           <div className="text-right">
-            <div className="text-2xl font-bold text-gray-900">
+            <div className={`font-bold text-gray-900 ${getAmountTextSize(formatCurrency(data.summary.totalDebits, currency))}`}>
               {formatCurrency(data.summary.totalDebits, currency)}
             </div>
             <div className="text-sm text-gray-600">Total Debits = Total Credits</div>
@@ -207,7 +224,7 @@ export default function TrialBalancePage() {
       </div>
 
       {/* Date Filter */}
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="bg-white rounded-lg shadow p-4">
         <div className="flex items-center gap-4">
           <Calendar className="h-5 w-5 text-gray-400" />
           <div>
@@ -229,32 +246,29 @@ export default function TrialBalancePage() {
 
       {/* Trial Balance Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">
-            Trial Balance Report
+        <div className="p-4 border-b border-gray-200">
+          <h2 className="text-base font-semibold text-gray-900">
+            Trial Balance Report - As of {new Date(data.summary.asOfDate).toLocaleDateString()}
           </h2>
-          <p className="text-sm text-gray-600 mt-1">
-            As of {new Date(data.summary.asOfDate).toLocaleDateString()}
-          </p>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50 border-b-2 border-gray-300">
+            <thead className="bg-gray-50 border-b-2 border-gray-300 sticky top-0">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Account Code
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Code
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Account Name
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Type
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Debit
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Credit
                 </th>
               </tr>

@@ -7,6 +7,15 @@ import { ArrowLeft, TrendingUp, TrendingDown, Calendar, Filter } from 'lucide-re
 import { useOrganization } from '@/hooks/useOrganization';
 import { formatCurrency } from '@/lib/utils';
 
+// Helper function to get responsive text size based on string length
+const getAmountTextSize = (value: string) => {
+  const length = value.length;
+  if (length <= 10) return 'text-2xl';
+  if (length <= 15) return 'text-xl';
+  if (length <= 20) return 'text-lg';
+  return 'text-base';
+};
+
 interface LedgerEntry {
   id: string;
   entryType: string;
@@ -15,7 +24,7 @@ interface LedgerEntry {
   transaction: {
     id: string;
     transactionDate: string;
-    reference: string;
+    transactionNumber: string;
     description: string;
   };
 }
@@ -92,11 +101,11 @@ export default function AccountDetailsPage() {
 
     const totalDebits = entries
       .filter((e) => e.entryType === 'DEBIT')
-      .reduce((sum, e) => sum + e.amount, 0);
+      .reduce((sum, e) => sum + parseFloat(String(e.amount)), 0);
 
     const totalCredits = entries
       .filter((e) => e.entryType === 'CREDIT')
-      .reduce((sum, e) => sum + e.amount, 0);
+      .reduce((sum, e) => sum + parseFloat(String(e.amount)), 0);
 
     const netChange = totalDebits - totalCredits;
 
@@ -177,7 +186,7 @@ export default function AccountDetailsPage() {
             <div className="text-sm text-gray-600">Current Balance</div>
             <TrendingUp className="h-5 w-5 text-blue-500" />
           </div>
-          <div className="text-2xl font-bold text-gray-900">
+          <div className={`${getAmountTextSize(formatCurrency(Number(account.balance), currency))} font-bold text-gray-900`}>
             {formatCurrency(Number(account.balance), currency)}
           </div>
         </div>
@@ -187,7 +196,7 @@ export default function AccountDetailsPage() {
             <div className="text-sm text-gray-600">Total Debits</div>
             <TrendingUp className="h-5 w-5 text-green-500" />
           </div>
-          <div className="text-2xl font-bold text-gray-900">
+          <div className={`${getAmountTextSize(formatCurrency(stats.totalDebits, currency))} font-bold text-gray-900`}>
             {formatCurrency(stats.totalDebits, currency)}
           </div>
         </div>
@@ -197,7 +206,7 @@ export default function AccountDetailsPage() {
             <div className="text-sm text-gray-600">Total Credits</div>
             <TrendingDown className="h-5 w-5 text-red-500" />
           </div>
-          <div className="text-2xl font-bold text-gray-900">
+          <div className={`${getAmountTextSize(formatCurrency(stats.totalCredits, currency))} font-bold text-gray-900`}>
             {formatCurrency(stats.totalCredits, currency)}
           </div>
         </div>
@@ -208,7 +217,7 @@ export default function AccountDetailsPage() {
             <Calendar className="h-5 w-5 text-purple-500" />
           </div>
           <div
-            className={`text-2xl font-bold ${
+            className={`${getAmountTextSize(formatCurrency(Math.abs(stats.netChange), currency) + ' DR')} font-bold ${
               stats.netChange >= 0 ? 'text-green-600' : 'text-red-600'
             }`}
           >
@@ -317,7 +326,7 @@ export default function AccountDetailsPage() {
                         href={`/${orgSlug}/general-ledger/journal-entries/list`}
                         className="text-sm text-blue-600 hover:text-blue-700"
                       >
-                        {entry.transaction.reference}
+                        {entry.transaction.transactionNumber}
                       </Link>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900">
@@ -326,7 +335,7 @@ export default function AccountDetailsPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
                       {entry.entryType === 'DEBIT' ? (
                         <span className="font-medium text-green-600">
-                          {formatCurrency(entry.amount, currency)}
+                          {formatCurrency(parseFloat(String(entry.amount)), currency)}
                         </span>
                       ) : (
                         <span className="text-gray-400">-</span>
@@ -335,14 +344,14 @@ export default function AccountDetailsPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
                       {entry.entryType === 'CREDIT' ? (
                         <span className="font-medium text-red-600">
-                          {formatCurrency(entry.amount, currency)}
+                          {formatCurrency(parseFloat(String(entry.amount)), currency)}
                         </span>
                       ) : (
                         <span className="text-gray-400">-</span>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium text-gray-900">
-                      {formatCurrency(entry.balance, currency)}
+                      {formatCurrency(parseFloat(String(entry.balance)), currency)}
                     </td>
                   </tr>
                 ))}

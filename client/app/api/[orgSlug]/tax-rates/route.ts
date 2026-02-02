@@ -13,33 +13,52 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    await requireOrgMembership(user.id, params.orgSlug);
-    
-    const org = await prisma.organization.findUnique({
-      where: { slug: params.orgSlug },
-    });
-    if (!org) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
+    const { orgSlug } = params;
+    const { searchParams } = new URL(req.url);
+    const activeOnly = searchParams.get('activeOnly') === 'true';
+
+    // Get organization and verify membership
+    const { org: organization } = await requireOrgMembership(user.id, orgSlug);
+
+    // Build where clause
+    const where: any = {
+      taxAgency: {
+        organizationId: organization.id,
+      },
+    };
+
+    if (activeOnly) {
+      where.isActive = true;
+      where.OR = [
+        { effectiveTo: null },
+        { effectiveTo: { gte: new Date() } },
+      ];
     }
 
-    // Fetch all active tax rates for this organization
-    const taxRates = await prisma.taxRate.findMany({
-      where: {
-        organizationId: org.id,
-        isActive: true,
+    // Fetch rates from TaxAgencyRate
+    const rates = await prisma.taxAgencyRate.findMany({
+      where,
+      include: {
+        taxAgency: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+          },
+        },
       },
-      orderBy: {
-        name: 'asc',
-      },
-      select: {
-        id: true,
-        name: true,
-        rate: true,
-        taxType: true,
-        isActive: true,
-        description: true,
-      },
+      orderBy: [
+        { taxAgency: { name: 'asc' } },
+        { rate: 'desc' },
+      ],
     });
+
+    // Transform for UI - return in the format the form expects
+    const taxRates = rates.map((rate) => ({
+      id: rate.id,
+      name: `${rate.taxAgency.name} - ${rate.name} (${rate.rate}%)`,
+      rate: Number(rate.rate),
+    }));
 
     return NextResponse.json({ taxRates });
   } catch (error) {

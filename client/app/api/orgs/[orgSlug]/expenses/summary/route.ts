@@ -11,7 +11,7 @@ export async function GET(
   { params }: { params: { orgSlug: string } }
 ) {
   try {
-    const { organization } = await requireAuth(request);
+    const { organizationId } = await requireAuth(params.orgSlug);
     const searchParams = request.nextUrl.searchParams;
 
     const startDate = searchParams.get('startDate');
@@ -26,7 +26,7 @@ export async function GET(
     }
 
     const summary = await ExpenseService.getExpenseSummary(
-      organization.id,
+      organizationId,
       new Date(startDate),
       new Date(endDate),
       groupBy

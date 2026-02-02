@@ -57,7 +57,7 @@ export default function ExpenseTrackingPage() {
 
   // Expense lines
   const [lines, setLines] = useState<ExpenseLine[]>([
-    { id: '1', categoryId: '', description: '', amount: '', taxInclusive: true },
+    { id: '1', categoryId: '', description: '', amount: '', taxInclusive: false },
   ]);
 
   // Data
@@ -195,6 +195,22 @@ export default function ExpenseTrackingPage() {
   const calculateTotal = () => {
     return lines.reduce((sum, line) => {
       const amount = parseFloat(line.amount) || 0;
+      
+      // If tax rate is selected, calculate actual total
+      if (line.taxRateId && amount > 0) {
+        const taxRate = taxRates.find(r => r.id === line.taxRateId);
+        const rate = taxRate ? taxRate.rate : 0;
+        
+        if (line.taxInclusive) {
+          // Tax Inclusive: amount + tax
+          const taxAmount = amount * (rate / 100);
+          return sum + amount + taxAmount;
+        } else {
+          // Tax Exclusive: amount already includes everything
+          return sum + amount;
+        }
+      }
+      
       return sum + amount;
     }, 0);
   };
@@ -256,7 +272,7 @@ export default function ExpenseTrackingPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          expenseDate: new Date(expenseDate),
+          expenseDate: expenseDate, // Send as string, let backend parse
           payeeVendorId: payeeType === 'VENDOR' ? payeeVendorId : undefined,
           payeeName: payeeType === 'ONETIME' ? payeeName : undefined,
           paymentAccountId,
@@ -278,6 +294,12 @@ export default function ExpenseTrackingPage() {
           notes,
         }),
       });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Server error:', errorText);
+        throw new Error(errorText || `Server error: ${response.status}`);
+      }
 
       const data = await response.json();
 
@@ -593,6 +615,36 @@ export default function ExpenseTrackingPage() {
                         onChange={(e) => updateLine(line.id, 'amount', e.target.value)}
                         placeholder="0.00"
                       />
+                      {line.taxRateId && line.amount && (
+                        <div className="mt-1 text-xs text-gray-600">
+                          {(() => {
+                            const amount = parseFloat(line.amount) || 0;
+                            const taxRate = taxRates.find(r => r.id === line.taxRateId);
+                            const rate = taxRate ? taxRate.rate : 0;
+                            let taxAmount = 0;
+                            let netAmount = amount;
+                            
+                            if (line.taxInclusive) {
+                              // Tax Inclusive: Amount excludes tax, add tax on top
+                              taxAmount = amount * (rate / 100);
+                            } else {
+                              // Tax Exclusive: Amount includes tax, extract net
+                              netAmount = amount / (1 + rate / 100);
+                              taxAmount = amount - netAmount;
+                            }
+                            
+                            return (
+                              <>
+                                {line.taxInclusive ? (
+                                  <span>Subtotal: {amount.toFixed(2)} + Tax: {taxAmount.toFixed(2)} = {(amount + taxAmount).toFixed(2)}</span>
+                                ) : (
+                                  <span>Net: {netAmount.toFixed(2)} + Tax: {taxAmount.toFixed(2)}</span>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      )}
                     </div>
 
                     <div>
@@ -604,8 +656,8 @@ export default function ExpenseTrackingPage() {
                         value={line.taxInclusive ? 'inclusive' : 'exclusive'}
                         onChange={(e) => updateLine(line.id, 'taxInclusive', e.target.value === 'inclusive')}
                       >
-                        <option value="inclusive">Tax Inclusive</option>
                         <option value="exclusive">Tax Exclusive</option>
+                        <option value="inclusive">Tax Inclusive</option>
                       </select>
                     </div>
 

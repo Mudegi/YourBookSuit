@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { DoubleEntryService } from '../accounting/double-entry.service';
+import { ForeignExchangeGainLossService } from '../currency/fx-gain-loss.service';
+import { Decimal } from 'decimal.js';
 
 const getCustomerDisplayName = (customer: { name?: string | null; firstName?: string | null; lastName?: string | null; companyName?: string | null }) => {
   const personalName = [customer.firstName, customer.lastName].filter(Boolean).join(' ').trim();
@@ -200,6 +202,18 @@ export class PaymentService {
         data: { referenceId: payment.id },
       });
 
+      // Get organization for base currency and FX account settings
+      const organization = await tx.organization.findUnique({
+        where: { id: organizationId },
+        select: {
+          baseCurrency: true,
+          fxGainAccountId: true,
+          fxLossAccountId: true,
+        },
+      });
+
+      let totalFxGainLoss = new Decimal(0);
+
       // Create payment allocations and update invoice statuses
       for (const allocation of data.invoiceAllocations) {
         await tx.paymentAllocation.create({
@@ -224,6 +238,38 @@ export class PaymentService {
             0
           );
 
+          // Calculate FX gain/loss if invoice is in foreign currency
+          if (organization && invoice.currency !== organization.baseCurrency) {
+            try {
+              const fxCalculation = await ForeignExchangeGainLossService.calculateRealizedFX(
+                organizationId,
+                invoice.id,
+                'INVOICE',
+                allocation.amount,
+                data.paymentDate,
+                invoice.exchangeRate
+              );
+
+              if (fxCalculation && Math.abs(fxCalculation.gainLossAmount) > 0.01) {
+                // Record the FX gain/loss
+                await ForeignExchangeGainLossService.recordRealizedFX(
+                  organizationId,
+                  payment.id,
+                  fxCalculation,
+                  invoice.id,
+                  undefined,
+                  userId,
+                  tx
+                );
+
+                totalFxGainLoss = totalFxGainLoss.plus(fxCalculation.gainLossAmount);
+              }
+            } catch (error) {
+              console.error('Error calculating FX gain/loss:', error);
+              // Continue processing - don't fail the payment
+            }
+          }
+
           // Update invoice status based on payment
           let newStatus = invoice.status;
           if (totalPaid >= invoice.totalAmount) {
@@ -240,6 +286,19 @@ export class PaymentService {
             });
           }
         }
+      }
+
+      // Update payment with total FX gain/loss if applicable
+      if (!totalFxGainLoss.isZero()) {
+        await tx.payment.update({
+          where: { id: payment.id },
+          data: {
+            fxGainLossAmount: totalFxGainLoss.toNumber(),
+            fxGainLossAccountId: totalFxGainLoss.gt(0)
+              ? organization?.fxGainAccountId
+              : organization?.fxLossAccountId,
+          },
+        });
       }
 
       // Fetch complete payment with relations
@@ -418,6 +477,18 @@ export class PaymentService {
         data: { referenceId: payment.id },
       });
 
+      // Get organization for base currency and FX account settings
+      const organization = await tx.organization.findUnique({
+        where: { id: organizationId },
+        select: {
+          baseCurrency: true,
+          fxGainAccountId: true,
+          fxLossAccountId: true,
+        },
+      });
+
+      let totalFxGainLoss = new Decimal(0);
+
       // Create payment allocations and update bill statuses
       for (const allocation of data.billAllocations) {
         await tx.paymentAllocation.create({
@@ -442,6 +513,38 @@ export class PaymentService {
             0
           );
 
+          // Calculate FX gain/loss if bill is in foreign currency
+          if (organization && bill.currency !== organization.baseCurrency) {
+            try {
+              const fxCalculation = await ForeignExchangeGainLossService.calculateRealizedFX(
+                organizationId,
+                bill.id,
+                'BILL',
+                allocation.amount,
+                data.paymentDate,
+                bill.exchangeRate
+              );
+
+              if (fxCalculation && Math.abs(fxCalculation.gainLossAmount) > 0.01) {
+                // Record the FX gain/loss
+                await ForeignExchangeGainLossService.recordRealizedFX(
+                  organizationId,
+                  payment.id,
+                  fxCalculation,
+                  undefined,
+                  bill.id,
+                  userId,
+                  tx
+                );
+
+                totalFxGainLoss = totalFxGainLoss.plus(fxCalculation.gainLossAmount);
+              }
+            } catch (error) {
+              console.error('Error calculating FX gain/loss:', error);
+              // Continue processing - don't fail the payment
+            }
+          }
+
           // Update bill status based on payment
           let newStatus = bill.status;
           if (totalPaid >= bill.totalAmount) {
@@ -458,6 +561,19 @@ export class PaymentService {
             });
           }
         }
+      }
+
+      // Update payment with total FX gain/loss if applicable
+      if (!totalFxGainLoss.isZero()) {
+        await tx.payment.update({
+          where: { id: payment.id },
+          data: {
+            fxGainLossAmount: totalFxGainLoss.toNumber(),
+            fxGainLossAccountId: totalFxGainLoss.gt(0)
+              ? organization?.fxGainAccountId
+              : organization?.fxLossAccountId,
+          },
+        });
       }
 
       // Fetch complete payment with relations

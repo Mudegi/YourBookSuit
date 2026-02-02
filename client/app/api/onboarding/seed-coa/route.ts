@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
+import { PaymentTermsService } from '@/services/payment-terms.service';
 
 // Default Chart of Accounts templates by industry
 const getIndustryAccounts = (industry: string) => {
@@ -180,6 +181,15 @@ export async function POST(request: NextRequest) {
         })
       )
     );
+
+    // Seed default payment terms for the organization
+    try {
+      await PaymentTermsService.seedDefaults(organizationId);
+      console.log('✅ Default payment terms seeded successfully');
+    } catch (seedError) {
+      // Log but don't fail the onboarding if payment terms fail
+      console.error('⚠️ Failed to seed payment terms:', seedError);
+    }
 
     return NextResponse.json({
       success: true,

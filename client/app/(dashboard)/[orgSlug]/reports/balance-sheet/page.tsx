@@ -9,34 +9,66 @@ import { Alert } from '@/components/ui/alert';
 import Loading from '@/components/ui/loading';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useOrganization } from '@/hooks/useOrganization';
 
 interface BalanceSheetAccount {
-  id: string;
-  code: string;
-  name: string;
+  accountId: string;
+  accountCode: string;
+  accountName: string;
   accountType: string;
-  balance: number;
+  accountCategory?: string;
+  debit: string;
+  credit: string;
+  balance: string;
+  transactionCount: number;
 }
 
 interface BalanceSheetData {
+  organizationId: string;
   asOfDate: string;
+  basis: 'ACCRUAL' | 'CASH';
   assets: {
-    currentAssets: BalanceSheetAccount[];
-    fixedAssets: BalanceSheetAccount[];
-    otherAssets: BalanceSheetAccount[];
-    totalAssets: number;
+    currentAssets: {
+      title: string;
+      accounts: BalanceSheetAccount[];
+      subtotal: string;
+    };
+    fixedAssets: {
+      title: string;
+      accounts: BalanceSheetAccount[];
+      subtotal: string;
+    };
+    otherAssets: {
+      title: string;
+      accounts: BalanceSheetAccount[];
+      subtotal: string;
+    };
+    totalAssets: string;
   };
   liabilities: {
-    currentLiabilities: BalanceSheetAccount[];
-    longTermLiabilities: BalanceSheetAccount[];
-    totalLiabilities: number;
+    currentLiabilities: {
+      title: string;
+      accounts: BalanceSheetAccount[];
+      subtotal: string;
+    };
+    longTermLiabilities: {
+      title: string;
+      accounts: BalanceSheetAccount[];
+      subtotal: string;
+    };
+    totalLiabilities: string;
   };
   equity: {
-    equityAccounts: BalanceSheetAccount[];
-    retainedEarnings: number;
-    totalEquity: number;
+    retainedEarnings: string;
+    currentYearEarnings: string;
+    otherEquity: {
+      title: string;
+      accounts: BalanceSheetAccount[];
+      subtotal: string;
+    };
+    totalEquity: string;
   };
-  isBalanced: boolean;
+  totalLiabilitiesAndEquity: string;
 }
 
 export default function BalanceSheetPage() {
@@ -56,15 +88,19 @@ export default function BalanceSheetPage() {
   async function fetchBalanceSheet() {
     try {
       setLoading(true);
-      const url = `/api/orgs/{formatCurrency(orgSlug, currency)}/reports/balance-sheet?asOfDate={formatCurrency(asOfDate, currency)}`;
+      const url = `/api/orgs/${orgSlug}/reports/balance-sheet?asOfDate=${asOfDate}`;
       const response = await fetch(url);
       
       if (!response.ok) throw new Error('Failed to fetch balance sheet');
       
       const data = await response.json();
-      setBalanceSheet(data);
-    } catch (err) {
-      setError('Failed to load balance sheet');
+      if (data.success && data.report) {
+        setBalanceSheet(data.report);
+      } else {
+        throw new Error(data.error || 'Failed to load balance sheet');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to load balance sheet');
       console.error(err);
     } finally {
       setLoading(false);
@@ -87,21 +123,32 @@ export default function BalanceSheetPage() {
     return (
       <div className="space-y-4">
         <Alert variant="error">{error || 'Failed to load balance sheet'}</Alert>
-        <Link href={`/{formatCurrency(orgSlug, currency)}/reports`}>
+        <Link href={`/${orgSlug}/reports`}>
           <Button variant="outline">Back to Reports</Button>
         </Link>
       </div>
     );
   }
 
-  const difference = balanceSheet.assets.totalAssets - 
-    (balanceSheet.liabilities.totalLiabilities + balanceSheet.equity.totalEquity);
+  const formatCurrency = (value: string, currencyCode?: string) => {
+    return parseFloat(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  const difference = parseFloat(balanceSheet.assets.totalAssets) - 
+    parseFloat(balanceSheet.totalLiabilitiesAndEquity);
+  
+  const isBalanced = Math.abs(difference) < 0.01; // Consider balanced if difference is less than 1 cent
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-start print:hidden">
         <div>
+          <Link href={`/${orgSlug}/reports`}>
+            <Button variant="ghost" className="mb-2">
+              ← Back to Reports
+            </Button>
+          </Link>
           <h1 className="text-3xl font-bold">Balance Sheet</h1>
           <p className="text-gray-600 mt-1">
             As of {new Date(balanceSheet.asOfDate).toLocaleDateString()}
@@ -125,7 +172,7 @@ export default function BalanceSheetPage() {
       </div>
 
       {/* Balance Status */}
-      {!balanceSheet.isBalanced && (
+      {!isBalanced && (
         <Alert variant="error">
           ⚠️ Balance Sheet is out of balance by ${Math.abs(difference).toFixed(2)}
           <br />
@@ -133,7 +180,7 @@ export default function BalanceSheetPage() {
         </Alert>
       )}
 
-      {balanceSheet.isBalanced && (
+      {isBalanced && (
         <Alert variant="success">
           ✓ Balance Sheet is balanced - Assets = Liabilities + Equity
         </Alert>
@@ -155,19 +202,19 @@ export default function BalanceSheetPage() {
               <h2 className="text-xl font-bold border-b-2 pb-2 mb-4">ASSETS</h2>
 
               {/* Current Assets */}
-              {balanceSheet.assets.currentAssets.length > 0 && (
+              {balanceSheet.assets.currentAssets.accounts.length > 0 && (
                 <div className="mb-6">
                   <h3 className="font-semibold text-gray-700 mb-2">Current Assets</h3>
                   <table className="w-full text-sm">
                     <tbody>
-                      {balanceSheet.assets.currentAssets.map((account) => (
-                        <tr key={account.id}>
+                      {balanceSheet.assets.currentAssets.accounts.map((account) => (
+                        <tr key={account.accountId}>
                           <td className="py-1 pl-4">
                             <Link
-                              href={`/{formatCurrency(orgSlug, currency)}/general-ledger/chart-of-accounts/{formatCurrency(account.id, currency)}`}
+                              href={`/${orgSlug}/general-ledger/chart-of-accounts/${account.accountId}`}
                               className="text-blue-600 hover:underline"
                             >
-                              {account.code} - {account.name}
+                              {account.accountCode} - {account.accountName}
                             </Link>
                           </td>
                           <td className="py-1 text-right pr-4">
@@ -178,10 +225,7 @@ export default function BalanceSheetPage() {
                       <tr className="border-t font-semibold">
                         <td className="py-2 pl-8">Total Current Assets</td>
                         <td className="py-2 text-right pr-4">
-                          $
-                          {balanceSheet.assets.currentAssets
-                            .reduce((sum, a) => sum + a.balance, 0)
-                            .toFixed(2)}
+                          {formatCurrency(balanceSheet.assets.currentAssets.subtotal, currency)}
                         </td>
                       </tr>
                     </tbody>
@@ -190,19 +234,19 @@ export default function BalanceSheetPage() {
               )}
 
               {/* Fixed Assets */}
-              {balanceSheet.assets.fixedAssets.length > 0 && (
+              {balanceSheet.assets.fixedAssets.accounts.length > 0 && (
                 <div className="mb-6">
                   <h3 className="font-semibold text-gray-700 mb-2">Fixed Assets</h3>
                   <table className="w-full text-sm">
                     <tbody>
-                      {balanceSheet.assets.fixedAssets.map((account) => (
-                        <tr key={account.id}>
+                      {balanceSheet.assets.fixedAssets.accounts.map((account) => (
+                        <tr key={account.accountId}>
                           <td className="py-1 pl-4">
                             <Link
-                              href={`/{formatCurrency(orgSlug, currency)}/general-ledger/chart-of-accounts/{formatCurrency(account.id, currency)}`}
+                              href={`/${orgSlug}/general-ledger/chart-of-accounts/${account.accountId}`}
                               className="text-blue-600 hover:underline"
                             >
-                              {account.code} - {account.name}
+                              {account.accountCode} - {account.accountName}
                             </Link>
                           </td>
                           <td className="py-1 text-right pr-4">
@@ -213,10 +257,7 @@ export default function BalanceSheetPage() {
                       <tr className="border-t font-semibold">
                         <td className="py-2 pl-8">Total Fixed Assets</td>
                         <td className="py-2 text-right pr-4">
-                          $
-                          {balanceSheet.assets.fixedAssets
-                            .reduce((sum, a) => sum + a.balance, 0)
-                            .toFixed(2)}
+                          {formatCurrency(balanceSheet.assets.fixedAssets.subtotal, currency)}
                         </td>
                       </tr>
                     </tbody>
@@ -225,19 +266,19 @@ export default function BalanceSheetPage() {
               )}
 
               {/* Other Assets */}
-              {balanceSheet.assets.otherAssets.length > 0 && (
+              {balanceSheet.assets.otherAssets.accounts.length > 0 && (
                 <div className="mb-6">
                   <h3 className="font-semibold text-gray-700 mb-2">Other Assets</h3>
                   <table className="w-full text-sm">
                     <tbody>
-                      {balanceSheet.assets.otherAssets.map((account) => (
-                        <tr key={account.id}>
+                      {balanceSheet.assets.otherAssets.accounts.map((account) => (
+                        <tr key={account.accountId}>
                           <td className="py-1 pl-4">
                             <Link
-                              href={`/{formatCurrency(orgSlug, currency)}/general-ledger/chart-of-accounts/{formatCurrency(account.id, currency)}`}
+                              href={`/${orgSlug}/general-ledger/chart-of-accounts/${account.accountId}`}
                               className="text-blue-600 hover:underline"
                             >
-                              {account.code} - {account.name}
+                              {account.accountCode} - {account.accountName}
                             </Link>
                           </td>
                           <td className="py-1 text-right pr-4">
@@ -248,10 +289,7 @@ export default function BalanceSheetPage() {
                       <tr className="border-t font-semibold">
                         <td className="py-2 pl-8">Total Other Assets</td>
                         <td className="py-2 text-right pr-4">
-                          $
-                          {balanceSheet.assets.otherAssets
-                            .reduce((sum, a) => sum + a.balance, 0)
-                            .toFixed(2)}
+                          {formatCurrency(balanceSheet.assets.otherAssets.subtotal, currency)}
                         </td>
                       </tr>
                     </tbody>
@@ -281,21 +319,21 @@ export default function BalanceSheetPage() {
               </h2>
 
               {/* Current Liabilities */}
-              {balanceSheet.liabilities.currentLiabilities.length > 0 && (
+              {balanceSheet.liabilities.currentLiabilities.accounts.length > 0 && (
                 <div className="mb-6">
                   <h3 className="font-semibold text-gray-700 mb-2">
                     Current Liabilities
                   </h3>
                   <table className="w-full text-sm">
                     <tbody>
-                      {balanceSheet.liabilities.currentLiabilities.map((account) => (
-                        <tr key={account.id}>
+                      {balanceSheet.liabilities.currentLiabilities.accounts.map((account) => (
+                        <tr key={account.accountId}>
                           <td className="py-1 pl-4">
                             <Link
-                              href={`/{formatCurrency(orgSlug, currency)}/general-ledger/chart-of-accounts/{formatCurrency(account.id, currency)}`}
+                              href={`/${orgSlug}/general-ledger/chart-of-accounts/${account.accountId}`}
                               className="text-blue-600 hover:underline"
                             >
-                              {account.code} - {account.name}
+                              {account.accountCode} - {account.accountName}
                             </Link>
                           </td>
                           <td className="py-1 text-right pr-4">
@@ -306,10 +344,7 @@ export default function BalanceSheetPage() {
                       <tr className="border-t font-semibold">
                         <td className="py-2 pl-8">Total Current Liabilities</td>
                         <td className="py-2 text-right pr-4">
-                          $
-                          {balanceSheet.liabilities.currentLiabilities
-                            .reduce((sum, a) => sum + a.balance, 0)
-                            .toFixed(2)}
+                          {formatCurrency(balanceSheet.liabilities.currentLiabilities.subtotal, currency)}
                         </td>
                       </tr>
                     </tbody>
@@ -318,21 +353,21 @@ export default function BalanceSheetPage() {
               )}
 
               {/* Long-term Liabilities */}
-              {balanceSheet.liabilities.longTermLiabilities.length > 0 && (
+              {balanceSheet.liabilities.longTermLiabilities.accounts.length > 0 && (
                 <div className="mb-6">
                   <h3 className="font-semibold text-gray-700 mb-2">
                     Long-term Liabilities
                   </h3>
                   <table className="w-full text-sm">
                     <tbody>
-                      {balanceSheet.liabilities.longTermLiabilities.map((account) => (
-                        <tr key={account.id}>
+                      {balanceSheet.liabilities.longTermLiabilities.accounts.map((account) => (
+                        <tr key={account.accountId}>
                           <td className="py-1 pl-4">
                             <Link
-                              href={`/{formatCurrency(orgSlug, currency)}/general-ledger/chart-of-accounts/{formatCurrency(account.id, currency)}`}
+                              href={`/${orgSlug}/general-ledger/chart-of-accounts/${account.accountId}`}
                               className="text-blue-600 hover:underline"
                             >
-                              {account.code} - {account.name}
+                              {account.accountCode} - {account.accountName}
                             </Link>
                           </td>
                           <td className="py-1 text-right pr-4">
@@ -343,10 +378,7 @@ export default function BalanceSheetPage() {
                       <tr className="border-t font-semibold">
                         <td className="py-2 pl-8">Total Long-term Liabilities</td>
                         <td className="py-2 text-right pr-4">
-                          $
-                          {balanceSheet.liabilities.longTermLiabilities
-                            .reduce((sum, a) => sum + a.balance, 0)
-                            .toFixed(2)}
+                          {formatCurrency(balanceSheet.liabilities.longTermLiabilities.subtotal, currency)}
                         </td>
                       </tr>
                     </tbody>
@@ -373,14 +405,14 @@ export default function BalanceSheetPage() {
                 <h3 className="font-semibold text-gray-700 mb-2">Equity</h3>
                 <table className="w-full text-sm">
                   <tbody>
-                    {balanceSheet.equity.equityAccounts.map((account) => (
-                      <tr key={account.id}>
+                    {balanceSheet.equity.otherEquity.accounts.map((account) => (
+                      <tr key={account.accountId}>
                         <td className="py-1 pl-4">
                           <Link
-                            href={`/{formatCurrency(orgSlug, currency)}/general-ledger/chart-of-accounts/{formatCurrency(account.id, currency)}`}
+                            href={`/${orgSlug}/general-ledger/chart-of-accounts/${account.accountId}`}
                             className="text-blue-600 hover:underline"
                           >
-                            {account.code} - {account.name}
+                            {account.accountCode} - {account.accountName}
                           </Link>
                         </td>
                         <td className="py-1 text-right pr-4">
@@ -392,6 +424,12 @@ export default function BalanceSheetPage() {
                       <td className="py-1 pl-4">Retained Earnings</td>
                       <td className="py-1 text-right pr-4">
                         {formatCurrency(balanceSheet.equity.retainedEarnings, currency)}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-1 pl-4">Current Year Earnings</td>
+                      <td className="py-1 text-right pr-4">
+                        {formatCurrency(balanceSheet.equity.currentYearEarnings, currency)}
                       </td>
                     </tr>
                     <tr className="border-t font-semibold">
@@ -411,11 +449,7 @@ export default function BalanceSheetPage() {
                     <tr className="text-lg font-bold">
                       <td className="py-2">TOTAL LIABILITIES & EQUITY</td>
                       <td className="py-2 text-right pr-4">
-                        $
-                        {(
-                          balanceSheet.liabilities.totalLiabilities +
-                          balanceSheet.equity.totalEquity
-                        ).toFixed(2)}
+                        {formatCurrency(balanceSheet.totalLiabilitiesAndEquity, currency)}
                       </td>
                     </tr>
                   </tbody>
@@ -434,7 +468,7 @@ export default function BalanceSheetPage() {
                 {formatCurrency(balanceSheet.liabilities.totalLiabilities, currency)} +{' '}
                 {formatCurrency(balanceSheet.equity.totalEquity, currency)}
               </p>
-              {balanceSheet.isBalanced ? (
+              {isBalanced ? (
                 <p className="text-center text-green-600 font-semibold mt-2">
                   ✓ Balanced
                 </p>

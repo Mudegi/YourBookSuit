@@ -11,7 +11,7 @@ export async function GET(
   { params }: { params: { orgSlug: string } }
 ) {
   try {
-    const { organization } = await requireAuth(request);
+    const { organizationId } = await requireAuth(params.orgSlug);
     const searchParams = request.nextUrl.searchParams;
 
     const vendorId = searchParams.get('vendorId');
@@ -25,7 +25,7 @@ export async function GET(
     }
 
     const suggestions = await ExpenseService.getExpenseSuggestions(
-      organization.id,
+      organizationId,
       vendorId || undefined,
       vendorName || undefined
     );

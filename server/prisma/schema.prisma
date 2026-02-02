@@ -26,6 +26,16 @@ model Organization {
   onboardingCompleted     Boolean                  @default(false)
   industry                String?
   businessModel           String                   @default("GENERAL")
+  
+  // Multi-Currency Settings
+  fxGainAccountId         String?
+  fxLossAccountId         String?
+  unrealizedFxGainAccountId String?
+  unrealizedFxLossAccountId String?
+  defaultExchangeRateProvider String?             @default("MANUAL") // MANUAL, OANDA, XE, ECB
+  enableAutoFetchRates    Boolean                  @default(false)
+  exchangeRateBufferPercent Decimal?               @db.Decimal(5, 2) // Buffer for purchases
+  
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
   activities              Activity[]
@@ -85,6 +95,7 @@ model Organization {
   opportunities           Opportunity[]
   users                   OrganizationUser[]
   paymentEvents           PaymentEvent[]
+  paymentTerms            PaymentTerm[]
   payrollRuns             PayrollRun[]
   positions               Position[]
   priceLists              PriceList[]
@@ -138,6 +149,11 @@ model Organization {
   workOrders              WorkOrder[]
   invites                 OrganizationInvite[]
   unitsOfMeasure          UnitOfMeasure[]
+  
+  // Multi-Currency Relations
+  currencies              Currency[]
+  exchangeRates           ExchangeRate[]
+  fxGainLossTransactions  ForeignExchangeGainLoss[]
 
   @@index([slug])
   @@index([homeCountry])
@@ -389,6 +405,8 @@ model User {
   sentInvites                OrganizationInvite[]
   serviceTimeEntries         ServiceTimeEntry[]
   createdGoodsReceipts       GoodsReceipt[]
+  paymentsCreated            Payment[]               @relation("PaymentCreatedBy")
+  paymentsUpdated            Payment[]               @relation("PaymentUpdatedBy")
 
   @@index([email])
 }
@@ -552,7 +570,8 @@ model Customer {
   phone                   String?
   website                 String?
   taxIdNumber             String?
-  paymentTerms            Int                    @default(30)
+  paymentTerms            Int                    @default(30) // Deprecated: use paymentTermId
+  paymentTermId           String?                // New: Reference to PaymentTerm
   creditLimit             Decimal?               @db.Decimal(19, 4)
   billingAddress          Json?
   shippingAddress         Json?
@@ -569,6 +588,7 @@ model Customer {
   creditNotes             CreditNote[]
   Branch                  Branch?                @relation(fields: [branchId], references: [id])
   organization            Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  paymentTerm             PaymentTerm?           @relation(fields: [paymentTermId], references: [id])
   debitNotes              DebitNote[]
   invoices                Invoice[]
   nonConformanceReports   NonConformanceReport[]
@@ -581,6 +601,7 @@ model Customer {
   @@unique([organizationId, customerNumber])
   @@index([organizationId])
   @@index([email])
+  @@index([paymentTermId])
 }
 
 model Invoice {
@@ -675,6 +696,7 @@ model Invoice {
   debitNotes          DebitNote[]
   recurringExecutions RecurringExecution[]
   serviceWorkOrders   ServiceWorkOrder[]
+  fxGainLoss          ForeignExchangeGainLoss[] // FX gains/losses related to this invoice
 
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId, status])
@@ -776,7 +798,8 @@ model Vendor {
   phone                 String?
   website               String?
   taxIdNumber           String?
-  paymentTerms          Int                    @default(30)
+  paymentTerms          Int                    @default(30) // Deprecated: use paymentTermId
+  paymentTermId         String?                // New: Reference to PaymentTerm
   bankAccount           Json?
   billingAddress        Json?
   notes                 String?
@@ -792,10 +815,12 @@ model Vendor {
   goodsReceipts         GoodsReceipt[]
   Branch                Branch?                @relation(fields: [branchId], references: [id])
   organization          Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  paymentTerm           PaymentTerm?           @relation(fields: [paymentTermId], references: [id])
   whtTransactions       WHTTransaction[]
 
   @@unique([organizationId, vendorNumber])
   @@index([organizationId])
+  @@index([paymentTermId])
 }
 
 model PurchaseOrder {
@@ -945,6 +970,7 @@ model Bill {
   payments            PaymentAllocation[]
   recurringExecutions RecurringExecution[]
   whtTransactions     WHTTransaction[]
+  fxGainLoss          ForeignExchangeGainLoss[] // FX gains/losses related to this bill
 
   @@unique([organizationId, billNumber])
   @@index([organizationId, status])
@@ -992,6 +1018,12 @@ model Payment {
   amount              Decimal              @db.Decimal(19, 4)
   currency            String               @default("USD")
   exchangeRate        Decimal              @default(1) @db.Decimal(12, 6)
+  
+  // FX Gain/Loss Tracking
+  fxGainLossAmount    Decimal?             @db.Decimal(19, 4)
+  fxGainLossAccountId String?
+  baseCurrencyAmount  Decimal?             @db.Decimal(19, 4) // Amount in base currency
+  
   paymentMethod       PaymentMethod
   referenceNumber     String?
   bankAccountId       String?
@@ -1000,20 +1032,32 @@ model Payment {
   notes               String?
   attachments         String[]
   transactionId       String?
+  isReconciled        Boolean              @default(false)
+  reconciledDate      DateTime?
+  reconciliationId    String?
+  createdById         String?
+  updatedById         String?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   bankAccount         BankAccount?         @relation(fields: [bankAccountId], references: [id])
   customer            Customer?            @relation(fields: [customerId], references: [id])
   vendor              Vendor?              @relation(fields: [vendorId], references: [id])
+  createdBy           User?                @relation("PaymentCreatedBy", fields: [createdById], references: [id])
+  updatedBy           User?                @relation("PaymentUpdatedBy", fields: [updatedById], references: [id])
   allocations         PaymentAllocation[]
   paymentEvents       PaymentEvent[]
   recurringExecutions RecurringExecution[]
   debitNotes          DebitNote[]          @relation("DebitNotePayments")
+  fxGainLoss          ForeignExchangeGainLoss?
 
   @@unique([organizationId, paymentNumber])
   @@index([organizationId, paymentDate])
   @@index([customerId])
   @@index([vendorId])
+  @@index([createdById])
+  @@index([isReconciled])
+  @@index([reconciliationId])
+  @@index([currency])
 }
 
 model PaymentEvent {
@@ -1050,6 +1094,29 @@ model PaymentAllocation {
   @@index([billId])
 }
 
+model PaymentTerm {
+  id                String       @id @default(cuid())
+  organizationId    String
+  code              String       // e.g., "NET30", "NET15", "COD"
+  name              String       // e.g., "Net 30 Days", "Due on Receipt"
+  description       String?
+  daysUntilDue      Int          // Number of days after invoice date
+  discountPercentage Decimal?    @db.Decimal(5, 2) // e.g., 2.00 for 2%
+  discountDays      Int?         // Days within which discount applies
+  isActive          Boolean      @default(true)
+  isDefault         Boolean      @default(false)
+  displayOrder      Int          @default(0)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customers         Customer[]
+  vendors           Vendor[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([isDefault])
+}
+
 model BankAccount {
   id              String               @id @default(cuid())
   organizationId  String
@@ -1075,21 +1142,29 @@ model BankAccount {
 }
 
 model BankReconciliation {
-  id               String               @id @default(cuid())
-  bankAccountId    String
-  statementDate    DateTime
-  statementBalance Decimal              @db.Decimal(19, 4)
-  bookBalance      Decimal              @db.Decimal(19, 4)
-  difference       Decimal              @db.Decimal(19, 4)
-  status           ReconciliationStatus @default(IN_PROGRESS)
-  reconciledBy     String?
-  reconciledAt     DateTime?
-  notes            String?
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
-  bankAccount      BankAccount          @relation(fields: [bankAccountId], references: [id])
+  id                    String            @id @default(cuid())
+  bankAccountId         String
+  statementDate         DateTime
+  statementBalance      Decimal           @db.Decimal(19, 4)
+  bookBalance           Decimal           @db.Decimal(19, 4)
+  difference            Decimal           @db.Decimal(19, 4)
+  depositsInTransit     Decimal           @default(0) @db.Decimal(19, 4)
+  outstandingChecks     Decimal           @default(0) @db.Decimal(19, 4)
+  adjustedBookBalance   Decimal           @default(0) @db.Decimal(19, 4)
+  status                ReconciliationStatus @default(IN_PROGRESS)
+  reconciledBy          String?
+  reconciledAt          DateTime?
+  finalizedAt           DateTime?
+  notes                 String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  bankAccount           BankAccount       @relation(fields: [bankAccountId], references: [id])
+  bankTransactions      BankTransaction[]
+  adjustmentEntries     Json?
+  reconciliationReport  String?
 
   @@index([bankAccountId, statementDate])
+  @@index([status])
 }
 
 model Product {
@@ -2310,26 +2385,32 @@ model BankFeed {
 }
 
 model BankTransaction {
-  id                   String       @id @default(cuid())
+  id                   String              @id @default(cuid())
   organizationId       String
   bankFeedId           String
   externalId           String?
   transactionDate      DateTime
-  amount               Decimal      @db.Decimal(19, 4)
+  amount               Decimal             @db.Decimal(19, 4)
   description          String
   payee                String?
   referenceNo          String?
   transactionType      String
-  status               String       @default("PENDING")
+  status               String              @default("PENDING")
   matchedPaymentId     String?
   matchedTransactionId String?
-  confidenceScore      Decimal?     @db.Decimal(5, 2)
-  createdAt            DateTime     @default(now())
-  bankFeed             BankFeed     @relation(fields: [bankFeedId], references: [id], onDelete: Cascade)
-  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  confidenceScore      Decimal?            @db.Decimal(5, 2)
+  clearedDate          DateTime?
+  reconciliationId     String?
+  isReconciled         Boolean             @default(false)
+  createdAt            DateTime            @default(now())
+  bankFeed             BankFeed            @relation(fields: [bankFeedId], references: [id], onDelete: Cascade)
+  organization         Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  reconciliation       BankReconciliation? @relation(fields: [reconciliationId], references: [id])
 
   @@index([organizationId, transactionDate])
   @@index([status, matchedPaymentId])
+  @@index([reconciliationId])
+  @@index([isReconciled])
 }
 
 model Document {
@@ -5843,4 +5924,96 @@ model Testimonial {
   updatedAt        DateTime       @updatedAt
 
   @@index([systemSettingsId])
+}
+
+// ============================================================================
+// MULTI-CURRENCY MODELS
+// ============================================================================
+
+model Currency {
+  id               String         @id @default(cuid())
+  organizationId   String
+  code             String         // ISO 4217 code (USD, EUR, GBP, UGX, etc.)
+  name             String         // Full name (US Dollar, Ugandan Shilling)
+  symbol           String         // $, €, £, UGX
+  decimalPlaces    Int            @default(2) // Number of decimal places (0 for UGX, 2 for USD)
+  isActive         Boolean        @default(true)
+  isBase           Boolean        @default(false) // True if this is the base currency
+  displayOrder     Int            @default(0)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  exchangeRatesFrom ExchangeRate[] @relation("FromCurrency")
+  exchangeRatesTo   ExchangeRate[] @relation("ToCurrency")
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([isActive])
+}
+
+model ExchangeRate {
+  id                String       @id @default(cuid())
+  organizationId    String
+  fromCurrencyCode  String       // Source currency (e.g., USD)
+  toCurrencyCode    String       // Target currency (e.g., UGX)
+  rate              Decimal      @db.Decimal(18, 6) // Exchange rate
+  effectiveDate     DateTime     // Date this rate is effective
+  source            String       @default("MANUAL") // MANUAL, OANDA, XE, ECB, etc.
+  isManualOverride  Boolean      @default(false) // True if manually entered
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  fromCurrency      Currency     @relation("FromCurrency", fields: [organizationId, fromCurrencyCode], references: [organizationId, code])
+  toCurrency        Currency     @relation("ToCurrency", fields: [organizationId, toCurrencyCode], references: [organizationId, code])
+
+  @@unique([organizationId, fromCurrencyCode, toCurrencyCode, effectiveDate])
+  @@index([organizationId])
+  @@index([effectiveDate])
+  @@index([fromCurrencyCode, toCurrencyCode])
+}
+
+model ForeignExchangeGainLoss {
+  id                  String       @id @default(cuid())
+  organizationId      String
+  transactionId       String?      // Related GL transaction
+  paymentId           String?      @unique // Related payment (for realized gains/losses)
+  invoiceId           String?      // Related invoice
+  billId              String?      // Related bill
+  
+  // FX Calculation Details
+  fxType              String       // REALIZED or UNREALIZED
+  foreignCurrency     String       // Currency code (USD, EUR, etc.)
+  foreignAmount       Decimal      @db.Decimal(19, 4)
+  
+  // Transaction Date (Invoice/Bill Date)
+  transactionDate     DateTime
+  transactionRate     Decimal      @db.Decimal(18, 6)
+  transactionBaseAmount Decimal    @db.Decimal(19, 4)
+  
+  // Settlement/Revaluation Date
+  settlementDate      DateTime
+  settlementRate      Decimal      @db.Decimal(18, 6)
+  settlementBaseAmount Decimal     @db.Decimal(19, 4)
+  
+  // Gain or Loss
+  gainLossAmount      Decimal      @db.Decimal(19, 4) // Positive = Gain, Negative = Loss
+  glAccountId         String       // GL account where gain/loss was posted
+  
+  // References
+  notes               String?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payment             Payment?     @relation(fields: [paymentId], references: [id])
+  invoice             Invoice?     @relation(fields: [invoiceId], references: [id])
+  bill                Bill?        @relation(fields: [billId], references: [id])
+
+  @@index([organizationId])
+  @@index([paymentId])
+  @@index([invoiceId])
+  @@index([billId])
+  @@index([fxType])
+  @@index([settlementDate])
+  @@index([foreignCurrency])
 }

@@ -64,8 +64,54 @@ router.post('/', async (req, res) => {
   try {
     const { organizationId, customerId, invoiceDate, dueDate, items, notes, terms, currency } = req.body;
 
-    if (!organizationId || !customerId || !invoiceDate || !dueDate || !items || !Array.isArray(items)) {
+    if (!organizationId || !customerId || !invoiceDate || !items || !Array.isArray(items)) {
       return res.status(400).json({ success: false, error: 'Required fields missing' });
+    }
+
+    // Fetch customer with payment term
+    const customer = await prisma.customer.findFirst({
+      where: {
+        id: customerId,
+        organizationId,
+      },
+      include: {
+        paymentTerm: true,
+      },
+    });
+
+    if (!customer) {
+      return res.status(404).json({ success: false, error: 'Customer not found' });
+    }
+
+    // Calculate due date from payment terms if not provided
+    let calculatedDueDate;
+    if (dueDate) {
+      calculatedDueDate = new Date(dueDate);
+    } else {
+      // Use customer's payment term, or organization's default, or fallback to NET30
+      let paymentTerm = customer.paymentTerm;
+      
+      if (!paymentTerm) {
+        // Try to get organization's default payment term
+        paymentTerm = await prisma.paymentTerm.findFirst({
+          where: {
+            organizationId,
+            isDefault: true,
+            isActive: true,
+          },
+        });
+      }
+      
+      if (paymentTerm) {
+        const invoiceDateObj = new Date(invoiceDate);
+        calculatedDueDate = new Date(invoiceDateObj);
+        calculatedDueDate.setDate(calculatedDueDate.getDate() + paymentTerm.daysUntilDue);
+      } else {
+        // Fallback to NET30 if no payment terms configured
+        const invoiceDateObj = new Date(invoiceDate);
+        calculatedDueDate = new Date(invoiceDateObj);
+        calculatedDueDate.setDate(calculatedDueDate.getDate() + 30);
+      }
     }
 
     // Get next invoice number
@@ -113,7 +159,7 @@ router.post('/', async (req, res) => {
         customerId,
         invoiceNumber,
         invoiceDate: new Date(invoiceDate),
-        dueDate: new Date(dueDate),
+        dueDate: calculatedDueDate,
         currency: currency || 'USD',
         subtotal: subtotal.toNumber(),
         taxAmount: taxAmount.toNumber(),

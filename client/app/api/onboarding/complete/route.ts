@@ -89,32 +89,45 @@ export async function POST(request: NextRequest) {
 
     // If there's an opening balance, create proper double-entry journal entry
     if (openingBalance > 0) {
-      const ownerCapitalAccountId = await getOwnerCapitalAccountId(organizationId);
-      
-      // Create opening balance journal entry with proper double-entry bookkeeping
-      // Debit: Cash (Asset increases)
-      // Credit: Owner's Capital (Equity increases)
-      await DoubleEntryService.createTransaction({
-        organizationId,
-        transactionDate: new Date(),
-        transactionType: 'JOURNAL_ENTRY',
-        description: `Opening balance for ${bankName}`,
-        entries: [
-          {
-            accountId: cashAccount.id,
-            entryType: 'DEBIT',
-            amount: openingBalance,
-            description: `Opening balance - ${bankName}`,
+      // Check if opening balance entry already exists for this organization
+      const existingOpeningBalance = await prisma.transaction.findFirst({
+        where: {
+          organizationId,
+          description: {
+            contains: 'Opening balance',
           },
-          {
-            accountId: ownerCapitalAccountId,
-            entryType: 'CREDIT',
-            amount: openingBalance,
-            description: `Owner capital contribution - ${bankName}`,
-          },
-        ],
-        createdById: userId,
+        },
       });
+
+      // Only create opening balance if one doesn't already exist
+      if (!existingOpeningBalance) {
+        const ownerCapitalAccountId = await getOwnerCapitalAccountId(organizationId);
+        
+        // Create opening balance journal entry with proper double-entry bookkeeping
+        // Debit: Cash (Asset increases)
+        // Credit: Owner's Capital (Equity increases)
+        await DoubleEntryService.createTransaction({
+          organizationId,
+          transactionDate: new Date(),
+          transactionType: 'JOURNAL_ENTRY',
+          description: `Opening balance for ${bankName}`,
+          entries: [
+            {
+              accountId: cashAccount.id,
+              entryType: 'DEBIT',
+              amount: openingBalance,
+              description: `Opening balance - ${bankName}`,
+            },
+            {
+              accountId: ownerCapitalAccountId,
+              entryType: 'CREDIT',
+              amount: openingBalance,
+              description: `Owner capital contribution - ${bankName}`,
+            },
+          ],
+          createdById: userId,
+        });
+      }
     }
 
     // Mark onboarding as complete

@@ -120,6 +120,7 @@ export async function requireAuth(
     throw makeError('Unauthorized', 401);
   }
 
+  console.log('🔍 api-auth - orgSlug:', orgSlug, 'Type:', typeof orgSlug, 'Value:', JSON.stringify(orgSlug));
   const organization = await prisma.organization.findUnique({ where: { slug: orgSlug } });
   if (!organization) {
     throw makeError('Organization not found', 404);

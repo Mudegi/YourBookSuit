@@ -80,7 +80,7 @@ export default function ExpenseListPage() {
   };
 
   const totalExpenses = expenses.reduce((sum, expense) => {
-    const amount = parseFloat(expense.metadata?.totalGross || 0);
+    const amount = parseFloat(expense.calculatedTotal || 0);
     return sum + amount;
   }, 0);
 
@@ -109,7 +109,7 @@ export default function ExpenseListPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Total Expenses</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
+              <p className="text-xl font-bold text-gray-900 mt-1">
                 {currency} {totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </p>
             </div>
@@ -123,7 +123,7 @@ export default function ExpenseListPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Number of Expenses</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{expenses.length}</p>
+              <p className="text-xl font-bold text-gray-900 mt-1">{expenses.length}</p>
             </div>
             <div className="p-3 bg-green-100 rounded-lg">
               <Receipt className="h-6 w-6 text-green-600" />
@@ -135,7 +135,7 @@ export default function ExpenseListPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Avg Expense</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
+              <p className="text-xl font-bold text-gray-900 mt-1">
                 {currency}{' '}
                 {expenses.length > 0
                   ? (totalExpenses / expenses.length).toLocaleString(undefined, { minimumFractionDigits: 2 })
@@ -152,7 +152,7 @@ export default function ExpenseListPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600">Mobile Money</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
+              <p className="text-xl font-bold text-gray-900 mt-1">
                 {expenses.filter((e) => e.metadata?.paymentMethod === 'MOBILE_MONEY').length}
               </p>
             </div>
@@ -302,7 +302,7 @@ export default function ExpenseListPage() {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium">
-                      {currency} {parseFloat(expense.metadata?.totalGross || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      {currency} {parseFloat(expense.calculatedTotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center text-sm">
                       <button

@@ -9,6 +9,7 @@ import { InvoiceStatus, TransactionType, EntryType } from '@prisma/client';
 import DoubleEntryService from '../accounting/double-entry.service';
 import { DocumentSequenceService } from '@/lib/document-sequence.service';
 import { calculateTax, calculateLineItem } from '@/lib/tax/tax-calculation';
+import { ExchangeRateService } from '../currency/exchange-rate.service';
 
 export interface InvoiceTaxLineInput {
   taxType: string;
@@ -98,6 +99,33 @@ export class InvoiceService {
     // Get account mappings from organization settings
     const accountMappings = await this.getAccountMappings(input.organizationId);
 
+    // Auto-fetch exchange rate if foreign currency and no rate provided
+    const organization = await prisma.organization.findUnique({
+      where: { id: input.organizationId },
+      select: { baseCurrency: true },
+    });
+
+    let finalCurrency = input.currency || organization?.baseCurrency || 'USD';
+    let finalExchangeRate = input.exchangeRate || 1;
+
+    if (organization && finalCurrency !== organization.baseCurrency && !input.exchangeRate) {
+      try {
+        const rate = await ExchangeRateService.getRate(
+          input.organizationId,
+          finalCurrency,
+          organization.baseCurrency,
+          input.invoiceDate
+        );
+        if (rate) {
+          finalExchangeRate = rate.toNumber();
+          console.log(`Auto-fetched exchange rate for ${finalCurrency} to ${organization.baseCurrency}: ${finalExchangeRate}`);
+        }
+      } catch (error) {
+        console.error('Error fetching exchange rate:', error);
+        // Continue with rate of 1 as fallback
+      }
+    }
+
     // Create invoice and post to GL in a transaction
     const result = await prisma.$transaction(async (tx) => {
       // Create the invoice
@@ -109,8 +137,8 @@ export class InvoiceService {
           invoiceNumber,
           invoiceDate: input.invoiceDate,
           dueDate: input.dueDate,
-          currency: input.currency || 'USD',
-          exchangeRate: input.exchangeRate || 1,
+          currency: finalCurrency,
+          exchangeRate: finalExchangeRate,
           taxCalculationMethod,
           subtotal: calculations.subtotal,
           taxAmount: calculations.taxAmount,

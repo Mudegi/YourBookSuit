@@ -1,46 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-import { ReportingService } from '@/services/reports/reporting.service';
-
-const prisma = new PrismaClient();
-const reportingService = new ReportingService();
+import { requireAuth } from '@/lib/api-auth';
+import FinancialReportsService from '@/services/reports/financial-reports.service';
 
 /**
  * GET /api/orgs/[orgSlug]/reports/balance-sheet
- * Generate Balance Sheet report
+ * Generate Balance Sheet (Statement of Financial Position)
  */
 export async function GET(
   request: NextRequest,
   { params }: { params: { orgSlug: string } }
 ) {
   try {
-    const orgSlug = params.orgSlug;
+    const user = await requireAuth(params.orgSlug);
+
     const searchParams = request.nextUrl.searchParams;
-    const asOfDateParam = searchParams.get('asOfDate');
+    const asOfDate = searchParams.get('asOfDate');
+    const basis = (searchParams.get('basis') || 'ACCRUAL') as 'ACCRUAL' | 'CASH';
+    const fiscalYearStart = searchParams.get('fiscalYearStart');
 
-    // Get organization
-    const organization = await prisma.organization.findUnique({
-      where: { slug: orgSlug },
-    });
-
-    if (!organization) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
+    if (!asOfDate) {
+      return NextResponse.json(
+        { success: false, error: 'As-of date is required' },
+        { status: 400 }
+      );
     }
 
-    // Default to today if no date provided
-    const asOfDate = asOfDateParam ? new Date(asOfDateParam) : new Date();
-
-    // Generate balance sheet
-    const balanceSheet = await reportingService.generateBalanceSheet(
-      organization.id,
-      asOfDate
+    const report = await FinancialReportsService.generateBalanceSheet(
+      user.organizationId,
+      new Date(asOfDate),
+      basis,
+      fiscalYearStart ? new Date(fiscalYearStart) : undefined
     );
 
-    return NextResponse.json(balanceSheet);
+    // Convert Decimal to string for JSON serialization
+    const serializedReport = JSON.parse(
+      JSON.stringify(report, (key, value) => {
+        if (value && typeof value === 'object' && value.constructor.name === 'Decimal') {
+          return value.toString();
+        }
+        return value;
+      })
+    );
+
+    return NextResponse.json({
+      success: true,
+      report: serializedReport,
+    });
   } catch (error: any) {
-    console.error('Error generating balance sheet:', error);
+    console.error('Error generating Balance Sheet:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to generate balance sheet' },
+      { success: false, error: error.message },
       { status: 500 }
     );
   }

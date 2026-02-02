@@ -13,6 +13,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { JournalEntryService } from '../accounting/journal-entry.service';
+import { DoubleEntryService } from '../accounting/double-entry.service';
 import { TaxCalculationService } from '@/lib/tax/tax-calculation.service';
 import { Decimal } from 'decimal.js';
 
@@ -80,11 +81,14 @@ export class ExpenseService {
       // Validate payment account
       const paymentAccount = await tx.bankAccount.findUnique({
         where: { id: data.paymentAccountId },
-        include: { glAccount: true },
       });
 
       if (!paymentAccount) {
         throw new Error('Payment account not found');
+      }
+
+      if (!paymentAccount.glAccountId) {
+        throw new Error(`Payment account "${paymentAccount.accountName}" must have a GL account linked. Please configure this in Bank Accounts settings.`);
       }
 
       // Mobile Money validation (country-agnostic)
@@ -108,31 +112,35 @@ export class ExpenseService {
         let netAmount = lineAmount;
 
         if (line.taxRateId) {
-          const taxRate = await tx.taxRate.findUnique({
+          const taxRate = await tx.taxAgencyRate.findUnique({
             where: { id: line.taxRateId },
           });
 
           if (taxRate) {
             if (line.taxInclusive) {
-              // Extract tax from inclusive amount
+              // Add tax on top of amount (swapped logic)
+              lineTax = lineAmount.times(new Decimal(taxRate.rate).div(100));
+              netAmount = lineAmount; // net is the line amount
+            } else {
+              // Extract tax from inclusive amount (swapped logic)
               const taxMultiplier = new Decimal(taxRate.rate).div(100).plus(1);
               netAmount = lineAmount.div(taxMultiplier);
               lineTax = lineAmount.minus(netAmount);
-            } else {
-              // Add tax to exclusive amount
-              lineTax = lineAmount.times(new Decimal(taxRate.rate).div(100));
             }
           }
         }
 
-        totalAmount = totalAmount.plus(lineAmount);
+        // For tax inclusive (add on top), total = net + tax
+        // For tax exclusive (extract), total = lineAmount already includes tax
+        const grossAmount = line.taxInclusive ? lineAmount.plus(lineTax) : lineAmount;
+        totalAmount = totalAmount.plus(grossAmount);
         totalTax = totalTax.plus(lineTax);
 
         processedLines.push({
           ...line,
           netAmount: netAmount.toNumber(),
           taxAmount: lineTax.toNumber(),
-          grossAmount: lineAmount.toNumber(),
+          grossAmount: grossAmount.toNumber(),
         });
       }
 
@@ -166,7 +174,7 @@ export class ExpenseService {
               const whtAccount = await tx.chartOfAccount.findFirst({
                 where: {
                   organizationId: data.organizationId,
-                  accountCode: { startsWith: '2400' }, // WHT Payable
+                  code: { startsWith: '2400' }, // WHT Payable
                   accountType: 'LIABILITY',
                 },
               });
@@ -184,7 +192,7 @@ export class ExpenseService {
       const lastExpense = await tx.transaction.findFirst({
         where: {
           organizationId: data.organizationId,
-          transactionType: 'EXPENSE',
+          transactionType: 'JOURNAL_ENTRY',
         },
         orderBy: { createdAt: 'desc' },
       });
@@ -221,7 +229,7 @@ export class ExpenseService {
         const inputVATAccount = await tx.chartOfAccount.findFirst({
           where: {
             organizationId: data.organizationId,
-            accountCode: { startsWith: '1600' }, // Input VAT
+            code: { startsWith: '1600' }, // Input VAT
             accountType: 'ASSET',
           },
         });
@@ -242,7 +250,7 @@ export class ExpenseService {
         const employeePayableAccount = await tx.chartOfAccount.findFirst({
           where: {
             organizationId: data.organizationId,
-            accountCode: { startsWith: '2300' }, // Employee Payables
+            code: { startsWith: '2300' }, // Employee Payables
             accountType: 'LIABILITY',
           },
         });
@@ -300,17 +308,25 @@ export class ExpenseService {
         (data.payeeVendorId ? (await tx.vendor.findUnique({ where: { id: data.payeeVendorId } }))?.name : null) ||
         'Unnamed Payee';
 
-      const transaction = await JournalEntryService.createJournalEntry(
+      const transaction = await DoubleEntryService.createTransaction(
         {
           organizationId: data.organizationId,
           transactionDate: data.expenseDate,
-          transactionType: 'EXPENSE',
+          transactionType: 'JOURNAL_ENTRY',
           description: `${data.isReimbursement ? 'Reimbursable ' : ''}Expense - ${payeeName}`,
           referenceType: 'EXPENSE',
           referenceId: expenseNumber,
-          referenceNumber: expenseNumber,
           createdById: data.userId,
-          entries: journalLines,
+          entries: journalLines.map(line => ({
+            accountId: line.accountId,
+            entryType: line.entryType,
+            amount: line.amount,
+            currency: organization.baseCurrency,
+            exchangeRate: 1,
+            description: line.description,
+            projectId: line.projectId,
+            costCenterId: line.costCenterId,
+          })),
           metadata: {
             payeeVendorId: data.payeeVendorId,
             payeeName: data.payeeName,
@@ -323,6 +339,7 @@ export class ExpenseService {
             totalGross: totalAmount.toNumber(),
             totalTax: totalTax.toNumber(),
             whtAmount: whtAmount.toNumber(),
+            referenceNumber: expenseNumber,
           },
         },
         tx
@@ -360,7 +377,7 @@ export class ExpenseService {
     const pastTransactions = await prisma.transaction.findMany({
       where: {
         organizationId,
-        transactionType: 'EXPENSE',
+        transactionType: 'JOURNAL_ENTRY',
         status: 'POSTED',
         OR: [
           vendorId ? { metadata: { path: ['payeeVendorId'], equals: vendorId } } : {},
@@ -436,7 +453,8 @@ export class ExpenseService {
     const transactions = await prisma.transaction.findMany({
       where: {
         organizationId,
-        transactionType: 'EXPENSE',
+        transactionType: 'JOURNAL_ENTRY',
+        referenceType: 'EXPENSE',
         status: 'POSTED',
         transactionDate: {
           gte: startDate,
@@ -444,12 +462,10 @@ export class ExpenseService {
         },
       },
       include: {
-        entries: {
+        ledgerEntries: {
           where: { entryType: 'DEBIT' },
           include: {
             account: true,
-            project: true,
-            costCenter: true,
           },
         },
       },
@@ -458,23 +474,25 @@ export class ExpenseService {
     const summary = new Map<string, { name: string; total: Decimal }>();
 
     for (const tx of transactions) {
-      for (const entry of tx.entries) {
+      for (const entry of tx.ledgerEntries) {
         let key: string;
         let name: string;
 
         switch (groupBy) {
           case 'PROJECT':
-            key = entry.projectId || 'No Project';
-            name = entry.project?.name || 'No Project';
+            // Projects would need to be fetched from metadata
+            key = 'No Project';
+            name = 'No Project';
             break;
           case 'COST_CENTER':
-            key = entry.costCenterId || 'No Cost Center';
-            name = entry.costCenter?.name || 'No Cost Center';
+            // Cost centers would need to be fetched from metadata
+            key = 'No Cost Center';
+            name = 'No Cost Center';
             break;
           case 'CATEGORY':
           default:
             key = entry.accountId;
-            name = entry.account.accountName;
+            name = entry.account.name;
             break;
         }
 

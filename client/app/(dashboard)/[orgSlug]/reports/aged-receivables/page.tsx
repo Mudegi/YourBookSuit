@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useOrganization } from '@/hooks/useOrganization';
 import { formatCurrency } from '@/lib/currency';
 import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
@@ -53,8 +54,7 @@ interface AgingSummary {
 }
 
 export default function AgedReceivablesPage() {
-  const params = useParams();
-  const orgSlug = params.orgSlug as string;
+  const params = useParams();  const router = useRouter();  const orgSlug = params.orgSlug as string;
   const { currency } = useOrganization();
 
   const [agingData, setAgingData] = useState<CustomerAging[]>([]);
@@ -185,9 +185,17 @@ export default function AgedReceivablesPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-start print:hidden">
-        <div>
-          <h1 className="text-3xl font-bold">Aged Receivables Report</h1>
-          <p className="text-gray-600 mt-1">Customer aging analysis by invoice due date</p>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => router.back()}
+            className="flex items-center px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <div>
+            <h1 className="text-3xl font-bold">Aged Receivables Report</h1>
+            <p className="text-gray-600 mt-1">Customer aging analysis by invoice due date</p>
+          </div>
         </div>
         <div className="flex gap-2 items-end">
           <div>

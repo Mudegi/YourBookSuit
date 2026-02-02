@@ -1,20 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { chartOfAccountSchema } from '@/lib/validation';
+import { requireAuth } from '@/lib/api-auth';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { orgSlug: string; id: string } }
 ) {
   try {
-    const organizationId = request.headers.get('x-organization-id');
+    const user = await requireAuth(params.orgSlug);
+    const organizationId = user.organizationId;
 
-    if (!organizationId) {
-      return NextResponse.json(
-        { error: 'Organization not found' },
-        { status: 404 }
-      );
-    }
+    console.log('🔍 Chart of Account API - Looking for account:', {
+      accountId: params.id,
+      organizationId,
+      orgSlug: params.orgSlug
+    });
 
     // Get query parameters for date filtering
     const { searchParams } = new URL(request.url);
@@ -36,11 +37,14 @@ export async function GET(
     });
 
     if (!account) {
+      console.log('❌ Account not found with query:', { id: params.id, organizationId });
       return NextResponse.json(
         { error: 'Account not found' },
         { status: 404 }
       );
     }
+
+    console.log('✅ Account found:', account.code, '-', account.name);
 
     // Build where clause for ledger entries
     const ledgerWhere: any = {
@@ -67,7 +71,7 @@ export async function GET(
           select: {
             id: true,
             transactionDate: true,
-            reference: true,
+            transactionNumber: true,
             description: true,
           },
         },
@@ -120,15 +124,9 @@ export async function PUT(
   { params }: { params: { orgSlug: string; id: string } }
 ) {
   try {
-    const organizationId = request.headers.get('x-organization-id');
-    const userId = request.headers.get('x-user-id');
-
-    if (!organizationId || !userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    const user = await requireAuth(params.orgSlug);
+    const organizationId = user.organizationId;
+    const userId = user.userId;
 
     const body = await request.json();
 
@@ -213,15 +211,8 @@ export async function DELETE(
   { params }: { params: { orgSlug: string; id: string } }
 ) {
   try {
-    const organizationId = request.headers.get('x-organization-id');
-    const userId = request.headers.get('x-user-id');
-
-    if (!organizationId || !userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    const user = await requireAuth(params.orgSlug);
+    const organizationId = user.organizationId;
 
     // Check if account exists
     const account = await prisma.chartOfAccount.findFirst({
