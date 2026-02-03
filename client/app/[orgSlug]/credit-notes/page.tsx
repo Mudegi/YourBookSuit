@@ -54,7 +54,7 @@ export default function CreditNotesPage() {
       if (filter.startDate) queryParams.append('startDate', filter.startDate);
       if (filter.endDate) queryParams.append('endDate', filter.endDate);
 
-      const response = await fetch(`/api/${orgSlug}/credit-notes?${queryParams}`);
+      const response = await fetch(`/api/orgs/${orgSlug}/credit-notes?${queryParams}`);
       const data = await response.json();
 
       if (data.success) {

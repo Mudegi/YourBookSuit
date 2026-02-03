@@ -195,6 +195,13 @@ export class TaxReturnService {
   }> {
     const dateField = basis === 'CASH' ? 'paymentDate' : 'invoiceDate';
 
+    // Check if organization is in Uganda (EFRIS applies)
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { homeCountry: true },
+    });
+    const isUganda = org?.homeCountry === 'UG' || org?.homeCountry === 'UGANDA';
+
     // Get all sales invoices for the period
     const invoices = await prisma.invoice.findMany({
       where: {
@@ -204,11 +211,13 @@ export class TaxReturnService {
           lte: periodEnd,
         },
         status: { notIn: ['DRAFT', 'CANCELLED'] },
+        // Only apply EFRIS filter for Uganda
+        ...(isUganda ? { efrisFDN: { not: null } } : {}),
       },
       include: {
-        invoiceItems: {
+        items: {
           include: {
-            taxRule: true,
+            taxRateConfig: true,
           },
         },
       },
@@ -221,10 +230,10 @@ export class TaxReturnService {
     let zeroRatedCount = 0;
 
     for (const invoice of invoices) {
-      for (const item of invoice.invoiceItems) {
+      for (const item of invoice.items) {
         const itemTotal = new Decimal(item.total.toString());
         const taxAmount = new Decimal(item.taxAmount.toString());
-        const taxRate = item.taxRule?.rate || 0;
+        const taxRate = Number(item.taxRate);
 
         if (taxRate > 0) {
           // Standard rated
@@ -263,6 +272,13 @@ export class TaxReturnService {
   }> {
     const dateField = basis === 'CASH' ? 'paymentDate' : 'billDate';
 
+    // Check if organization is in Uganda (EFRIS applies)
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { homeCountry: true },
+    });
+    const isUganda = org?.homeCountry === 'UG' || org?.homeCountry === 'UGANDA';
+
     // Get all bills for the period
     const bills = await prisma.bill.findMany({
       where: {
@@ -272,11 +288,13 @@ export class TaxReturnService {
           lte: periodEnd,
         },
         status: { notIn: ['DRAFT', 'CANCELLED'] },
+        // Only apply EFRIS filter for Uganda
+        ...(isUganda ? { efrisReceiptNo: { not: null } } : {}),
       },
       include: {
-        billItems: {
+        items: {
           include: {
-            taxRule: true,
+            taxRateConfig: true,
           },
         },
       },
@@ -287,7 +305,7 @@ export class TaxReturnService {
     let transactionCount = 0;
 
     for (const bill of bills) {
-      for (const item of bill.billItems) {
+      for (const item of bill.items) {
         const itemTotal = new Decimal(item.total.toString());
         const taxAmount = new Decimal(item.taxAmount.toString());
 
@@ -391,7 +409,7 @@ export class TaxReturnService {
         },
       },
       include: {
-        taxRule: true,
+        taxRateConfig: true,
       },
     });
 
@@ -405,9 +423,9 @@ export class TaxReturnService {
     }>();
 
     for (const item of invoiceItems) {
-      const taxRuleId = item.taxRuleId || 'no-tax';
-      const taxRuleName = item.taxRule?.name || 'No Tax';
-      const taxRate = item.taxRule?.rate || 0;
+      const taxRuleId = item.taxRateId || 'no-tax';
+      const taxRuleName = item.taxRateConfig?.name || 'No Tax';
+      const taxRate = Number(item.taxRate);
 
       if (!byTaxRateMap.has(taxRuleId)) {
         byTaxRateMap.set(taxRuleId, {
@@ -458,6 +476,13 @@ export class TaxReturnService {
     periodEnd: Date,
     taxRuleId?: string
   ): Promise<TaxTransactionDetail[]> {
+    // Check if organization is in Uganda (EFRIS applies)
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { homeCountry: true },
+    });
+    const isUganda = org?.homeCountry === 'UG' || org?.homeCountry === 'UGANDA';
+
     const invoices = await prisma.invoice.findMany({
       where: {
         organizationId,
@@ -466,14 +491,15 @@ export class TaxReturnService {
           lte: periodEnd,
         },
         status: { notIn: ['DRAFT', 'CANCELLED'] },
+        // Only apply EFRIS filter for Uganda
+        ...(isUganda ? { efrisFDN: { not: null } } : {}),
       },
       include: {
         customer: true,
-        invoiceItems: {
-          where: taxRuleId ? { taxRuleId } : undefined,
+        items: {
+          where: taxRuleId ? { taxRateId: taxRuleId } : undefined,
           include: {
-            taxRule: true,
-            revenueAccount: true,
+            taxRateConfig: true,
           },
         },
       },
@@ -485,7 +511,9 @@ export class TaxReturnService {
     const details: TaxTransactionDetail[] = [];
 
     for (const invoice of invoices) {
-      for (const item of invoice.invoiceItems) {
+      for (const item of invoice.items) {
+        const netAmount = item.netAmount ? new Decimal(item.netAmount.toString()) : 
+          new Decimal(item.total.toString()).minus(new Decimal(item.taxAmount.toString()));
         details.push({
           id: invoice.id,
           date: invoice.invoiceDate,
@@ -494,12 +522,12 @@ export class TaxReturnService {
           customerVendor: invoice.customer.companyName || 
             `${invoice.customer.firstName} ${invoice.customer.lastName}`.trim(),
           description: item.description || 'Sales',
-          baseAmount: new Decimal(item.subtotal.toString()),
+          baseAmount: netAmount,
           taxAmount: new Decimal(item.taxAmount.toString()),
-          taxRate: item.taxRule?.rate || 0,
-          taxRuleName: item.taxRule?.name || 'No Tax',
-          accountCode: item.revenueAccount?.code || '',
-          accountName: item.revenueAccount?.name || '',
+          taxRate: Number(item.taxRate),
+          taxRuleName: item.taxRateConfig?.name || 'No Tax',
+          accountCode: '',
+          accountName: 'Revenue',
           efrisFiscalNumber: invoice.efrisFDN || undefined,
           isFiscalized: !!invoice.efrisFDN,
         });
@@ -526,14 +554,16 @@ export class TaxReturnService {
           lte: periodEnd,
         },
         status: { notIn: ['DRAFT', 'CANCELLED'] },
+        efrisReceiptNo: { not: null }, // Only bills with vendor EFRIS FDN
+        efrisReceiptNo: { not: null }, // Only bills with vendor EFRIS FDN
       },
       include: {
         vendor: true,
-        billItems: {
-          where: taxRuleId ? { taxRuleId } : undefined,
+        items: {
+          where: taxRuleId ? { taxRateId: taxRuleId } : undefined,
           include: {
-            taxRule: true,
-            expenseAccount: true,
+            taxRateConfig: true,
+            account: true,
           },
         },
       },
@@ -545,7 +575,8 @@ export class TaxReturnService {
     const details: TaxTransactionDetail[] = [];
 
     for (const bill of bills) {
-      for (const item of bill.billItems) {
+      for (const item of bill.items) {
+        const subtotal = new Decimal(item.total.toString()).minus(new Decimal(item.taxAmount.toString()));
         details.push({
           id: bill.id,
           date: bill.billDate,
@@ -553,14 +584,14 @@ export class TaxReturnService {
           referenceNumber: bill.billNumber,
           customerVendor: bill.vendor.companyName || '',
           description: item.description || 'Purchase',
-          baseAmount: new Decimal(item.subtotal.toString()),
+          baseAmount: subtotal,
           taxAmount: new Decimal(item.taxAmount.toString()),
-          taxRate: item.taxRule?.rate || 0,
-          taxRuleName: item.taxRule?.name || 'No Tax',
-          accountCode: item.expenseAccount?.code || '',
-          accountName: item.expenseAccount?.name || '',
-          efrisFiscalNumber: undefined, // Bills don't have EFRIS FDN
-          isFiscalized: false,
+          taxRate: Number(item.taxRate),
+          taxRuleName: item.taxRateConfig?.name || 'No Tax',
+          accountCode: item.account?.code || '',
+          accountName: item.account?.name || 'Expense',
+          efrisFiscalNumber: bill.efrisReceiptNo || undefined,
+          isFiscalized: !!bill.efrisReceiptNo,
         });
       }
     }

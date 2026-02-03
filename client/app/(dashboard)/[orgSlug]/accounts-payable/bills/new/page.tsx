@@ -93,7 +93,8 @@ export default function NewBillPage() {
   });
   const [vendorFormError, setVendorFormError] = useState<string | null>(null);
   const [vendorFormLoading, setVendorFormLoading] = useState(false);
-  const { currency } = useOrganization();
+  const { currency, organization } = useOrganization();
+  const isUganda = organization?.homeCountry === 'UG' || organization?.homeCountry === 'UGANDA';
 
   const [formData, setFormData] = useState({
     vendorId: preselectedVendorId || '',
@@ -101,6 +102,7 @@ export default function NewBillPage() {
     dueDate: '',
     billNumber: '',
     referenceNumber: '',
+    efrisReceiptNo: '',
     notes: '',
   });
 
@@ -544,6 +546,7 @@ export default function NewBillPage() {
         dueDate: formData.dueDate,
         billNumber: formData.billNumber || undefined,
         referenceNumber: formData.referenceNumber || undefined,
+        efrisReceiptNo: formData.efrisReceiptNo || undefined,
         notes: formData.notes || undefined,
         items: items.map((item) => ({
           description: item.name,
@@ -733,6 +736,25 @@ export default function NewBillPage() {
                     className="h-10"
                   />
                 </div>
+
+                {isUganda && (
+                  <div className="md:col-span-2">
+                    <Label htmlFor="efrisReceiptNo" className="text-sm font-semibold">
+                      Vendor EFRIS Receipt No
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">(Optional - for VAT credit)</span>
+                    </Label>
+                    <Input
+                      id="efrisReceiptNo"
+                      value={formData.efrisReceiptNo || ''}
+                      onChange={(e) => handleChange('efrisReceiptNo', e.target.value)}
+                      placeholder="Vendor's EFRIS Fiscal Document Number"
+                      className="h-10"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Enter the vendor's EFRIS FDN to claim Input VAT credit on this bill
+                    </p>
+                  </div>
+                )}
               </div>
               </CardContent>
             </Card>
@@ -747,7 +769,7 @@ export default function NewBillPage() {
                 </Button>
               </CardHeader>
               <CardContent className="pt-6">
-                <div className="overflow-x-auto">
+                <div className="overflow-visible">
                   <table className="w-full border-collapse">
                     <thead>
                       <tr className="bg-gray-50 border-b-2 border-gray-200">
@@ -781,7 +803,7 @@ export default function NewBillPage() {
                                 autoComplete="off"
                               />
                               {productDropdownOpen[item.id] && getDisplayProducts(item.id).length > 0 && (
-                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-10 max-h-48 overflow-y-auto">
+                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-48 overflow-y-auto">
                                   {getDisplayProducts(item.id).map((product: Product) => (
                                     <button
                                       key={product.id}

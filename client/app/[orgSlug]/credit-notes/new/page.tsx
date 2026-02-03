@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Save, ArrowLeft } from 'lucide-react';
+import { useOrganization } from '@/hooks/useOrganization';
 
 interface Customer { id: string; customerNumber: string; companyName: string | null; firstName: string; lastName: string; }
 interface Invoice { id: string; invoiceNumber: string; total: number; amountDue: number; }
@@ -12,6 +13,8 @@ export default function NewCreditNotePage() {
   const params = useParams();
   const router = useRouter();
   const orgSlug = params.orgSlug as string;
+  const { organization } = useOrganization();
+  const isUganda = organization?.homeCountry === 'UG' || organization?.homeCountry === 'UGANDA';
 
   const [loading, setLoading] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -36,6 +39,12 @@ export default function NewCreditNotePage() {
   useEffect(() => { if (formData.customerId) fetchInvoices(); }, [formData.customerId]);
 
   const checkEfrisConfig = async () => {
+    // Only check EFRIS for Uganda organizations
+    if (!isUganda) {
+      setEfrisEnabled(false);
+      return;
+    }
+    
     try {
       const res = await fetch(`/api/orgs/${orgSlug}/settings/efris`);
       if (res.ok) {
@@ -48,13 +57,13 @@ export default function NewCreditNotePage() {
   };
 
   const fetchCustomers = async () => {
-    const res = await fetch(`/api/${orgSlug}/customers`);
+    const res = await fetch(`/api/orgs/${orgSlug}/customers`);
     const data = await res.json();
     if (data.success) setCustomers(data.data);
   };
 
   const fetchInvoices = async () => {
-    const res = await fetch(`/api/${orgSlug}/invoices?customerId=${formData.customerId}&status=SENT`);
+    const res = await fetch(`/api/orgs/${orgSlug}/invoices?customerId=${formData.customerId}&status=SENT`);
     const data = await res.json();
     if (data.success) setInvoices(data.data);
   };
@@ -94,7 +103,7 @@ export default function NewCreditNotePage() {
     if (err) { alert(err); return; }
     try {
       setLoading(true);
-      const res = await fetch(`/api/${orgSlug}/credit-notes`, {
+      const res = await fetch(`/api/orgs/${orgSlug}/credit-notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -121,7 +130,7 @@ export default function NewCreditNotePage() {
         // Submit to EFRIS if requested
         if (shouldSendToEfris) {
           try {
-            const efrisRes = await fetch(`/api/${orgSlug}/credit-notes/${creditNoteId}/efris`, {
+            const efrisRes = await fetch(`/api/orgs/${orgSlug}/credit-notes/${creditNoteId}/efris`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
             });

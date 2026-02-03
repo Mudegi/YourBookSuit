@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, CheckCircle, FilePlus, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle, FilePlus, XCircle, DollarSign } from 'lucide-react';
+import { CreditNoteApplicationModal } from '@/components/accounting/CreditNoteApplicationModal';
 
 export default function CreditNoteDetailPage() {
   const params = useParams();
@@ -13,14 +14,14 @@ export default function CreditNoteDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [note, setNote] = useState<any>(null);
-  const [applyRows, setApplyRows] = useState<{ invoiceId: string; amount: string }[]>([]);
+  const [showApplicationModal, setShowApplicationModal] = useState(false);
 
   useEffect(() => { fetchNote(); }, [id]);
 
   const fetchNote = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`/api/${orgSlug}/credit-notes/${id}`);
+      const res = await fetch(`/api/orgs/${orgSlug}/credit-notes/${id}`);
       const data = await res.json();
       if (data.success) {
         setNote(data.data);
@@ -30,27 +31,14 @@ export default function CreditNoteDetailPage() {
 
   const approve = async () => {
     if (!confirm('Approve this credit note?')) return;
-    const res = await fetch(`/api/${orgSlug}/credit-notes/${id}/approve`, {
+    const res = await fetch(`/api/orgs/${orgSlug}/credit-notes/${id}/approve`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ approvalNotes: '', autoPost: true })
     });
     const data = await res.json();
     if (data.success) { fetchNote(); } else { alert('Error: ' + data.error); }
   };
 
-  const apply = async () => {
-    if (!applyRows.length) { alert('Add at least one invoice application'); return; }
-    const total = applyRows.reduce((s, r) => s + parseFloat(r.amount || '0'), 0);
-    if (total > note.remainingAmount) { alert('Amount exceeds remaining credit'); return; }
-    const res = await fetch(`/api/${orgSlug}/credit-notes/${id}/apply`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ applications: applyRows })
-    });
-    const data = await res.json();
-    if (data.success) { setApplyRows([]); fetchNote(); } else { alert('Error: ' + data.error); }
-  };
 
-  const addRow = () => setApplyRows([...applyRows, { invoiceId: '', amount: '' }]);
-  const updateRow = (i: number, k: string, v: string) => { const rows = [...applyRows]; rows[i] = { ...rows[i], [k]: v }; setApplyRows(rows); };
-  const removeRow = (i: number) => setApplyRows(applyRows.filter((_, idx) => idx !== i));
 
   const currency = (n: number) => new Intl.NumberFormat('en-UG', { style: 'currency', currency: 'UGX', minimumFractionDigits: 0 }).format(n);
 
@@ -69,10 +57,28 @@ export default function CreditNoteDetailPage() {
           <div className="text-gray-600">{note.customer.companyName || `${note.customer.firstName} ${note.customer.lastName}`}</div>
         </div>
         <div className="flex gap-2">
-          {note.status === 'APPROVED' || note.status === 'PARTIALLY_APPLIED' || note.status === 'APPLIED' ? (
-            <span className="px-3 py-2 bg-green-100 text-green-800 rounded-lg flex items-center gap-2"><CheckCircle className="w-4 h-4" /> {note.status.replace('_', ' ')}</span>
+          {note.status === 'APPROVED' || note.status === 'PARTIALLY_APPLIED' ? (
+            <>
+              <span className="px-3 py-2 bg-green-100 text-green-800 rounded-lg flex items-center gap-2">
+                <CheckCircle className="w-4 h-4" /> {note.status.replace('_', ' ')}
+              </span>
+              {note.remainingAmount > 0 && (
+                <button 
+                  onClick={() => setShowApplicationModal(true)} 
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                >
+                  <DollarSign className="w-4 h-4" /> Apply to Invoices
+                </button>
+              )}
+            </>
+          ) : note.status === 'APPLIED' ? (
+            <span className="px-3 py-2 bg-green-100 text-green-800 rounded-lg flex items-center gap-2">
+              <CheckCircle className="w-4 h-4" /> Fully Applied
+            </span>
           ) : note.status === 'VOID' ? (
-            <span className="px-3 py-2 bg-red-100 text-red-800 rounded-lg flex items-center gap-2"><XCircle className="w-4 h-4" /> Void</span>
+            <span className="px-3 py-2 bg-red-100 text-red-800 rounded-lg flex items-center gap-2">
+              <XCircle className="w-4 h-4" /> Void
+            </span>
           ) : (
             <button onClick={approve} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2">
               <CheckCircle className="w-4 h-4" /> Approve & Post
@@ -108,26 +114,7 @@ export default function CreditNoteDetailPage() {
               <th className="px-3 py-2 text-left text-sm">Description</th>
               <th className="px-3 py-2 text-right text-sm">Qty</th>
               <th className="px-3 py-2 text-right text-sm">Unit Price</th>
-              <th className="px-3 py-2 text-right text-sm">Tax</th>
-              <th className="px-3 py-2 text-right text-sm">Total</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {note.lineItems.map((li: any) => (
-              <tr key={li.id}>
-                <td className="px-3 py-2">{li.description}</td>
-                <td className="px-3 py-2 text-right">{li.quantity}</td>
-                <td className="px-3 py-2 text-right">{currency(parseFloat(li.unitPrice))}</td>
-                <td className="px-3 py-2 text-right">{currency(parseFloat(li.taxAmount))}</td>
-                <td className="px-3 py-2 text-right font-medium">{currency(parseFloat(li.totalAmount))}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {(note.status === 'APPROVED' || note.status === 'PARTIALLY_APPLIED') && (
-        <div className="bg-white rounded-lg shadow p-4 mb-6">
+       note.applications?.length > 0 &&ounded-lg shadow p-4 mb-6">
           <h2 className="text-xl font-semibold mb-3 flex items-center gap-2"><FilePlus className="w-4 h-4" /> Apply to Invoices</h2>
           <div className="space-y-3">
             {applyRows.map((r, i) => (
@@ -171,3 +158,27 @@ export default function CreditNoteDetailPage() {
     </div>
   );
 }
+}
+
+      {/* Credit Note Application Modal */}
+      {showApplicationModal && note && (
+        <CreditNoteApplicationModal
+          open={showApplicationModal}
+          onClose={() => setShowApplicationModal(false)}
+          creditNote={{
+            id: note.id,
+            creditNoteNumber: note.creditNoteNumber,
+            customerId: note.customerId,
+            totalAmount: parseFloat(note.totalAmount),
+            appliedAmount: parseFloat(note.appliedAmount),
+            remainingAmount: parseFloat(note.remainingAmount),
+            currency: note.currency || 'UGX',
+            lineItems: note.lineItems || [],
+          }}
+          orgSlug={orgSlug}
+          onSuccess={() => {
+            fetchNote();
+            setShowApplicationModal(false);
+          }}
+        />
+      )

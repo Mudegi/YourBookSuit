@@ -2,6 +2,7 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
+import { useOrganization } from '@/hooks/useOrganization';
 
 interface UnitOfMeasure {
   id: string;
@@ -43,10 +44,16 @@ export default function NewProductPage() {
   const [registerToEfris, setRegisterToEfris] = useState(false);
   const [efrisEnabled, setEfrisEnabled] = useState(false);
   const [efrisLoading, setEfrisLoading] = useState(true);
+  const { organization } = useOrganization();
+  const isUganda = organization?.homeCountry === 'UG' || organization?.homeCountry === 'UGANDA';
 
-  // Check EFRIS configuration
+  // Check EFRIS configuration (only for Uganda)
   useEffect(() => {
     const checkEfris = async () => {
+      if (!isUganda) {
+        setEfrisLoading(false);
+        return;
+      }
       try {
         const res = await fetch(`/api/orgs/${orgSlug}/settings/efris`);
         if (res.ok) {
@@ -235,7 +242,7 @@ export default function NewProductPage() {
             >
               {submitting ? 'Saving…' : 'Save Product'}
             </button>
-            {efrisEnabled && (
+            {isUganda && efrisEnabled && (
               <button
                 type="button"
                 onClick={(e) => {
@@ -246,7 +253,7 @@ export default function NewProductPage() {
                 disabled={submitting}
                 className="px-4 py-2 rounded-md bg-green-600 text-white shadow hover:bg-green-700 disabled:opacity-60"
               >
-                {submitting ? 'Saving…' : 'Save and Register to EFRIS'}
+                {submitting ? 'Saving…' : 'Create & Register with EFRIS'}
               </button>
             )}
           </div>

@@ -31,6 +31,12 @@ export interface CustomerStatementData {
     phone: string | null;
     email: string | null;
     website: string | null;
+    bankAccount: {
+      bankName: string;
+      accountName: string;
+      accountNumber: string;
+      currency: string;
+    } | null;
   };
   statement: {
     fromDate: Date;
@@ -76,6 +82,23 @@ export class CustomerStatementService {
     if (!customer) {
       throw new Error('Customer not found');
     }
+
+    // Fetch organization's primary bank account for payment instructions
+    const bankAccount = await prisma.bankAccount.findFirst({
+      where: {
+        organizationId,
+        isActive: true,
+      },
+      orderBy: {
+        createdAt: 'asc', // Get the first/primary bank account
+      },
+      select: {
+        bankName: true,
+        accountName: true,
+        accountNumber: true,
+        currency: true,
+      },
+    });
 
     // Calculate opening balance (all transactions before fromDate)
     const openingBalance = await this.calculateOpeningBalance(
@@ -125,6 +148,7 @@ export class CustomerStatementService {
         phone: customer.organization.phone,
         email: customer.organization.email,
         website: null, // Field doesn't exist in schema
+        bankAccount: bankAccount || null,
       },
       statement: {
         fromDate,

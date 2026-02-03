@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-import { BankAccountService } from '@/services/banking/bank-account.service';
-
-const prisma = new PrismaClient();
-const bankAccountService = new BankAccountService();
+import { prisma } from '@/lib/prisma';
 
 /**
  * GET /api/orgs/[orgSlug]/bank-accounts
@@ -13,42 +9,69 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { orgSlug: string } }
 ) {
+  console.log('🏦 === Bank Accounts API Called ===');
+  console.log('OrgSlug:', params.orgSlug);
+  
   try {
-    const orgSlug = params.orgSlug;
-    const searchParams = request.nextUrl.searchParams;
-    const includeInactive = searchParams.get('includeInactive') === 'true';
-
-    // Get organization
-    const organization = await prisma.organization.findUnique({
-      where: { slug: orgSlug },
+    console.log('Step 1: Getting organization by slug...');
+    const org = await prisma.organization.findUnique({
+      where: { slug: params.orgSlug },
     });
-
-    if (!organization) {
+    
+    if (!org) {
+      console.log('Organization not found');
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
     }
+    
+    console.log('Org found:', { id: org.id, slug: org.slug });
 
-    // Get bank accounts
-    const bankAccounts = await bankAccountService.getBankAccounts(
-      organization.id,
-      includeInactive
-    );
+    console.log('Step 2: Fetching chart of accounts...');
+    const allAccounts = await prisma.chartOfAccount.findMany({
+      where: {
+        organizationId: org.id,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        accountType: true,
+        currency: true,
+        balance: true,
+      },
+      orderBy: {
+        code: 'asc',
+      },
+    });
+    
+    console.log('Step 3: Found', allAccounts.length, 'accounts');
 
-    // Calculate summary statistics
-    const activeBankAccounts = bankAccounts.filter((account) => account.isActive);
-    const totalBalance = activeBankAccounts.reduce(
-      (sum, account) => sum + account.currentBalance,
-      0
-    );
+    // Filter for ASSET accounts (bank/cash)
+    const glAccounts = allAccounts.filter(a => a.accountType === 'ASSET');
 
+    console.log('🏦 Bank accounts debug:', {
+      organizationId: org.id,
+      organizationSlug: params.orgSlug,
+      totalAccounts: allAccounts.length,
+      assetAccounts: glAccounts.length,
+    });
+
+    // Simple stats from GL accounts
     const stats = {
-      totalAccounts: bankAccounts.length,
-      activeAccounts: activeBankAccounts.length,
-      totalBalance,
+      totalAccounts: allAccounts.length,
+      activeAccounts: glAccounts.length,
     };
 
-    return NextResponse.json({ bankAccounts, stats });
+    const response = { 
+      data: glAccounts.length > 0 ? glAccounts : allAccounts,
+      stats,
+    };
+    
+    console.log('Step 4: Returning', (glAccounts.length > 0 ? glAccounts.length : allAccounts.length), 'accounts');
+    return NextResponse.json(response);
   } catch (error: any) {
-    console.error('Error fetching bank accounts:', error);
+    console.error('❌ Bank accounts error:', error.message);
+    console.error('Stack:', error.stack);
     return NextResponse.json(
       { error: error.message || 'Failed to fetch bank accounts' },
       { status: 500 }
@@ -65,15 +88,12 @@ export async function POST(
   { params }: { params: { orgSlug: string } }
 ) {
   try {
-    const orgSlug = params.orgSlug;
     const body = await request.json();
-
-    // Get organization
-    const organization = await prisma.organization.findUnique({
-      where: { slug: orgSlug },
+    const org = await prisma.organization.findUnique({
+      where: { slug: params.orgSlug },
     });
 
-    if (!organization) {
+    if (!org) {
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
     }
 
@@ -97,16 +117,19 @@ export async function POST(
       return NextResponse.json({ error: 'Account type is required' }, { status: 400 });
     }
 
-    // Create bank account
-    const bankAccount = await bankAccountService.createBankAccount({
-      organizationId: organization.id,
-      accountId: body.accountId,
-      bankName: body.bankName,
-      accountNumber: body.accountNumber,
-      accountType: body.accountType,
-      routingNumber: body.routingNumber,
-      currency: body.currency,
-      isActive: body.isActive,
+    // Create bank account record
+    const bankAccount = await prisma.bankAccount.create({
+      data: {
+        organizationId: org.id,
+        accountId: body.accountId,
+        bankName: body.bankName,
+        accountNumber: body.accountNumber,
+        accountType: body.accountType,
+        routingNumber: body.routingNumber,
+        currency: body.currency || 'UGX',
+        isActive: body.isActive ?? true,
+        currentBalance: 0,
+      },
     });
 
     return NextResponse.json(bankAccount, { status: 201 });

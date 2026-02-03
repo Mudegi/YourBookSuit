@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
+import { useOrganization } from '@/hooks/useOrganization';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -103,6 +104,8 @@ interface DrillDownDetail {
 export default function VATReturnPage() {
   const params = useParams();
   const orgSlug = params.orgSlug as string;
+  const { organization } = useOrganization();
+  const isUganda = organization?.homeCountry === 'UG' || organization?.homeCountry === 'UGANDA';
 
   // State
   const [period, setPeriod] = useState(() => {
@@ -260,6 +263,30 @@ export default function VATReturnPage() {
           )}
         </div>
       </div>
+
+      {/* EFRIS Compliance Notice - Uganda Only */}
+      {isUganda && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <CheckCircle className="h-5 w-5 text-blue-600 mt-0.5" />
+              <div>
+                <p className="font-semibold text-blue-900">EFRIS Compliant VAT Return</p>
+                <p className="text-sm text-blue-700 mt-1">
+                  This return only includes <strong>fiscalized transactions</strong>:
+                </p>
+                <ul className="text-sm text-blue-700 mt-2 ml-4 space-y-1 list-disc">
+                  <li><strong>Box 1 (Output VAT):</strong> Only invoices with EFRIS FDN (Fiscal Document Number)</li>
+                  <li><strong>Box 3 (Input VAT):</strong> Only bills with vendor's EFRIS receipt number</li>
+                </ul>
+                <p className="text-xs text-blue-600 mt-2">
+                  Non-fiscalized transactions are excluded to ensure audit compliance with URA regulations.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Controls */}
       <Card>

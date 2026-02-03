@@ -64,8 +64,8 @@ export default function NewGoodsReceiptPage() {
   const [productSearch, setProductSearch] = useState<Record<string, string>>({});
   const [productDropdownOpen, setProductDropdownOpen] = useState<Record<string, boolean>>({});
   
-  
-  const { currency } = useOrganization();
+  const { currency, organization } = useOrganization();
+  const isUganda = organization?.homeCountry === 'UG' || organization?.homeCountry === 'UGANDA';
 
   const [formData, setFormData] = useState({
     vendorId: '',
@@ -103,6 +103,12 @@ export default function NewGoodsReceiptPage() {
   }, [orgSlug]);
 
   async function checkEfrisConfig() {
+    // Only check EFRIS for Uganda organizations
+    if (!isUganda) {
+      setEfrisEnabled(false);
+      return;
+    }
+    
     try {
       const res = await fetch(`/api/orgs/${orgSlug}/settings/efris`);
       if (res.ok) {
@@ -811,7 +817,7 @@ export default function NewGoodsReceiptPage() {
                   )}
                 </Button>
                 
-                {efrisEnabled && (
+                {isUganda && efrisEnabled && (
                   <Button 
                     type="button" 
                     onClick={(e: any) => handleSubmit(e, true)}
@@ -821,10 +827,10 @@ export default function NewGoodsReceiptPage() {
                     {submittingEfris ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Creating and Registering...
+                        Adding Stock to EFRIS...
                       </>
                     ) : (
-                      'Create & Register with EFRIS'
+                      'Save and Add Stock to EFRIS'
                     )}
                   </Button>
                 )}

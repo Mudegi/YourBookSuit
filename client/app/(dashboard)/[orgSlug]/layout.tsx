@@ -212,6 +212,7 @@ export default function DashboardLayout({
         { name: 'Customers', href: `/${orgSlug}/accounts-receivable/customers` },
         { name: 'Invoices', href: `/${orgSlug}/accounts-receivable/invoices` },
         { name: 'New Invoice', href: `/${orgSlug}/accounts-receivable/invoices/new` },
+        { name: 'Statements', href: `/${orgSlug}/accounts-receivable/statements/new` },
         { name: 'Credit Notes', href: `/${orgSlug}/credit-notes` },
         { name: 'Customer Payments', href: `/${orgSlug}/payments/customer` },
         { name: 'Sales Pipeline', href: `/${orgSlug}/crm/opportunities` },
@@ -586,7 +587,7 @@ export default function DashboardLayout({
                         <div className="space-y-1">
                           <button onClick={() => { setCreateMenuOpen(false); window.location.href = `/${orgSlug}/accounts-receivable/invoices/new`; }} className="w-full text-left block px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors">Invoice</button>
                           <button onClick={() => { setCreateMenuOpen(false); window.location.href = `/${orgSlug}/payments/customer`; }} className="w-full text-left block px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors">Receive payment</button>
-                          <button onClick={() => { setCreateMenuOpen(false); window.location.href = `/${orgSlug}/accounts-receivable/invoices`; }} className="w-full text-left block px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors">Statement</button>
+                          <button onClick={() => { setCreateMenuOpen(false); window.location.href = `/${orgSlug}/accounts-receivable/statements/new`; }} className="w-full text-left block px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors">Statement</button>
                           <button onClick={() => { setCreateMenuOpen(false); window.location.href = `/${orgSlug}/accounts-receivable/estimates/new`; }} className="w-full text-left block px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors">Estimate</button>
                           <button onClick={() => { setCreateMenuOpen(false); window.location.href = `/${orgSlug}/credit-notes/new`; }} className="w-full text-left block px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors">Credit note</button>
                           <button onClick={() => { setCreateMenuOpen(false); window.location.href = `/${orgSlug}/accounts-receivable/sales-receipts/new`; }} className="w-full text-left block px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors">Sales receipt</button>
