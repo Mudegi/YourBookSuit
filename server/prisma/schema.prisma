@@ -82,6 +82,7 @@ model Organization {
   inventoryValuations     InventoryValuation[]
   warehouses              InventoryWarehouse[]
   invoices                Invoice[]
+  salesReceipts           SalesReceipt[]
   itemMasters             ItemMaster[]
   jobTitles               JobTitle[]
   landedCosts             LandedCost[]
@@ -215,6 +216,7 @@ model Branch {
   products             Product[]
   recurringTemplates   RecurringTemplate[]
   transactions         Transaction[]
+  salesReceipts        SalesReceipt[]
   vendors              Vendor[]
   workOrders           WorkOrder[]
   documentSequences    DocumentSequence[]
@@ -482,6 +484,7 @@ model ChartOfAccount {
   debitNoteItems              DebitNoteItem[]
   ledgerEntries               LedgerEntry[]
   billItems                   BillItem[]
+  salesReceiptDeposits        SalesReceipt[]
   taxJurisdictions            TaxJurisdiction[]
   taxAgenciesLiability        TaxAgency[]       @relation("TaxAgencyLiability")
   taxAgencyRatesSales         TaxAgencyRate[]   @relation("SalesTaxAccount")
@@ -591,6 +594,7 @@ model Customer {
   paymentTerm             PaymentTerm?           @relation(fields: [paymentTermId], references: [id])
   debitNotes              DebitNote[]
   invoices                Invoice[]
+  salesReceipts           SalesReceipt[]
   nonConformanceReports   NonConformanceReport[]
   payments                Payment[]
   projects                Project[]
@@ -788,6 +792,153 @@ model InvoiceTaxLine {
   @@index([isWithholding])
 }
 
+model SalesReceipt {
+  id                String             @id @default(cuid())
+  organizationId    String
+  receiptNumber     String
+  receiptDate       DateTime
+  customerId        String?            // Optional - can be walk-in customer
+  
+  // Multi-Currency Support
+  currency          String             @default("USD")
+  exchangeRate      Decimal            @default(1) @db.Decimal(12, 6)
+  baseCurrencyTotal Decimal?           @db.Decimal(19, 4)
+  
+  // Financial Breakdown
+  subtotal          Decimal            @db.Decimal(19, 4)
+  taxAmount         Decimal            @default(0) @db.Decimal(19, 4)
+  discountAmount    Decimal            @default(0) @db.Decimal(19, 4)
+  total             Decimal            @db.Decimal(19, 4)
+  
+  // Tax Calculation - Default to INCLUSIVE for retail
+  taxCalculationMethod String          @default("INCLUSIVE")
+  
+  // Payment Information (Required - this is the key difference from Invoice)
+  paymentMethod     PaymentMethod
+  referenceNumber   String?            // Mobile Money ID, Check number, etc.
+  depositToAccountId String            // Required: Which cash/bank account receives the money
+  
+  // Mobile Money Specific Fields
+  mobileNetwork     String?            // MTN, Airtel, etc.
+  payerPhoneNumber  String?            // Customer's mobile number
+  
+  // Branch & Location
+  branchId          String?
+  warehouseId       String?
+  
+  // Status (Simpler than Invoice - no approval needed)
+  status            SalesReceiptStatus @default(COMPLETED)
+  voidedAt          DateTime?
+  voidReason        String?
+  
+  // References & Notes
+  reference         String?
+  notes             String?
+  
+  // E-Invoicing & Fiscalization (Uganda EFRIS)
+  transactionId     String?            // GL Transaction reference
+  efrisFDN          String?            // Fiscal Document Number
+  efrisVerificationCode String?
+  efrisQRCode       String?
+  eInvoiceStatus    String?            // PENDING, SUBMITTED, ACCEPTED
+  eInvoiceSubmittedAt DateTime?
+  eInvoiceResponse  Json?
+  
+  // Inventory Deduction (Immediate - not committed, deducted)
+  inventoryDeducted Boolean            @default(false)
+  inventoryDeductedAt DateTime?
+  
+  // Salesperson & Commission
+  salespersonId     String?
+  commissionRate    Decimal?           @db.Decimal(5, 2)
+  commissionAmount  Decimal?           @db.Decimal(19, 4)
+  
+  // Audit Trail
+  createdById       String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  
+  // Relations
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer          Customer?          @relation(fields: [customerId], references: [id])
+  depositToAccount  ChartOfAccount     @relation(fields: [depositToAccountId], references: [id])
+  branch            Branch?            @relation(fields: [branchId], references: [id])
+  warehouse         InventoryWarehouse? @relation(fields: [warehouseId], references: [id])
+  items             SalesReceiptItem[]
+  
+  @@unique([organizationId, receiptNumber])
+  @@unique([organizationId, referenceNumber, receiptDate]) // Prevent duplicate mobile money IDs same day
+  @@index([organizationId, status])
+  @@index([customerId])
+  @@index([depositToAccountId])
+  @@index([efrisFDN])
+  @@index([branchId])
+  @@index([createdById])
+  @@index([paymentMethod])
+}
+
+model SalesReceiptItem {
+  id              String        @id @default(cuid())
+  salesReceiptId  String
+  productId       String?
+  serviceId       String?
+  description     String
+  
+  // Quantity & Pricing
+  quantity        Decimal       @db.Decimal(19, 4)
+  unitPrice       Decimal       @db.Decimal(19, 4)
+  discount        Decimal       @default(0) @db.Decimal(19, 4)
+  discountType    String        @default("AMOUNT") // AMOUNT or PERCENTAGE
+  
+  // Tax
+  taxAmount       Decimal       @default(0) @db.Decimal(19, 4)
+  taxRuleId       String?
+  
+  // Totals
+  lineTotal       Decimal       @db.Decimal(19, 4)
+  
+  // Inventory & COGS
+  warehouseId     String?
+  lotNumber       String?
+  serialNumber    String?
+  unitCost        Decimal?      @db.Decimal(19, 4) // For COGS calculation
+  
+  // Relations
+  salesReceipt    SalesReceipt  @relation(fields: [salesReceiptId], references: [id], onDelete: Cascade)
+  product         Product?      @relation(fields: [productId], references: [id])
+  service         ServiceOffering? @relation(fields: [serviceId], references: [id])
+  taxRule         TaxRule?      @relation(fields: [taxRuleId], references: [id])
+  warehouse       InventoryWarehouse? @relation(fields: [warehouseId], references: [id])
+  taxLines        SalesReceiptTaxLine[]
+  
+  @@index([salesReceiptId])
+  @@index([productId])
+  @@index([serviceId])
+  @@index([warehouseId])
+}
+
+model SalesReceiptTaxLine {
+  id                  String             @id @default(cuid())
+  salesReceiptItemId  String
+  taxRuleId           String?
+  jurisdictionId      String?
+  taxType             String
+  rate                Decimal            @db.Decimal(5, 2)
+  baseAmount          Decimal            @db.Decimal(19, 4)
+  taxAmount           Decimal            @db.Decimal(19, 4)
+  isCompound          Boolean            @default(false)
+  compoundSequence    Int                @default(1)
+  createdAt           DateTime           @default(now())
+  
+  salesReceiptItem    SalesReceiptItem   @relation(fields: [salesReceiptItemId], references: [id], onDelete: Cascade)
+  jurisdiction        TaxJurisdiction?   @relation(fields: [jurisdictionId], references: [id])
+  taxRule             TaxRule?           @relation(fields: [taxRuleId], references: [id])
+  
+  @@index([salesReceiptItemId])
+  @@index([taxRuleId])
+  @@index([jurisdictionId])
+}
+
 model Vendor {
   id                    String                 @id @default(cuid())
   organizationId        String
@@ -960,6 +1111,9 @@ model Bill {
   whtRate             Decimal              @default(0) @db.Decimal(5, 2)
   whtCertificateNo    String?
   efrisReceiptNo      String?
+  efrisSubmitted      Boolean              @default(false)
+  efrisStatus         String?              // DRAFT, SUBMITTED, FAILED, ACKNOWLEDGED
+  efrisReference      String?              // Reference number from EFRIS
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   branchId            String?
@@ -1183,6 +1337,16 @@ model Product {
   reorderQuantity        Decimal?                   @db.Decimal(12, 4)
   taxable                Boolean                    @default(true)
   defaultTaxRate         Decimal                    @default(0) @db.Decimal(5, 2)
+  exciseDutyCode         String?                    // EFRIS excise duty code for URA compliance
+  exciseRate             Decimal?                   @db.Decimal(21, 8) // Excise rate (% or amount per unit)
+  exciseRule             String?                    // 1=by percentage, 2=by quantity
+  pack                   Decimal?                   @db.Decimal(12, 8) // Package value for excise calculation
+  stick                  Decimal?                   @db.Decimal(12, 8) // Piece value for excise calculation
+  exciseUnit             String?                    // 101=per stick, 102=per litre, 103=per kg
+  efrisItemCode          String?                    // EFRIS item code used for registration (description or name)
+  efrisProductCode       String?                    // EFRIS registered product code
+  efrisRegisteredAt      DateTime?                  // When product was registered with EFRIS
+  goodsCategoryId        String?                    // EFRIS VAT commodity category from T124 (e.g., "10111301")
   taxGroupId             String? // Tax Group assignment
   incomeAccountId        String?
   expenseAccountId       String?
@@ -1229,6 +1393,7 @@ model Product {
   stockMovements         StockMovement[]
   reservations           StockReservation[]
   transferOrderLines     TransferOrderLine[]
+  salesReceiptItems      SalesReceiptItem[]
   workOrders             WorkOrder[]
   workOrderMaterials     WorkOrderMaterial[]
   goodsReceiptItems      GoodsReceiptItem[]
@@ -1366,6 +1531,8 @@ model InventoryWarehouse {
   transferOrdersTo   TransferOrder[]      @relation("TransferToWarehouse")
   invoices           Invoice[]
   invoiceItems       InvoiceItem[]
+  salesReceipts      SalesReceipt[]
+  salesReceiptItems  SalesReceiptItem[]
   purchaseOrders     PurchaseOrder[]
   goodsReceipts      GoodsReceipt[]
 
@@ -3116,6 +3283,7 @@ model ServiceOffering {
   updatedAt          DateTime              @updatedAt
   organization       Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   serviceCatalog     ServiceCatalog        @relation(fields: [serviceCatalogId], references: [id], onDelete: Cascade)
+  salesReceiptItems  SalesReceiptItem[]
   bookings           ServiceBooking[]
 
   @@unique([organizationId, serviceCatalogId, offeringCode])
@@ -4457,6 +4625,7 @@ model TaxJurisdiction {
   updatedAt             DateTime          @updatedAt
   invoiceTaxLines       InvoiceTaxLine[]
   organization          Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  salesReceiptTaxLines  SalesReceiptTaxLine[]
   taxRules              TaxRule[]
   parentJurisdiction    TaxJurisdiction?  @relation("JurisdictionHierarchy", fields: [parentJurisdictionId], references: [id])
   childJurisdictions    TaxJurisdiction[] @relation("JurisdictionHierarchy")
@@ -4498,6 +4667,8 @@ model TaxRule {
   organization       Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   parentRule         TaxRule?         @relation("CompoundRules", fields: [parentRuleId], references: [id])
   childRules         TaxRule[]        @relation("CompoundRules")
+  salesReceiptItems  SalesReceiptItem[]
+  salesReceiptTaxLines SalesReceiptTaxLine[]
 
   @@index([organizationId, taxType])
   @@index([effectiveFrom, effectiveTo])
@@ -4756,12 +4927,14 @@ enum BranchType {
 enum DocumentType {
   INVOICE
   BILL
+  SALES_RECEIPT
   CREDIT_NOTE
   DEBIT_NOTE
   PAYMENT
   CUSTOMER
   VENDOR
   TRANSACTION
+  JOURNAL
 }
 
 enum IntegrationType {
@@ -4887,6 +5060,11 @@ enum BillStatus {
   PAID
   OVERDUE
   CANCELLED
+  VOIDED
+}
+
+enum SalesReceiptStatus {
+  COMPLETED
   VOIDED
 }
 

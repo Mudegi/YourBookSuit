@@ -29,6 +29,8 @@ export interface InvoiceItemInput {
   unitPrice: number;
   discount?: number;
   taxRate?: number;
+  taxRateId?: string; // Link to TaxRate configuration (EFRIS-enabled)
+  taxAgencyRateId?: string; // Link to TaxAgencyRate (legacy multi-country)
   taxLines?: InvoiceTaxLineInput[];
   isInclusive?: boolean; // Whether unitPrice includes tax
 }
@@ -161,6 +163,8 @@ export class InvoiceService {
               netAmount: new Decimal(line.lineNet).toNumber(),
               discount: new Decimal(line.lineDiscount).toNumber(),
               taxRate: new Decimal(line.appliedTaxRate).toNumber(),
+              taxRateId: line.item.taxRateId, // Link to TaxRate (EFRIS-enabled)
+              taxAgencyRateId: line.item.taxAgencyRateId, // Link to TaxAgencyRate (legacy)
               taxAmount: new Decimal(line.taxAmount).toNumber(),
               subtotal: new Decimal(line.lineSubtotal).toNumber(),
               total: new Decimal(line.total).toNumber(),

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { EfrisApiService } from '@/lib/services/efris/efris-api.service';
 
 /**
  * POST /api/orgs/[orgSlug]/credit-notes/[id]/efris
@@ -8,7 +9,7 @@ import { prisma } from '@/lib/prisma';
  */
 export async function POST(req: NextRequest, { params }: { params: { orgSlug: string; id: string } }) {
   try {
-    const user = await getCurrentUser(req);
+    const user = await getCurrentUser();
     if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
     const org = await prisma.organization.findUnique({
@@ -40,74 +41,107 @@ export async function POST(req: NextRequest, { params }: { params: { orgSlug: st
       return NextResponse.json({ success: false, error: 'Only approved credit notes can be submitted to EFRIS' }, { status: 400 });
     }
 
-    // Get EFRIS settings
-    const settings = await prisma.efrISSettings.findFirst({
+    // Get EFRIS configuration
+    const efrisConfig = await prisma.eInvoiceConfig.findUnique({
       where: { organizationId: org.id }
     });
 
-    if (!settings || !settings.isConfigured) {
+    if (!efrisConfig || !efrisConfig.isActive) {
       return NextResponse.json({ success: false, error: 'EFRIS not configured' }, { status: 400 });
     }
 
-    // Call EFRIS API
-    const efrisResponse = await fetch('http://localhost:8001/api/efris/credit-note', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tin: settings.tin,
-        deviceNo: settings.deviceNo,
-        privateKey: settings.privateKey,
-        creditNote: {
-          creditNoteNumber: creditNote.creditNoteNumber,
-          creditDate: creditNote.creditDate,
-          originalInvoiceFDN: creditNote.invoice?.efrisFDN || null,
-          customer: {
-            name: creditNote.customer.companyName || `${creditNote.customer.firstName} ${creditNote.customer.lastName}`,
-            tin: creditNote.customer.tin,
-            mobile: creditNote.customer.mobile,
-            address: creditNote.customer.billingAddress
-          },
-          items: creditNote.lineItems.map((item) => ({
-            description: item.description,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            taxRate: item.taxRate,
-            taxAmount: item.taxAmount,
-            total: item.lineTotal
-          })),
-          subtotal: creditNote.subtotal,
-          totalTax: creditNote.totalTax,
-          total: creditNote.totalAmount
-        }
-      })
-    });
-
-    if (!efrisResponse.ok) {
-      const errorData = await efrisResponse.json();
-      return NextResponse.json({ 
-        success: false, 
-        error: `EFRIS submission failed: ${errorData.error || 'Unknown error'}` 
-      }, { status: 500 });
+    const credentials = efrisConfig.credentials as any;
+    const efrisApiKey = credentials?.efrisApiKey || credentials?.apiKey;
+    
+    if (!efrisApiKey || !efrisConfig.apiEndpoint) {
+      return NextResponse.json({ success: false, error: 'EFRIS API credentials not configured' }, { status: 400 });
     }
 
-    const efrisData = await efrisResponse.json();
-
-    // Update credit note with EFRIS details
-    const updated = await prisma.creditNote.update({
-      where: { id: params.id },
-      data: {
-        efrisFDN: efrisData.fdn,
-        efrisSubmittedAt: new Date(),
-        efrisVerificationUrl: efrisData.verificationUrl
-      },
-      include: {
-        customer: true,
-        invoice: true,
-        lineItems: true
-      }
+    // Initialize EFRIS service
+    const efrisService = new EfrisApiService({
+      apiBaseUrl: efrisConfig.apiEndpoint,
+      apiKey: efrisApiKey,
+      enabled: efrisConfig.isActive,
     });
 
-    return NextResponse.json({ success: true, data: updated, efris: efrisData });
+    // Prepare credit note data for EFRIS
+    const customerName = creditNote.customer.companyName || 
+      `${creditNote.customer.firstName} ${creditNote.customer.lastName}`;
+    
+    // Check if already submitted
+    if (creditNote.efrisFDN) {
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Credit note has already been submitted to EFRIS',
+          fdn: creditNote.efrisFDN,
+          qrCode: creditNote.efrisQRCode,
+        },
+        { status: 400 }
+      );
+    }
+
+    const efrisData = await efrisService.submitCreditNote({
+      credit_note_number: creditNote.creditNoteNumber,
+      credit_note_date: creditNote.creditDate.toISOString().split('T')[0],
+      original_invoice_number: creditNote.invoice?.invoiceNumber || '',
+      original_fdn: creditNote.invoice?.efrisFDN || '',
+      customer_name: customerName,
+      customer_tin: creditNote.customer.taxIdNumber || undefined,
+      items: creditNote.lineItems.map((item: any) => ({
+        item_name: item.description,
+        quantity: parseFloat(item.quantity?.toString() || '0'),
+        unit_price: parseFloat(item.unitPrice?.toString() || '0'),
+        tax_rate: parseFloat(item.taxRate?.toString() || '0'),
+        tax_amount: parseFloat(item.taxAmount?.toString() || '0'),
+        total: parseFloat(item.totalAmount?.toString() || '0'),
+      })),
+      total_amount: parseFloat(creditNote.subtotal?.toString() || '0'),
+      total_tax: parseFloat(creditNote.taxAmount?.toString() || '0'),
+      currency: 'UGX',
+      reason: creditNote.reason || creditNote.description,
+    });
+
+    if (!efrisData.success) {
+      // Update credit note with error
+      await prisma.creditNote.update({
+        where: { id: creditNote.id },
+        data: {
+          eInvoiceStatus: 'REJECTED',
+          eInvoiceResponse: efrisData as any,
+        },
+      });
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: efrisData.message || 'EFRIS submission failed',
+          errorCode: efrisData.error_code,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Update credit note with EFRIS data
+    await prisma.creditNote.update({
+      where: { id: creditNote.id },
+      data: {
+        efrisFDN: efrisData.fdn,
+        efrisQRCode: efrisData.qr_code,
+        efrisVerificationCode: efrisData.verification_code,
+        eInvoiceStatus: 'ACCEPTED',
+        eInvoiceSubmittedAt: new Date(),
+        eInvoiceResponse: efrisData as any,
+      },
+    });
+    
+    return NextResponse.json({ 
+      success: true, 
+      message: 'Credit note submitted to EFRIS successfully',
+      fdn: efrisData.fdn,
+      verificationCode: efrisData.verification_code,
+      qrCode: efrisData.qr_code,
+    });
   } catch (error: any) {
     console.error('Error submitting to EFRIS:', error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

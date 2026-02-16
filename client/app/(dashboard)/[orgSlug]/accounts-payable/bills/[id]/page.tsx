@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import Loading from '@/components/ui/loading';
 import { useOrganization } from '@/hooks/useOrganization';
+import { useAuth } from '@/hooks/useAuth';
 import { formatCurrency } from '@/lib/utils';
 
 interface Account {
@@ -82,6 +83,9 @@ interface Bill {
   items: BillItem[];
   transaction: Transaction | null;
   paymentAllocations?: PaymentAllocation[];
+  efrisSubmitted?: boolean;
+  efrisStatus?: string;
+  efrisReference?: string;
 }
 
 export default function BillDetailsPage() {
@@ -89,7 +93,8 @@ export default function BillDetailsPage() {
   const router = useRouter();
   const orgSlug = params.orgSlug as string;
   const billId = params.id as string;
-  const { currency } = useOrganization();
+  const { currency, organization } = useOrganization();
+  const { user } = useAuth();
 
   const [bill, setBill] = useState<Bill | null>(null);
   const [loading, setLoading] = useState(true);
@@ -98,13 +103,20 @@ export default function BillDetailsPage() {
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchBill();
-  }, [billId]);
+    if (organization?.id && user?.id) {
+      fetchBill();
+    }
+  }, [billId, organization?.id, user?.id]);
 
   async function fetchBill() {
     try {
       setLoading(true);
-      const response = await fetch(`/api/orgs/${orgSlug}/bills/${billId}`);
+      const response = await fetch(`/api/orgs/${orgSlug}/bills/${billId}`, {
+        headers: {
+          'x-organization-id': organization?.id || '',
+          'x-user-id': user?.id || '',
+        },
+      });
       if (!response.ok) throw new Error('Failed to fetch bill');
       const data = await response.json();
       setBill(data);
@@ -125,7 +137,11 @@ export default function BillDetailsPage() {
 
       const response = await fetch(`/api/orgs/${orgSlug}/bills/${billId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-organization-id': organization?.id || '',
+          'x-user-id': user?.id || '',
+        },
         body: JSON.stringify({ status: newStatus }),
       });
 
@@ -161,7 +177,13 @@ export default function BillDetailsPage() {
         return 'bg-gray-100 text-gray-800';
     }
   }
-
+  function getAmountFontSize(formattedAmount: string): string {
+    const length = formattedAmount.length;
+    if (length <= 12) return 'text-2xl';
+    if (length <= 15) return 'text-xl';
+    if (length <= 18) return 'text-lg';
+    return 'text-base';
+  }
   function handlePrint() {
     window.print();
   }
@@ -254,13 +276,13 @@ export default function BillDetailsPage() {
             <div className="grid grid-cols-3 gap-6 mb-4">
               <div>
                 <p className="text-sm text-gray-600">Total Amount</p>
-                <p className="text-2xl font-bold text-gray-900">
+                <p className={`${getAmountFontSize(formatCurrency(bill.totalAmount, currency))} font-bold text-gray-900 break-words`}>
                   {formatCurrency(bill.totalAmount, currency)}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-gray-600">Amount Paid</p>
-                <p className="text-2xl font-bold text-green-600">
+                <p className={`${getAmountFontSize(formatCurrency(bill.paymentAllocations.reduce((sum, p) => sum + p.amount, 0), currency))} font-bold text-green-600 break-words`}>
                   {formatCurrency(
                     bill.paymentAllocations.reduce((sum, p) => sum + p.amount, 0),
                     currency
@@ -269,7 +291,7 @@ export default function BillDetailsPage() {
               </div>
               <div>
                 <p className="text-sm text-gray-600">Amount Due</p>
-                <p className="text-2xl font-bold text-red-600">
+                <p className={`${getAmountFontSize(formatCurrency(bill.totalAmount - bill.paymentAllocations.reduce((sum, p) => sum + p.amount, 0), currency))} font-bold text-red-600 break-words`}>
                   {formatCurrency(
                     bill.totalAmount -
                       bill.paymentAllocations.reduce((sum, p) => sum + p.amount, 0),
@@ -385,6 +407,20 @@ export default function BillDetailsPage() {
                     {bill.status}
                   </span>
                 </div>
+                {bill.efrisSubmitted && (
+                  <div className="mt-2">
+                    <span className="text-gray-600">EFRIS: </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded bg-green-100 text-green-800">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
+                      </svg>
+                      {bill.efrisStatus || 'SUBMITTED'}
+                    </span>
+                    {bill.efrisReference && (
+                      <p className="text-xs text-gray-500 mt-1">Ref: {bill.efrisReference}</p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -436,15 +472,15 @@ export default function BillDetailsPage() {
             <div className="w-64 space-y-2">
               <div className="flex justify-between text-gray-700">
                 <span>Subtotal:</span>
-                <span>{formatCurrency(bill.subtotalAmount, currency)}</span>
+                <span className="break-words">{formatCurrency(bill.subtotalAmount, currency)}</span>
               </div>
               <div className="flex justify-between text-gray-700">
                 <span>Tax:</span>
-                <span>{formatCurrency(bill.taxAmount, currency)}</span>
+                <span className="break-words">{formatCurrency(bill.taxAmount, currency)}</span>
               </div>
-              <div className="flex justify-between text-xl font-bold border-t-2 pt-2">
+              <div className={`flex justify-between ${getAmountFontSize(formatCurrency(bill.totalAmount, currency))} font-bold border-t-2 pt-2`}>
                 <span>Total:</span>
-                <span>{formatCurrency(bill.totalAmount, currency)}</span>
+                <span className="break-words">{formatCurrency(bill.totalAmount, currency)}</span>
               </div>
             </div>
           </div>

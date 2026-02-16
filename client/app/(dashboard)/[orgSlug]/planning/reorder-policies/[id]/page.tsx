@@ -1,6 +1,6 @@
 /**
  * Individual Product Reorder Policy Configuration Page
- * Route: /[orgSlug]/planning/reorder-policies/[productId]
+ * Route: /[orgSlug]/planning/reorder-policies/[id]
  */
 
 'use client';
@@ -39,7 +39,7 @@ interface ReorderPolicy {
 export default function ProductReorderPolicyPage() {
   const params = useParams();
   const router = useRouter();
-  const { orgSlug, productId } = params;
+  const { orgSlug, id: productId } = params;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

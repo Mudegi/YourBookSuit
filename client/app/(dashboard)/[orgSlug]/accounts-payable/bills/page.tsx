@@ -10,6 +10,7 @@ import { Select } from '@/components/ui/select';
 import { Alert } from '@/components/ui/alert';
 import Loading from '@/components/ui/loading';
 import { useOrganization } from '@/hooks/useOrganization';
+import { useAuth } from '@/hooks/useAuth';
 import { formatCurrency } from '@/lib/utils';
 
 interface Vendor {
@@ -35,6 +36,8 @@ interface Bill {
   vendor: Vendor;
   transaction: Transaction | null;
   _count: { items: number };
+  efrisSubmitted?: boolean;
+  efrisStatus?: string;
 }
 
 interface Stats {
@@ -53,17 +56,19 @@ export default function BillsPage() {
   const searchParams = useSearchParams();
   const orgSlug = params.orgSlug as string;
   const vendorIdFilter = searchParams.get('vendorId');
-  const { currency } = useOrganization();
+  const { currency, organization } = useOrganization();
+  const { user } = useAuth();
 
   const [bills, setBills] = useState<Bill[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [efrisFilter, setEfrisFilter] = useState<string>('all');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchBills();
-  }, [orgSlug, statusFilter, vendorIdFilter]);
+  }, [orgSlug, statusFilter, efrisFilter, vendorIdFilter]);
 
   async function fetchBills() {
     try {
@@ -72,12 +77,21 @@ export default function BillsPage() {
       if (statusFilter !== 'all') {
         params.append('status', statusFilter.toUpperCase());
       }
+      if (efrisFilter !== 'all') {
+        params.append('efrisStatus', efrisFilter);
+      }
       if (vendorIdFilter) {
         params.append('vendorId', vendorIdFilter);
       }
 
       const response = await fetch(
-        `/api/orgs/${orgSlug}/bills?${params.toString()}`
+        `/api/orgs/${orgSlug}/bills?${params.toString()}`,
+        {
+          headers: {
+            'x-organization-id': organization?.id || '',
+            'x-user-id': user?.id || '',
+          },
+        }
       );
       if (!response.ok) throw new Error('Failed to fetch bills');
       const data = await response.json();
@@ -119,6 +133,14 @@ export default function BillsPage() {
     return `Due in ${diffDays} days`;
   }
 
+  function getAmountFontSize(formattedAmount: string): string {
+    const length = formattedAmount.length;
+    if (length <= 12) return 'text-2xl';
+    if (length <= 15) return 'text-xl';
+    if (length <= 18) return 'text-lg';
+    return 'text-base';
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -156,7 +178,7 @@ export default function BillsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold text-red-600">
+              <p className={`${getAmountFontSize(formatCurrency(stats.outstandingAmount, currency))} font-bold text-red-600 break-words`}>
                 {formatCurrency(stats.outstandingAmount, currency)}
               </p>
               <p className="text-xs text-gray-500">
@@ -172,7 +194,7 @@ export default function BillsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold">{formatCurrency(stats.totalAmount, currency)}</p>
+              <p className={`${getAmountFontSize(formatCurrency(stats.totalAmount, currency))} font-bold break-words`}>{formatCurrency(stats.totalAmount, currency)}</p>
               <p className="text-xs text-gray-500">
                 {stats.total} bill{stats.total !== 1 ? 's' : ''}
               </p>
@@ -184,7 +206,7 @@ export default function BillsPage() {
               <CardTitle className="text-sm font-medium text-gray-600">Paid</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold text-green-600">
+              <p className={`${getAmountFontSize(formatCurrency(stats.paidAmount, currency))} font-bold text-green-600 break-words`}>
                 {formatCurrency(stats.paidAmount, currency)}
               </p>
               <p className="text-xs text-gray-500">
@@ -200,7 +222,7 @@ export default function BillsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold text-red-700">
+              <p className={`${getAmountFontSize(formatCurrency(stats.overdueAmount, currency))} font-bold text-red-700 break-words`}>
                 {formatCurrency(stats.overdueAmount, currency)}
               </p>
               <p className="text-xs text-gray-500">
@@ -216,6 +238,7 @@ export default function BillsPage() {
         <CardContent className="pt-6">
           <div className="flex flex-col md:flex-row gap-4">
             <div className="w-full md:w-48">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
@@ -227,6 +250,18 @@ export default function BillsPage() {
                 <option value="paid">Paid</option>
                 <option value="overdue">Overdue</option>
                 <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+            <div className="w-full md:w-48">
+              <label className="block text-sm font-medium text-gray-700 mb-1">EFRIS Status</label>
+              <select
+                value={efrisFilter}
+                onChange={(e) => setEfrisFilter(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg"
+              >
+                <option value="all">All Bills</option>
+                <option value="submitted">EFRIS Submitted</option>
+                <option value="not-submitted">Not Submitted</option>
               </select>
             </div>
             {vendorIdFilter && (
@@ -304,13 +339,23 @@ export default function BillsPage() {
                         {formatCurrency(bill.totalAmount, currency)}
                       </td>
                       <td className="py-3">
-                        <span
-                          className={`px-2 py-1 text-xs rounded ${getStatusColor(
-                            bill.status
-                          )}`}
-                        >
-                          {bill.status}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`px-2 py-1 text-xs rounded ${getStatusColor(
+                              bill.status
+                            )}`}
+                          >
+                            {bill.status}
+                          </span>
+                          {bill.efrisSubmitted && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded bg-green-100 text-green-700" title="EFRIS Submitted">
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
+                              </svg>
+                              EFRIS
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 text-gray-600">
                         {bill._count.items} item{bill._count.items !== 1 ? 's' : ''}

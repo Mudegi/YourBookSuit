@@ -83,6 +83,9 @@ export async function GET(
       status: String(bill.status),
       notes: bill.notes ?? null,
       referenceNumber: bill.vendorInvoiceNo ?? null,
+      efrisSubmitted: bill.efrisSubmitted,
+      efrisStatus: bill.efrisStatus,
+      efrisReference: bill.efrisReference,
       vendor: {
         id: bill.vendor.id,
         name: bill.vendor.companyName,

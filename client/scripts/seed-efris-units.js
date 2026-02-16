@@ -1,0 +1,678 @@
+/**
+ * Seed EFRIS Units of Measure
+ * Run this to add all EFRIS standard measure units to your organization
+ * 
+ * Usage: node scripts/seed-efris-units.js
+ */
+
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+
+// Comprehensive EFRIS Units of Measure - Complete Official List
+const efrisUnits = [
+  // Basic Measures
+  { code: 'box', name: 'Box', abbreviation: 'Box', category: 'quantity' },
+  { code: 'pr', name: 'Pair', abbreviation: 'Pr', category: 'quantity' },
+  { code: 'yrd', name: 'Yard', abbreviation: 'Yd', category: 'length' },
+  { code: 'dzn', name: 'Dozen', abbreviation: 'Dz', category: 'quantity' },
+  { code: 'per_week', name: 'Per week', abbreviation: '/wk', category: 'time' },
+  { code: 'per_month', name: 'Per month', abbreviation: '/mo', category: 'time' },
+  { code: 'per_annum', name: 'Per annum', abbreviation: '/yr', category: 'time' },
+  { code: '1ugx', name: '1UGX', abbreviation: 'UGX', category: 'currency' },
+  { code: '1usd', name: '1USD', abbreviation: 'USD', category: 'currency' },
+  { code: 'stick', name: 'Stick', abbreviation: 'Stk', category: 'quantity' },
+  { code: 'ltr', name: 'Litre', abbreviation: 'L', category: 'volume' },
+  { code: 'kgm', name: 'Kg', abbreviation: 'Kg', category: 'weight' },
+  { code: 'user_per_day', name: 'User per day of access', abbreviation: 'User/day', category: 'time' },
+  { code: 'min', name: 'Minute', abbreviation: 'Min', category: 'time' },
+  { code: '1000sticks', name: '1000sticks', abbreviation: '1000stk', category: 'quantity' },
+  { code: '50kgs', name: '50kgs', abbreviation: '50kg', category: 'weight' },
+  { code: 'grm', name: 'g', abbreviation: 'g', category: 'weight' },
+  
+  // Container Types - O Series
+  { code: 'ot', name: 'OT-Octabin', abbreviation: 'OT', category: 'container' },
+  { code: 'ou', name: 'OU-Container', abbreviation: 'OU', category: 'container' },
+  
+  // Container Types - P Series
+  { code: 'p2', name: 'P2-Pan', abbreviation: 'P2', category: 'container' },
+  { code: 'pa', name: 'PA-Packet', abbreviation: 'PA', category: 'container' },
+  { code: 'pb', name: 'PB-Pallet, box', abbreviation: 'PB', category: 'container' },
+  { code: 'pc', name: 'PC-Parcel', abbreviation: 'PC', category: 'container' },
+  { code: 'plt', name: 'PLT - Pallet modular collars 80cm x 100cms', abbreviation: 'PLT', category: 'container' },
+  { code: 'pe', name: 'PE-Pallet modular collars 80cm*120cms', abbreviation: 'PE', category: 'container' },
+  { code: 'pf', name: 'PF-Pen', abbreviation: 'PF', category: 'container' },
+  { code: 'pg', name: 'PG-Plate', abbreviation: 'PG', category: 'container' },
+  { code: 'ph', name: 'PH-Pitcher', abbreviation: 'PH', category: 'container' },
+  { code: 'pi', name: 'PI-Pipe', abbreviation: 'PI', category: 'container' },
+  { code: 'pj', name: 'PJ-Punnet', abbreviation: 'PJ', category: 'container' },
+  { code: 'pk', name: 'PK-Package', abbreviation: 'PK', category: 'container' },
+  { code: 'pl', name: 'PL-Pail', abbreviation: 'PL', category: 'container' },
+  { code: 'pn', name: 'PN-Plank', abbreviation: 'PN', category: 'container' },
+  { code: 'po', name: 'PO-Pouch', abbreviation: 'PO', category: 'container' },
+  { code: 'pp', name: 'PP-Piece', abbreviation: 'PP', category: 'quantity' },
+  { code: 'pr_rec', name: 'PR-Receptable, plastic', abbreviation: 'PR', category: 'container' },
+  { code: 'pt', name: 'PT-Pot', abbreviation: 'PT', category: 'container' },
+  { code: 'pu', name: 'PU-Tray', abbreviation: 'PU', category: 'container' },
+  { code: 'pv', name: 'PV-Pipes, in bundle/bunch/truss', abbreviation: 'PV', category: 'container' },
+  { code: 'px', name: 'PX-Pallet', abbreviation: 'PX', category: 'container' },
+  { code: 'py', name: 'PY-Plates, in bundle/bunch/truss', abbreviation: 'PY', category: 'container' },
+  { code: 'pz', name: 'PZ-Planks, in bundle/bunch/truss', abbreviation: 'PZ', category: 'container' },
+  
+  // Container Types - Q Series (Drums)
+  { code: 'qa', name: 'QA-Drum steel non-removable head', abbreviation: 'QA', category: 'container' },
+  { code: 'qb', name: 'QB-Drum steel removable head', abbreviation: 'QB', category: 'container' },
+  { code: 'qc', name: 'QC-Drum aluminium non-removable head', abbreviation: 'QC', category: 'container' },
+  { code: 'qd', name: 'QD-Drum aluminium removable head', abbreviation: 'QD', category: 'container' },
+  { code: 'qf', name: 'QF-Drum plastic non-removable head', abbreviation: 'QF', category: 'container' },
+  { code: 'qg', name: 'QG-Drum plastic removable head', abbreviation: 'QG', category: 'container' },
+  { code: 'qh', name: 'QH-Barrel wooden bung type', abbreviation: 'QH', category: 'container' },
+  { code: 'qj', name: 'QJ-Barrel wooden removable head', abbreviation: 'QJ', category: 'container' },
+  { code: 'qk', name: 'QK-Jerrican steel non-removable head', abbreviation: 'QK', category: 'container' },
+  { code: 'ql', name: 'QL-Jerrican steel removable head', abbreviation: 'QL', category: 'container' },
+  { code: 'qm', name: 'QM-Jerrican plastic non-removable head', abbreviation: 'QM', category: 'container' },
+  { code: 'qn', name: 'QN-Jerrican plastic removable head', abbreviation: 'QN', category: 'container' },
+  { code: 'qp', name: 'QP-Box wooden natural wood ordinary', abbreviation: 'QP', category: 'container' },
+  { code: 'qq', name: 'QQ-Box natural wood with sift walls', abbreviation: 'QQ', category: 'container' },
+  { code: 'qr', name: 'QR-Box plastic expanded', abbreviation: 'QR', category: 'container' },
+  { code: 'qs', name: 'QS-Box plastic solid', abbreviation: 'QS', category: 'container' },
+  
+  // Container Types - R Series
+  { code: 'rd', name: 'RD-Rod', abbreviation: 'RD', category: 'container' },
+  { code: 'rg', name: 'RG-Ring', abbreviation: 'RG', category: 'container' },
+  { code: 'rj', name: 'RJ-Rack clothing hanger', abbreviation: 'RJ', category: 'container' },
+  { code: 'rk', name: 'RK-Rack', abbreviation: 'RK', category: 'container' },
+  { code: 'rl', name: 'RL-Reel', abbreviation: 'RL', category: 'container' },
+  { code: 'ro', name: 'RO-Roll', abbreviation: 'RO', category: 'quantity' },
+  { code: 'rt', name: 'RT-Rednet', abbreviation: 'RT', category: 'container' },
+  { code: 'rz', name: 'RZ-Rods in bundle/bunch/truss', abbreviation: 'RZ', category: 'container' },
+  
+  // Container Types - S Series
+  { code: 'sa', name: 'SA-Sack', abbreviation: 'SA', category: 'container' },
+  { code: 'sb', name: 'SB-Slab', abbreviation: 'SB', category: 'container' },
+  { code: 'sc', name: 'SC-Crate shallow', abbreviation: 'SC', category: 'container' },
+  { code: 'sd', name: 'SD-Spindle', abbreviation: 'SD', category: 'container' },
+  { code: 'se', name: 'SE-Sea-chest', abbreviation: 'SE', category: 'container' },
+  { code: 'sh', name: 'SH-Sachet', abbreviation: 'SH', category: 'container' },
+  { code: 'si', name: 'SI-Skid', abbreviation: 'SI', category: 'container' },
+  { code: 'sk', name: 'SK-Case skeleton', abbreviation: 'SK', category: 'container' },
+  { code: 'sl', name: 'SL-Slipsheet', abbreviation: 'SL', category: 'container' },
+  { code: 'sm', name: 'SM-Sheetmetal', abbreviation: 'SM', category: 'container' },
+  { code: 'so', name: 'SO-Spool', abbreviation: 'SO', category: 'container' },
+  { code: 'sp', name: 'SP-Sheet plastic wrapping', abbreviation: 'SP', category: 'container' },
+  { code: 'ss', name: 'SS-Case', abbreviation: 'SS', category: 'container' },
+  { code: 'st', name: 'ST-Sheet', abbreviation: 'ST', category: 'quantity' },
+  { code: 'su', name: 'SU-Suitcase', abbreviation: 'SU', category: 'container' },
+  { code: 'sv', name: 'SV-Envelope', abbreviation: 'SV', category: 'container' },
+  { code: 'sw', name: 'SW-Shrinkwrapped', abbreviation: 'SW', category: 'container' },
+  { code: 'sx', name: 'SX-Set', abbreviation: 'SX', category: 'quantity' },
+  { code: 'sy', name: 'SY-Sleeve', abbreviation: 'SY', category: 'container' },
+  { code: 'sz', name: 'SZ-Sheets in bundle/bunch/truss', abbreviation: 'SZ', category: 'container' },
+  
+  // Container Types - T Series
+  { code: 't1', name: 'T1-Tablet', abbreviation: 'T1', category: 'quantity' },
+  { code: 'tb', name: 'TB-Tub', abbreviation: 'TB', category: 'container' },
+  { code: 'tc', name: 'TC-Tea-chest', abbreviation: 'TC', category: 'container' },
+  { code: 'td', name: 'TD-Tube collapsible', abbreviation: 'TD', category: 'container' },
+  { code: 'te', name: 'TE-Tyre', abbreviation: 'TE', category: 'quantity' },
+  { code: 'tg', name: 'TG-Tank container', abbreviation: 'TG', category: 'container' },
+  { code: 'ti', name: 'TI-Tierce', abbreviation: 'TI', category: 'container' },
+  { code: 'tk', name: 'TK-Tank rectangular', abbreviation: 'TK', category: 'container' },
+  { code: 'tl', name: 'TL-Tub', abbreviation: 'TL', category: 'container' },
+  { code: 'tn', name: 'TN-Tin', abbreviation: 'TN', category: 'container' },
+  { code: 'to', name: 'TO-Tun', abbreviation: 'TO', category: 'container' },
+  { code: 'tr', name: 'TR-Trunk', abbreviation: 'TR', category: 'container' },
+  { code: 'ts', name: 'TS-Truss', abbreviation: 'TS', category: 'container' },
+  { code: 'tt', name: 'TT-Bag', abbreviation: 'TT', category: 'container' },
+  { code: 'tu', name: 'TU-Tube', abbreviation: 'TU', category: 'container' },
+  { code: 'tv', name: 'TV-Tube with nozzle', abbreviation: 'TV', category: 'container' },
+  { code: 'tw', name: 'TW-Pallet', abbreviation: 'TW', category: 'container' },
+  { code: 'ty', name: 'TY-Tank cylindrical', abbreviation: 'TY', category: 'container' },
+  { code: 'tz', name: 'TZ-Tubes in bundle/bunch/truss', abbreviation: 'TZ', category: 'container' },
+  
+  // Container Types - U-V Series
+  { code: 'uc', name: 'UC-Uncaged', abbreviation: 'UC', category: 'other' },
+  { code: 'un', name: 'UN-Unit', abbreviation: 'UN', category: 'quantity' },
+  { code: 'va', name: 'VA-Vat', abbreviation: 'VA', category: 'container' },
+  { code: 'veh', name: 'VEH-Vehicle', abbreviation: 'VEH', category: 'other' },
+  { code: 'vg', name: 'VG-Bulk', abbreviation: 'VG', category: 'other' },
+  { code: 'vi', name: 'VI-Vial', abbreviation: 'VI', category: 'container' },
+  { code: 'vk', name: 'VK-Vanpack', abbreviation: 'VK', category: 'container' },
+  { code: 'vl', name: 'VL-Bulk liquid', abbreviation: 'VL', category: 'other' },
+  { code: 'vn', name: 'VN-Vehicle', abbreviation: 'VN', category: 'other' },
+  { code: 'vo', name: 'VO-Bulk solid large particles', abbreviation: 'VO', category: 'other' },
+  { code: 'vp', name: 'VP-Vacuum-packed', abbreviation: 'VP', category: 'container' },
+  { code: 'mtr', name: 'Metre', abbreviation: 'M', category: 'length' },
+  { code: 'vq', name: 'VQ-Bulk liquefied gas', abbreviation: 'VQ', category: 'other' },
+  { code: 'vr', name: 'VR-Bulk solid granular particles', abbreviation: 'VR', category: 'other' },
+  { code: 'vs', name: 'VS-Bulk', abbreviation: 'VS', category: 'other' },
+  { code: 'vy', name: 'VY-Bulk solid fine particles powder', abbreviation: 'VY', category: 'other' },
+  
+  // Container Types - W Series (Intermediate Bulk Containers)
+  { code: 'wa', name: 'WA-Intermediate bulk container', abbreviation: 'WA', category: 'container' },
+  { code: 'wb', name: 'WB-Wickerbottle', abbreviation: 'WB', category: 'container' },
+  { code: 'wc', name: 'WC-Intermediate bulk container steel', abbreviation: 'WC', category: 'container' },
+  { code: 'wd', name: 'WD-Intermediate bulk container aluminium', abbreviation: 'WD', category: 'container' },
+  { code: 'wf', name: 'WF-Intermediate bulk container metal', abbreviation: 'WF', category: 'container' },
+  { code: 'wg', name: 'WG-Intermediate bulk container steel pressure', abbreviation: 'WG', category: 'container' },
+  { code: 'wh', name: 'WH-Intermediate bulk container aluminium pressure', abbreviation: 'WH', category: 'container' },
+  { code: 'wj', name: 'WJ-Intermediate bulk container metal pressure', abbreviation: 'WJ', category: 'container' },
+  { code: 'wk', name: 'WK-Intermediate bulk container steel liquid', abbreviation: 'WK', category: 'container' },
+  { code: 'wl', name: 'WL-Intermediate bulk container aluminium liquid', abbreviation: 'WL', category: 'container' },
+  { code: 'wm', name: 'WM-Intermediate bulk container metal liquid', abbreviation: 'WM', category: 'container' },
+  { code: 'wn', name: 'WN-Intermediate bulk container woven plastic no coat', abbreviation: 'WN', category: 'container' },
+  { code: 'wp', name: 'WP-Intermediate bulk container woven plastic coated', abbreviation: 'WP', category: 'container' },
+  { code: 'wq', name: 'WQ-Intermediate bulk container woven plastic liner', abbreviation: 'WQ', category: 'container' },
+  { code: 'wr', name: 'WR-Intermediate bulk container woven plastic coated liner', abbreviation: 'WR', category: 'container' },
+  { code: 'ws', name: 'WS-Intermediate bulk container plastic film', abbreviation: 'WS', category: 'container' },
+  { code: 'wt', name: 'WT-Intermediate bulk container textile no coat', abbreviation: 'WT', category: 'container' },
+  { code: 'wu', name: 'WU-Intermediate bulk container natural wood liner', abbreviation: 'WU', category: 'container' },
+  { code: 'wv', name: 'WV-Intermediate bulk container textile coated', abbreviation: 'WV', category: 'container' },
+  { code: 'ww', name: 'WW-Intermediate bulk container textile with liner', abbreviation: 'WW', category: 'container' },
+  { code: 'wx', name: 'WX-Intermediate bulk container textile coated liner', abbreviation: 'WX', category: 'container' },
+  { code: 'wy', name: 'WY-Intermediate bulk container plywood liner', abbreviation: 'WY', category: 'container' },
+  { code: 'wz', name: 'WZ-Intermediate bulk container reconstituted wood', abbreviation: 'WZ', category: 'container' },
+  
+  // Container Types - X Series (Bags)
+  { code: 'xa', name: 'XA-Bag woven plastic without inner coat', abbreviation: 'XA', category: 'container' },
+  { code: 'xb', name: 'XB-Bag woven plastic sift proof', abbreviation: 'XB', category: 'container' },
+  { code: 'xc', name: 'XC-Bag woven plastic water resistant', abbreviation: 'XC', category: 'container' },
+  { code: 'xd', name: 'XD-Bag plastics film', abbreviation: 'XD', category: 'container' },
+  { code: 'xf', name: 'XF-Bag textile without inner coat', abbreviation: 'XF', category: 'container' },
+  { code: 'xg', name: 'XG-Bag textile sift proof', abbreviation: 'XG', category: 'container' },
+  { code: 'xh', name: 'XH-Bag textile water resistant', abbreviation: 'XH', category: 'container' },
+  { code: 'xj', name: 'XJ-Bag paper multi-wall', abbreviation: 'XJ', category: 'container' },
+  { code: 'xk', name: 'XK-Bag paper multi-wall water resistant', abbreviation: 'XK', category: 'container' },
+  { code: 'xx', name: 'XX-SCT UN-IDENTIFIED', abbreviation: 'XX', category: 'other' },
+  
+  // Container Types - Y Series (Composite Packaging)
+  { code: 'ya', name: 'YA-Composite pack plastic receptacle steel drum', abbreviation: 'YA', category: 'container' },
+  { code: 'yb', name: 'YB-Composite pack plastic receptacle steel crate', abbreviation: 'YB', category: 'container' },
+  { code: 'yc', name: 'YC-Composite pack plastic receptacle aluminium drum', abbreviation: 'YC', category: 'container' },
+  { code: 'yd', name: 'YD-Composite pack plastic receptacle aluminium crate', abbreviation: 'YD', category: 'container' },
+  { code: 'yf', name: 'YF-Composite pack plastic receptacle wooden box', abbreviation: 'YF', category: 'container' },
+  { code: 'yg', name: 'YG-Composite pack plastic receptacle plywood drum', abbreviation: 'YG', category: 'container' },
+  { code: 'yh', name: 'YH-Composite pack plastic receptacle plywood box', abbreviation: 'YH', category: 'container' },
+  { code: 'yj', name: 'YJ-Composite pack plastic receptacle fibre drum', abbreviation: 'YJ', category: 'container' },
+  { code: 'yk', name: 'YK-Composite pack plastic receptacle fibre box', abbreviation: 'YK', category: 'container' },
+  { code: 'yl', name: 'YL-Composite pack plastic receptacle plastic drum', abbreviation: 'YL', category: 'container' },
+  { code: 'ym', name: 'YM-Composite pack plastic receptacle plastic box', abbreviation: 'YM', category: 'container' },
+  { code: 'yn', name: 'YN-Composite pack glass receptacle steel drum', abbreviation: 'YN', category: 'container' },
+  { code: 'yp', name: 'YP-Composite pack glass receptacle steel crate', abbreviation: 'YP', category: 'container' },
+  { code: 'yq', name: 'YQ-Composite pack glass receptacle aluminium drum', abbreviation: 'YQ', category: 'container' },
+  { code: 'yr', name: 'YR-Composite pack glass receptacle aluminium crate', abbreviation: 'YR', category: 'container' },
+  { code: 'ys', name: 'YS-Composite pack glass receptacle wooden box', abbreviation: 'YS', category: 'container' },
+  { code: 'yt', name: 'YT-Composite pack glass receptacle plywood drum', abbreviation: 'YT', category: 'container' },
+  { code: 'yv', name: 'YV-Composite pack glass receptacle wicker hamper', abbreviation: 'YV', category: 'container' },
+  { code: 'yw', name: 'YW-Composite pack glass receptacle fibre drum', abbreviation: 'YW', category: 'container' },
+  { code: 'yx', name: 'YX-Composite pack glass receptacle fibre box', abbreviation: 'YX', category: 'container' },
+  { code: 'yy', name: 'YY-Composite pack glass receptacle expanded plastic pack', abbreviation: 'YY', category: 'container' },
+  { code: 'yz', name: 'YZ-Composite pack glass receptacle solid plastic pack', abbreviation: 'YZ', category: 'container' },
+  
+  // Container Types - Z Series
+  { code: 'za', name: 'ZA-Intermediate bulk container paper multi-wall', abbreviation: 'ZA', category: 'container' },
+  { code: 'zb', name: 'ZB-Bag large', abbreviation: 'ZB', category: 'container' },
+  { code: 'zc', name: 'ZC-Intermediate bulk container paper water resistant', abbreviation: 'ZC', category: 'container' },
+  { code: 'zd', name: 'ZD-Intermediate bulk container plastic structural equipment solid', abbreviation: 'ZD', category: 'container' },
+  { code: 'zf', name: 'ZF-Intermediate bulk container plastic free standing', abbreviation: 'ZF', category: 'container' },
+  { code: 'zg', name: 'ZG-Intermediate bulk container plastic structural equipment pressure', abbreviation: 'ZG', category: 'container' },
+  { code: 'zh', name: 'ZH-Intermediate bulk container plastic freestanding pressure', abbreviation: 'ZH', category: 'container' },
+  { code: 'zj', name: 'ZJ-Intermediate bulk container plastic structural equipment liquid', abbreviation: 'ZJ', category: 'container' },
+  { code: 'zk', name: 'ZK-Intermediate bulk container plastic freestanding liquid', abbreviation: 'ZK', category: 'container' },
+  { code: 'zl', name: 'ZL-Intermediate bulk container composite rigid plastic solid', abbreviation: 'ZL', category: 'container' },
+  { code: 'zm', name: 'ZM-Intermediate bulk container composite flexible plastic solid', abbreviation: 'ZM', category: 'container' },
+  { code: 'zn', name: 'ZN-Intermediate bulk container composite rigid plastic pressure', abbreviation: 'ZN', category: 'container' },
+  { code: 'zp', name: 'ZP-Intermediate bulk container composite flexible plastic pressure', abbreviation: 'ZP', category: 'container' },
+  { code: 'zq', name: 'ZQ-Intermediate bulk container composite rigid plastic liquid', abbreviation: 'ZQ', category: 'container' },
+  { code: 'zr', name: 'ZR-Intermediate bulk container composite flexible plastic liquid', abbreviation: 'ZR', category: 'container' },
+  { code: 'zs', name: 'ZS-Intermediate bulk container', abbreviation: 'ZS', category: 'container' },
+  { code: 'zt', name: 'ZT-Intermediate bulk container', abbreviation: 'ZT', category: 'container' },
+  { code: 'zu', name: 'ZU-Intermediate bulk container', abbreviation: 'ZU', category: 'container' },
+  { code: 'zv', name: 'ZV-Intermediate bulk container', abbreviation: 'ZV', category: 'container' },
+  { code: 'zw', name: 'ZW-Intermediate bulk container', abbreviation: 'ZW', category: 'container' },
+  { code: 'zx', name: 'ZX-Intermediate bulk container', abbreviation: 'ZX', category: 'container' },
+  { code: 'zy', name: 'ZY-Intermediate bulk container', abbreviation: 'ZY', category: 'container' },
+  { code: 'zz', name: 'ZZ-Mutually defined', abbreviation: 'ZZ', category: 'other' },
+  
+  // Container Types - A Series
+  { code: 'aa', name: 'AA-Intermediate bulk container', abbreviation: 'AA', category: 'container' },
+  { code: 'ab', name: 'AB-Receptacle', abbreviation: 'AB', category: 'container' },
+  { code: 'ac', name: 'AC-Receptacle', abbreviation: 'AC', category: 'container' },
+  { code: 'ad', name: 'AD-Receptacle', abbreviation: 'AD', category: 'container' },
+  { code: 'ae', name: 'AE-Aerosol', abbreviation: 'AE', category: 'container' },
+  { code: 'af', name: 'AF-Pallet', abbreviation: 'AF', category: 'container' },
+  { code: 'ag', name: 'AG-Pallet', abbreviation: 'AG', category: 'container' },
+  { code: 'ah', name: 'AH-Pallet', abbreviation: 'AH', category: 'container' },
+  { code: 'ai', name: 'AI-Clamshell', abbreviation: 'AI', category: 'container' },
+  { code: 'aj', name: 'AJ-Cone', abbreviation: 'AJ', category: 'container' },
+  { code: 'al', name: 'AL-Ball', abbreviation: 'AL', category: 'container' },
+  { code: 'am', name: 'AM-Ampoule non protected', abbreviation: 'AM', category: 'container' },
+  { code: 'ap', name: 'AP-Ampoule protected', abbreviation: 'AP', category: 'container' },
+  { code: 'at', name: 'AT-Atomizer', abbreviation: 'AT', category: 'container' },
+  { code: 'av', name: 'AV-Capsule', abbreviation: 'AV', category: 'container' },
+  
+  // Container Types - B Series
+  { code: 'ba', name: 'BA-Barrel', abbreviation: 'BA', category: 'container' },
+  { code: 'bb', name: 'BB-Bobbin', abbreviation: 'BB', category: 'container' },
+  { code: 'bc', name: 'BC-Bottle crate/rack', abbreviation: 'BC', category: 'container' },
+  { code: 'bd', name: 'BD-Board', abbreviation: 'BD', category: 'container' },
+  { code: 'be', name: 'BE-Bundle', abbreviation: 'BE', category: 'quantity' },
+  { code: 'bf', name: 'BF-Balloon non-protected', abbreviation: 'BF', category: 'container' },
+  { code: 'bg', name: 'BG-Bag', abbreviation: 'BG', category: 'container' },
+  { code: 'bh', name: 'BH-Bunch', abbreviation: 'BH', category: 'quantity' },
+  { code: 'bi', name: 'BI-Bin', abbreviation: 'BI', category: 'container' },
+  { code: 'bj', name: 'BJ-Bucket', abbreviation: 'BJ', category: 'container' },
+  { code: 'bk', name: 'BK-Basket', abbreviation: 'BK', category: 'container' },
+  { code: 'bl', name: 'BL-Bale compressed', abbreviation: 'BL', category: 'container' },
+  { code: 'bm', name: 'BM-Basin', abbreviation: 'BM', category: 'container' },
+  { code: 'bn', name: 'BN-Bale non compressed', abbreviation: 'BN', category: 'container' },
+  { code: 'bo', name: 'BO-Bottle non protected cylindrical', abbreviation: 'BO', category: 'container' },
+  { code: 'bp', name: 'BP-Balloon protected', abbreviation: 'BP', category: 'container' },
+  { code: 'bq', name: 'BQ-Bottle protected cylindrical', abbreviation: 'BQ', category: 'container' },
+  { code: 'br', name: 'BR-Bar', abbreviation: 'BR', category: 'quantity' },
+  { code: 'bs', name: 'BS-Bottle non protected bulbous', abbreviation: 'BS', category: 'container' },
+  { code: 'bt', name: 'BT-Bolt', abbreviation: 'BT', category: 'quantity' },
+  { code: 'bu', name: 'BU-Butt', abbreviation: 'BU', category: 'container' },
+  { code: 'bv', name: 'BV-Bottle protected bulbous', abbreviation: 'BV', category: 'container' },
+  { code: 'bw', name: 'BW-Box for liquids', abbreviation: 'BW', category: 'container' },
+  { code: 'bx', name: 'BX-Box', abbreviation: 'BX', category: 'container' },
+  { code: 'by', name: 'BY-Board in bundle/bunch/truss', abbreviation: 'BY', category: 'container' },
+  { code: 'bz', name: 'BZ-Bars in bundle/bunch/truss', abbreviation: 'BZ', category: 'container' },
+  
+  // Container Types - C Series
+  { code: 'ca', name: 'CA-Can rectangular', abbreviation: 'CA', category: 'container' },
+  { code: 'cb', name: 'CB-Crate beer', abbreviation: 'CB', category: 'container' },
+  { code: 'cc', name: 'CC-Churn', abbreviation: 'CC', category: 'container' },
+  { code: 'cd', name: 'CD-Can with handle and spout', abbreviation: 'CD', category: 'container' },
+  { code: 'ce', name: 'CE-Creel', abbreviation: 'CE', category: 'container' },
+  { code: 'cf', name: 'CF-Coffer', abbreviation: 'CF', category: 'container' },
+  { code: 'cg', name: 'CG-Cage', abbreviation: 'CG', category: 'container' },
+  { code: 'ch', name: 'CH-Chest', abbreviation: 'CH', category: 'container' },
+  { code: 'ci', name: 'CI-Canister', abbreviation: 'CI', category: 'container' },
+  { code: 'cj', name: 'CJ-Coffin', abbreviation: 'CJ', category: 'container' },
+  { code: 'ck', name: 'CK-Cask', abbreviation: 'CK', category: 'container' },
+  { code: 'cl', name: 'CL-Coil', abbreviation: 'CL', category: 'container' },
+  { code: 'cm', name: 'CM-Card', abbreviation: 'CM', category: 'container' },
+  { code: 'cn', name: 'CN-Container transport equipment', abbreviation: 'CN', category: 'container' },
+  { code: 'co', name: 'CO-Carboy non-protected', abbreviation: 'CO', category: 'container' },
+  { code: 'cp', name: 'CP-Carboy protected', abbreviation: 'CP', category: 'container' },
+  { code: 'cq', name: 'CQ-Cartridge', abbreviation: 'CQ', category: 'container' },
+  { code: 'cr', name: 'CR-Crate', abbreviation: 'CR', category: 'container' },
+  { code: 'cs', name: 'CS-Case', abbreviation: 'CS', category: 'container' },
+  { code: 'ct', name: 'CT-Carton', abbreviation: 'CT', category: 'container' },
+  { code: 'cu', name: 'CU-Cup', abbreviation: 'CU', category: 'container' },
+  { code: 'cv', name: 'CV-Cover', abbreviation: 'CV', category: 'container' },
+  { code: 'cw', name: 'CW-Cage roll', abbreviation: 'CW', category: 'container' },
+  { code: 'cx', name: 'CX-Can cylindrical', abbreviation: 'CX', category: 'container' },
+  { code: 'cy', name: 'CY-Cylinder', abbreviation: 'CY', category: 'container' },
+  { code: 'cz', name: 'CZ-Canvas', abbreviation: 'CZ', category: 'container' },
+  
+  // Container Types - D Series
+  { code: 'da', name: 'DA-Crate multiple layer plastic', abbreviation: 'DA', category: 'container' },
+  { code: 'db', name: 'DB-Crate multiple layer wooden', abbreviation: 'DB', category: 'container' },
+  { code: 'dc', name: 'DC-Crate', abbreviation: 'DC', category: 'container' },
+  { code: 'dg', name: 'DG-Cage commonwealth handling equipment pool', abbreviation: 'DG', category: 'container' },
+  { code: 'dh', name: 'DH-Box commonwealth handling equipment pool', abbreviation: 'DH', category: 'container' },
+  { code: 'di', name: 'DI-Drum iron', abbreviation: 'DI', category: 'container' },
+  { code: 'dj', name: 'DJ-Demijohn non-protected', abbreviation: 'DJ', category: 'container' },
+  { code: 'dk', name: 'DK-Crate bulk cardboard', abbreviation: 'DK', category: 'container' },
+  { code: 'dl', name: 'DL-Crate bulk plastic', abbreviation: 'DL', category: 'container' },
+  { code: 'dm', name: 'DM-Crate bulk wooden', abbreviation: 'DM', category: 'container' },
+  { code: 'dn', name: 'DN-Dispenser', abbreviation: 'DN', category: 'container' },
+  { code: 'dp', name: 'DP-Demijohn protected', abbreviation: 'DP', category: 'container' },
+  { code: 'dr', name: 'DR-Drum', abbreviation: 'DR', category: 'container' },
+  { code: 'ds', name: 'DS-Tray one layer no cover plastic', abbreviation: 'DS', category: 'container' },
+  { code: 'dt', name: 'DT-Tray one layer no cover wooden', abbreviation: 'DT', category: 'container' },
+  { code: 'du', name: 'DU-Tray one layer no cover polystyrene', abbreviation: 'DU', category: 'container' },
+  { code: 'dv', name: 'DV-Tray one layer no cover cardboard', abbreviation: 'DV', category: 'container' },
+  { code: 'dw', name: 'DW-Tray two layers no cover plastic', abbreviation: 'DW', category: 'container' },
+  { code: 'dx', name: 'DX-Tray two layers no cover wooden', abbreviation: 'DX', category: 'container' },
+  { code: 'dy', name: 'DY-Tray two layers no cover cardboard', abbreviation: 'DY', category: 'container' },
+  
+  // Container Types - E-F Series
+  { code: 'ec', name: 'EC-Bag plastic', abbreviation: 'EC', category: 'container' },
+  { code: 'ed', name: 'ED-Case with pallet base', abbreviation: 'ED', category: 'container' },
+  { code: 'ee', name: 'EE-Case with pallet base wooden', abbreviation: 'EE', category: 'container' },
+  { code: 'ef', name: 'EF-Case with pallet base cardboard', abbreviation: 'EF', category: 'container' },
+  { code: 'eg', name: 'EG-Case with pallet base plastic', abbreviation: 'EG', category: 'container' },
+  { code: 'eh', name: 'EH-Case with pallet base metal', abbreviation: 'EH', category: 'container' },
+  { code: 'ei', name: 'EI-Case isothermic', abbreviation: 'EI', category: 'container' },
+  { code: 'en', name: 'EN-Envelope', abbreviation: 'EN', category: 'container' },
+  { code: 'fb', name: 'FB-Flexibag', abbreviation: 'FB', category: 'container' },
+  { code: 'fc', name: 'FC-Crate fruit', abbreviation: 'FC', category: 'container' },
+  { code: 'fd', name: 'FD-Crate framed', abbreviation: 'FD', category: 'container' },
+  { code: 'fe', name: 'FE-Flexitank', abbreviation: 'FE', category: 'container' },
+  { code: 'fi', name: 'FI-Firkin', abbreviation: 'FI', category: 'container' },
+  { code: 'fl', name: 'FL-Flask', abbreviation: 'FL', category: 'container' },
+  { code: 'fo', name: 'FO-Footlocker', abbreviation: 'FO', category: 'container' },
+  { code: 'fp', name: 'FP-Filmpack', abbreviation: 'FP', category: 'container' },
+  { code: 'fr', name: 'FR-Frame', abbreviation: 'FR', category: 'container' },
+  { code: 'ft', name: 'FT-Foodtainer', abbreviation: 'FT', category: 'container' },
+  { code: 'fw', name: 'FW-Cart', abbreviation: 'FW', category: 'container' },
+  { code: 'fx', name: 'FX-Bag', abbreviation: 'FX', category: 'container' },
+  
+  // Container Types - G-H Series
+  { code: 'gb', name: 'GB-Bottle gas', abbreviation: 'GB', category: 'container' },
+  { code: 'gi', name: 'GI-Girder', abbreviation: 'GI', category: 'container' },
+  { code: 'gl', name: 'GL-Container', abbreviation: 'GL', category: 'container' },
+  { code: 'gr', name: 'GR-Receptacle glass', abbreviation: 'GR', category: 'container' },
+  { code: 'gu', name: 'GU-Tray', abbreviation: 'GU', category: 'container' },
+  { code: 'gy', name: 'GY-Bag', abbreviation: 'GY', category: 'container' },
+  { code: 'gz', name: 'GZ-Girders in bundle/bunch/truss', abbreviation: 'GZ', category: 'container' },
+  { code: 'ha', name: 'HA-Basket with handle plastic', abbreviation: 'HA', category: 'container' },
+  { code: 'hb', name: 'HB-Basket with handle wooden', abbreviation: 'HB', category: 'container' },
+  { code: 'hc', name: 'HC-Basket with handle cardboard', abbreviation: 'HC', category: 'container' },
+  { code: 'hg', name: 'HG-Hogshead', abbreviation: 'HG', category: 'container' },
+  { code: 'hn', name: 'HN-Hanger', abbreviation: 'HN', category: 'container' },
+  { code: 'hr', name: 'HR-Hamper', abbreviation: 'HR', category: 'container' },
+  
+  // Container Types - I-J Series
+  { code: 'ia', name: 'IA-Package display wooden', abbreviation: 'IA', category: 'container' },
+  { code: 'ib', name: 'IB-Package display cardboard', abbreviation: 'IB', category: 'container' },
+  { code: 'ic', name: 'IC-Package display plastic', abbreviation: 'IC', category: 'container' },
+  { code: 'id', name: 'ID-Package display metal', abbreviation: 'ID', category: 'container' },
+  { code: 'ie', name: 'IE-Package show', abbreviation: 'IE', category: 'container' },
+  { code: 'if', name: 'IF-Package flow', abbreviation: 'IF', category: 'container' },
+  { code: 'ig', name: 'IG-Package paper wrapped', abbreviation: 'IG', category: 'container' },
+  { code: 'ih', name: 'IH-Drum plastic', abbreviation: 'IH', category: 'container' },
+  { code: 'ik', name: 'IK-Package', abbreviation: 'IK', category: 'container' },
+  { code: 'il', name: 'IL-Tray', abbreviation: 'IL', category: 'container' },
+  { code: 'in', name: 'IN-Ingot', abbreviation: 'IN', category: 'quantity' },
+  { code: 'iz', name: 'IZ-Ingots in bundle/bunch/truss', abbreviation: 'IZ', category: 'container' },
+  { code: 'jb', name: 'JB-Bag', abbreviation: 'JB', category: 'container' },
+  { code: 'jc', name: 'JC-Jerrican rectangular', abbreviation: 'JC', category: 'container' },
+  { code: 'jg', name: 'JG-Jug', abbreviation: 'JG', category: 'container' },
+  { code: 'jr', name: 'JR-Jar', abbreviation: 'JR', category: 'container' },
+  { code: 'jt', name: 'JT-Jute bag', abbreviation: 'JT', category: 'container' },
+  { code: 'jy', name: 'JY-Jerrican cylindrical', abbreviation: 'JY', category: 'container' },
+  
+  // Container Types - K-L Series
+  { code: 'kg_keg', name: 'KG-Keg', abbreviation: 'KG', category: 'container' },
+  { code: 'ki', name: 'KI-Kit', abbreviation: 'KI', category: 'container' },
+  { code: 'le', name: 'LE-Luggage', abbreviation: 'LE', category: 'container' },
+  { code: 'lg', name: 'LG-Log', abbreviation: 'LG', category: 'quantity' },
+  { code: 'lt', name: 'LT-Lot', abbreviation: 'LT', category: 'quantity' },
+  { code: 'lu', name: 'LU-Lug', abbreviation: 'LU', category: 'container' },
+  { code: 'lv', name: 'LV-Liftvan', abbreviation: 'LV', category: 'container' },
+  { code: 'lz', name: 'LZ-Logs in bundle/bunch/truss', abbreviation: 'LZ', category: 'container' },
+  
+  // Container Types - M-N Series
+  { code: 'ma', name: 'MA-Crate', abbreviation: 'MA', category: 'container' },
+  { code: 'mb', name: 'MB-Bag multiply', abbreviation: 'MB', category: 'container' },
+  { code: 'mc', name: 'MC-Crate milk', abbreviation: 'MC', category: 'container' },
+  { code: 'me', name: 'ME-Container', abbreviation: 'ME', category: 'container' },
+  { code: 'mr', name: 'MR-Receptacle metal', abbreviation: 'MR', category: 'container' },
+  { code: 'ms', name: 'MS-Sack multi-wall', abbreviation: 'MS', category: 'container' },
+  { code: 'mt', name: 'MT-Mat', abbreviation: 'MT', category: 'container' },
+  { code: 'mw', name: 'MW-Receptacle plastic wrapped', abbreviation: 'MW', category: 'container' },
+  { code: 'mx', name: 'MX-Matchbox', abbreviation: 'MX', category: 'container' },
+  { code: 'na', name: 'NA-Not available', abbreviation: 'NA', category: 'other' },
+  { code: 'ne', name: 'NE-Unpacked or unpackaged', abbreviation: 'NE', category: 'other' },
+  { code: 'nf', name: 'NF-Unpacked or unpackaged', abbreviation: 'NF', category: 'other' },
+  { code: 'ng', name: 'NG-Unpacked or unpackaged', abbreviation: 'NG', category: 'other' },
+  { code: 'ns', name: 'NS-Nest', abbreviation: 'NS', category: 'container' },
+  { code: 'nt', name: 'NT-Net', abbreviation: 'NT', category: 'container' },
+  { code: 'nu', name: 'NU-Net tube plastic', abbreviation: 'NU', category: 'container' },
+  { code: 'nv', name: 'NV-Net tube textile', abbreviation: 'NV', category: 'container' },
+  
+  // Additional Specialized Units
+  { code: 'ok', name: 'OK-Block', abbreviation: 'BLK', category: 'quantity' },
+  { code: 'per_quarter', name: 'Per quarter', abbreviation: '/qtr', category: 'time' },
+  { code: 'per_trip', name: 'Per Trip', abbreviation: '/trip', category: 'service' },
+  { code: '4h', name: '4H-Box', abbreviation: '4H', category: 'container' },
+  { code: 'kw', name: 'kW', abbreviation: 'kW', category: 'power' },
+  { code: 'b4', name: 'B4-Belt', abbreviation: 'B4', category: 'quantity' },
+  { code: '8a', name: '8A-Pallet', abbreviation: '8A', category: 'container' },
+  { code: 'mw_power', name: 'MW', abbreviation: 'MW', category: 'power' },
+  { code: '5m', name: '5M-Bag', abbreviation: '5M', category: 'container' },
+  { code: 'per_person', name: 'Per person', abbreviation: '/person', category: 'service' },
+  { code: 'per_day', name: 'Per day', abbreviation: '/day', category: 'time' },
+  { code: '1f', name: '1F-Container', abbreviation: '1F', category: 'container' },
+  { code: '2c', name: '2C-Barrel', abbreviation: '2C', category: 'container' },
+  { code: 'cycle', name: 'Cycle', abbreviation: 'Cycle', category: 'service' },
+  { code: '4c', name: '4C-Box', abbreviation: '4C', category: 'container' },
+  { code: '1g', name: '1G-Drum', abbreviation: '1G', category: 'container' },
+  { code: 'kwh', name: 'KWh - Kilo Watt Hour', abbreviation: 'kWh', category: 'power' },
+  { code: 'time_of_use', name: 'Time of use', abbreviation: 'TOU', category: 'service' },
+  { code: '4f', name: '4F-Box', abbreviation: '4F', category: 'container' },
+  { code: 'core', name: 'Core', abbreviation: 'Core', category: 'quantity' },
+  { code: '4b', name: '4B-Box', abbreviation: '4B', category: 'container' },
+  { code: '44', name: '44-Bag', abbreviation: '44', category: 'container' },
+  { code: 'manhours', name: 'Manhours', abbreviation: 'Mh', category: 'time' },
+  { code: 'km', name: 'KM - Kilometres', abbreviation: 'Km', category: 'length' },
+  { code: '3a', name: '3A-Jerrican', abbreviation: '3A', category: 'container' },
+  { code: 'hours', name: 'Hours', abbreviation: 'Hrs', category: 'time' },
+  { code: '7a', name: '7A-Case', abbreviation: '7A', category: 'container' },
+  { code: '1w', name: '1W-Drum', abbreviation: '1W', category: 'container' },
+  { code: 'cost', name: 'Cost', abbreviation: 'Cost', category: 'service' },
+  { code: '8c', name: '8C-Bundle', abbreviation: '8C', category: 'quantity' },
+  { code: 'mwh', name: 'MWh - Mega Watt Hour', abbreviation: 'MWh', category: 'power' },
+  { code: '3h', name: '3H-Jerrican', abbreviation: '3H', category: 'container' },
+  { code: 'percentage', name: 'Percentage', abbreviation: '%', category: 'other' },
+  { code: '1a', name: '1A-Drum', abbreviation: '1A', category: 'container' },
+  { code: 'tot', name: 'Tot', abbreviation: 'Tot', category: 'quantity' },
+  { code: 'ream', name: 'Ream', abbreviation: 'Rm', category: 'quantity' },
+  { code: '5l', name: '5L-Bag', abbreviation: '5L', category: 'container' },
+  { code: 'billing', name: 'Billing', abbreviation: 'Bill', category: 'service' },
+  { code: '4g', name: '4G-Box', abbreviation: '4G', category: 'container' },
+  { code: 'straw', name: 'Straw', abbreviation: 'Straw', category: 'quantity' },
+  { code: '7b', name: '7B-Case', abbreviation: '7B', category: 'container' },
+  { code: 'head', name: 'Head', abbreviation: 'Hd', category: 'quantity' },
+  { code: '8b', name: '8B-Crate', abbreviation: '8B', category: 'container' },
+  { code: '1d', name: '1D-Drum', abbreviation: '1D', category: 'container' },
+  { code: 'per_shift', name: 'Per Shift', abbreviation: '/shift', category: 'time' },
+  { code: '5h', name: '5H-Bag', abbreviation: '5H', category: 'container' },
+  { code: '4a', name: '4A-Box', abbreviation: '4A', category: 'container' },
+  { code: '6h', name: '6H-Composite packaging', abbreviation: '6H', category: 'container' },
+  { code: '1b', name: '1B-Drum', abbreviation: '1B', category: 'container' },
+  { code: '4d', name: '4D-Box', abbreviation: '4D', category: 'container' },
+  { code: '6p', name: '6P-Composite packaging', abbreviation: '6P', category: 'container' },
+  { code: '43', name: '43-Bag', abbreviation: '43', category: 'container' },
+  
+  // Measurement Standards
+  { code: 'apz', name: 'APZ-Ounce (31.10348 g)', abbreviation: 'APZ', category: 'weight' },
+  { code: 'asm', name: 'ASM-Alcoholic strength by mass', abbreviation: 'ASM', category: 'other' },
+  { code: 'asv', name: 'ASV-Alcoholic strength by volume', abbreviation: 'ASV', category: 'other' },
+  { code: 'bft', name: 'BFT-Board foot', abbreviation: 'BFT', category: 'volume' },
+  { code: 'age', name: 'AGE-YEAR OF MANUFACTURE', abbreviation: 'AGE', category: 'other' },
+  { code: 'ccp', name: 'CCP-ENGINE CAPACITY(c.c)', abbreviation: 'CCP', category: 'volume' },
+  { code: 'bhx', name: 'BHX-Hundred boxes', abbreviation: 'BHX', category: 'quantity' },
+  { code: 'bld', name: 'BLD-Dry barrel (115.627 dm3)', abbreviation: 'BLD', category: 'volume' },
+  { code: 'bll', name: 'BLL-Barrel petroleum (158.987 dm3)', abbreviation: 'BLL', category: 'volume' },
+  { code: 'bua', name: 'BUA-Bushel (35.2391 dm3)', abbreviation: 'BUA', category: 'volume' },
+  { code: 'bui', name: 'BUI-Bushel (36.36874 dm3)', abbreviation: 'BUI', category: 'volume' },
+  { code: 'cen', name: 'CEN-Hundred', abbreviation: 'CEN', category: 'quantity' },
+  { code: 'cgm', name: 'CGM-Centigram', abbreviation: 'cg', category: 'weight' },
+  { code: 'clf', name: 'CLF-Hundred leaves', abbreviation: 'CLF', category: 'quantity' },
+  { code: 'clt', name: 'CLT-Centilitre', abbreviation: 'cL', category: 'volume' },
+  { code: 'cmk', name: 'CMK-Square centimetre', abbreviation: 'cm²', category: 'area' },
+  { code: 'cmq', name: 'CMQ-Cubic centimetre', abbreviation: 'cm³', category: 'volume' },
+  { code: 'cmt', name: 'CMT-Centimetre', abbreviation: 'cm', category: 'length' },
+  { code: 'cnp', name: 'CNP-Hundred packs', abbreviation: 'CNP', category: 'quantity' },
+  { code: 'cnt', name: 'CNT-Cental (45.359237 kg)', abbreviation: 'CNT', category: 'weight' },
+  { code: 'ctm', name: 'CTM-Metric carat (200 mg)', abbreviation: 'ct', category: 'weight' },
+  { code: 'cwa', name: 'CWA-Hundredweight US (45.3592 kg)', abbreviation: 'CWA', category: 'weight' },
+  { code: 'cwi', name: 'CWI-Hundredweight GB (50.802345 kg)', abbreviation: 'CWI', category: 'weight' },
+  { code: 'dlt', name: 'DLT-Decilitre', abbreviation: 'dL', category: 'volume' },
+  { code: 'dmk', name: 'DMK-Square decimetre', abbreviation: 'dm²', category: 'area' },
+  { code: 'dmq', name: 'DMQ-Cubic decimetre', abbreviation: 'dm³', category: 'volume' },
+  { code: 'dmt', name: 'DMT-Decimetre', abbreviation: 'dm', category: 'length' },
+  { code: 'dpc', name: 'DPC-Dozen pieces', abbreviation: 'DPC', category: 'quantity' },
+  { code: 'dpr', name: 'DPR-Dozen pairs', abbreviation: 'DPR', category: 'quantity' },
+  { code: 'dra', name: 'DRA-Dram US (3.887935 g)', abbreviation: 'DRA', category: 'weight' },
+  { code: 'dri', name: 'DRI-Dram GB (1.771745 g)', abbreviation: 'DRI', category: 'weight' },
+  { code: 'drl', name: 'DRL-Dozen rolls', abbreviation: 'DRL', category: 'quantity' },
+  { code: 'drm', name: 'DRM-Drachm GB (3.887935 g)', abbreviation: 'DRM', category: 'weight' },
+  { code: 'dth', name: 'DTH-Hectokilogram', abbreviation: 'DTH', category: 'weight' },
+  { code: 'dtn', name: 'DTN-Centner metric (100 kg)', abbreviation: 'DTN', category: 'weight' },
+  { code: 'dwt', name: 'DWT-Pennyweight (1.555174 g)', abbreviation: 'DWT', category: 'weight' },
+  { code: 'dzn2', name: 'DZN-Dozen', abbreviation: 'Dz', category: 'quantity' },
+  { code: 'dzp', name: 'DZP-Dozen packs', abbreviation: 'DZP', category: 'quantity' },
+  { code: 'fot', name: 'FOT-Foot (0.3048 m)', abbreviation: 'ft', category: 'length' },
+  { code: 'ftk', name: 'FTK-Square foot', abbreviation: 'ft²', category: 'area' },
+  { code: 'ftq', name: 'FTQ-Cubic foot', abbreviation: 'ft³', category: 'volume' },
+  { code: 'ggr', name: 'GGR-Great gross (12 gross)', abbreviation: 'GGR', category: 'quantity' },
+  { code: 'gia', name: 'GIA-Gill (11.8294 cm3)', abbreviation: 'GIA', category: 'volume' },
+  { code: 'gii', name: 'GII-Gill (0.142065 dm3)', abbreviation: 'GII', category: 'volume' },
+  { code: 'gld', name: 'GLD-Dry gallon (4.404884 dm3)', abbreviation: 'GLD', category: 'volume' },
+  { code: 'gli', name: 'GLI-Gallon (4.546092 dm3)', abbreviation: 'GLI', category: 'volume' },
+  { code: 'gll', name: 'GLL-Liquid gallon (3.7854 dm3)', abbreviation: 'GLL', category: 'volume' },
+  { code: 'grm2', name: 'GRM-Gram', abbreviation: 'g', category: 'weight' },
+  { code: 'grn', name: 'GRN-Grain (64.79891 mg)', abbreviation: 'GRN', category: 'weight' },
+  { code: 'gro', name: 'GRO-Gross', abbreviation: 'Gro', category: 'quantity' },
+  { code: 'grt', name: 'GRT-Gross register ton', abbreviation: 'GRT', category: 'weight' },
+  { code: 'hgm', name: 'HGM-Hectogram', abbreviation: 'hg', category: 'weight' },
+  { code: 'hiu', name: 'HIU-Hundred international units', abbreviation: 'HIU', category: 'other' },
+  { code: 'hlt', name: 'HLT-Hectolitre', abbreviation: 'hL', category: 'volume' },
+  { code: 'hpa', name: 'HPA-Hectolitre of pure alcohol', abbreviation: 'HPA', category: 'volume' },
+  { code: 'inh', name: 'INH-Inch (25.4 mm)', abbreviation: 'in', category: 'length' },
+  { code: 'ink', name: 'INK-Square inch', abbreviation: 'in²', category: 'area' },
+  { code: 'inq', name: 'INQ-Cubic inch', abbreviation: 'in³', category: 'volume' },
+  { code: 'kgm2', name: 'KGM-Kilogram', abbreviation: 'kg', category: 'weight' },
+  { code: 'kni', name: 'KNI-Kilogram of nitrogen', abbreviation: 'KNI', category: 'weight' },
+  { code: 'kns', name: 'KNS-Kilogram of named substance', abbreviation: 'KNS', category: 'weight' },
+  { code: 'kph', name: 'KPH-Kilogram of caustic potash', abbreviation: 'KPH', category: 'weight' },
+  { code: 'kpo', name: 'KPO-Kilogram of potassium oxide', abbreviation: 'KPO', category: 'weight' },
+  { code: 'kpp', name: 'KPP-Kilogram of phosphoric anhydride', abbreviation: 'KPP', category: 'weight' },
+  { code: 'ksd', name: 'KSD-Kilogram of substance 90% dry', abbreviation: 'KSD', category: 'weight' },
+  { code: 'ksh', name: 'KSH-Kilogram of caustic soda', abbreviation: 'KSH', category: 'weight' },
+  { code: 'kur', name: 'KUR-Kilogram of uranium', abbreviation: 'KUR', category: 'weight' },
+  { code: 'lbr', name: 'LBR-Pound (0.45359237 kg)', abbreviation: 'lb', category: 'weight' },
+  { code: 'lbt', name: 'LBT-Troy pound (373.242 g)', abbreviation: 'LBT', category: 'weight' },
+  { code: 'lef', name: 'LEF-Leaf', abbreviation: 'Leaf', category: 'quantity' },
+  { code: 'lpa', name: 'LPA-Litre of pure alcohol', abbreviation: 'LPA', category: 'volume' },
+  { code: 'ltn', name: 'LTN-Long ton (1.0160469 t)', abbreviation: 'LTN', category: 'weight' },
+  { code: 'ltr2', name: 'LTR-Litre (1 dm3)', abbreviation: 'L', category: 'volume' },
+  { code: 'mal', name: 'MAL-Megalitre', abbreviation: 'ML', category: 'volume' },
+  { code: 'mam', name: 'MAM-Megametre', abbreviation: 'Mm', category: 'length' },
+  { code: 'mbf', name: 'MBF-Thousand board feet (2.36 m3)', abbreviation: 'MBF', category: 'volume' },
+  { code: 'mgm', name: 'MGM-Milligram', abbreviation: 'mg', category: 'weight' },
+  { code: 'mil', name: 'MIL-Thousand', abbreviation: 'K', category: 'quantity' },
+  { code: 'mtk', name: 'MTK-Square metre', abbreviation: 'm²', category: 'area' },
+  { code: 'mtq', name: 'MTQ-Cubic metre', abbreviation: 'm³', category: 'volume' },
+  { code: 'mtr2', name: 'MTR-Metre', abbreviation: 'm', category: 'length' },
+  { code: 'nar', name: 'NAR-Number of articles', abbreviation: 'NAR', category: 'quantity' },
+  { code: 'nbb', name: 'NBB-Number of bobbins', abbreviation: 'NBB', category: 'quantity' },
+  { code: 'niu', name: 'NIU-Number of international units', abbreviation: 'NIU', category: 'quantity' },
+  { code: 'nmb', name: 'NMB-Number', abbreviation: 'No', category: 'quantity' },
+  { code: 'nmp', name: 'NMP-Number of packs', abbreviation: 'NMP', category: 'quantity' },
+  { code: 'npl', name: 'NPL-Number of parcels', abbreviation: 'NPL', category: 'quantity' },
+  { code: 'npr', name: 'NPR-Number of pairs', abbreviation: 'NPR', category: 'quantity' },
+  { code: 'npt', name: 'NPT-Number of parts', abbreviation: 'NPT', category: 'quantity' },
+  { code: 'nrl', name: 'NRL-Number of rolls', abbreviation: 'NRL', category: 'quantity' },
+  { code: 'ntt', name: 'NTT-Net register ton', abbreviation: 'NTT', category: 'weight' },
+  { code: 'onz', name: 'ONZ-Ounce (28.349523 g)', abbreviation: 'oz', category: 'weight' },
+  { code: 'oza', name: 'OZA-Fluid ounce (29.5735 cm3)', abbreviation: 'OZA', category: 'volume' },
+  { code: 'ozi', name: 'OZI-Fluid ounce (28.413 cm3)', abbreviation: 'OZI', category: 'volume' },
+  { code: 'pce', name: 'PCE-Piece', abbreviation: 'Pc', category: 'quantity' },
+  { code: 'pgl', name: 'PGL-Proof gallon', abbreviation: 'PGL', category: 'volume' },
+  { code: 'ptd', name: 'PTD-Dry pint (0.55061 dm3)', abbreviation: 'PTD', category: 'volume' },
+  { code: 'pti', name: 'PTI-Pint (0.568262 dm3)', abbreviation: 'PTI', category: 'volume' },
+  { code: 'ptl', name: 'PTL-Liquid pint (0.47376 dm3)', abbreviation: 'PTL', category: 'volume' },
+  { code: 'qtd', name: 'QTD-Dry quart (1.101221 dm3)', abbreviation: 'QTD', category: 'volume' },
+  { code: 'qti', name: 'QTI-Quart (1.136523 dm3)', abbreviation: 'QTI', category: 'volume' },
+  { code: 'qtl', name: 'QTL-Liquid quart (0.946353 dm3)', abbreviation: 'QTL', category: 'volume' },
+  { code: 'qrt', name: 'QRT-Quarter (12.700586 kg)', abbreviation: 'QRT', category: 'weight' },
+  { code: 'set2', name: 'SET-Set', abbreviation: 'Set', category: 'quantity' },
+  { code: 'sht', name: 'SHT-Shipping ton', abbreviation: 'SHT', category: 'weight' },
+  { code: 'sti', name: 'STI-Stone (6.350293 kg)', abbreviation: 'STI', category: 'weight' },
+  { code: 'stn', name: 'STN-Short ton (0.90718474 t)', abbreviation: 'STN', category: 'weight' },
+  { code: 'tne', name: 'TNE-Metric ton (1000 kg)', abbreviation: 't', category: 'weight' },
+  { code: 'tpr', name: 'TPR-Ten pairs', abbreviation: 'TPR', category: 'quantity' },
+  { code: 'tsd', name: 'TSD-Tonne of substance 90% dry', abbreviation: 'TSD', category: 'weight' },
+  { code: 'wcd', name: 'WCD-Cord (3.63 m3)', abbreviation: 'WCD', category: 'volume' },
+  { code: 'ydk', name: 'YDK-Square yard', abbreviation: 'yd²', category: 'area' },
+  { code: 'ydq', name: 'YDQ-Cubic yard', abbreviation: 'yd³', category: 'volume' },
+  { code: 'yrd2', name: 'YRD-Yard (0.9144 m)', abbreviation: 'yd', category: 'length' },
+];
+
+async function main() {
+  try {
+    console.log('🌱 Seeding EFRIS Units of Measure...\n');
+    
+    // Get the demo organization (or specify your organization slug)
+    const orgSlug = process.argv[2] || 'demo-company';
+    
+    const organization = await prisma.organization.findUnique({
+      where: { slug: orgSlug }
+    });
+    
+    if (!organization) {
+      console.error(`❌ Organization "${orgSlug}" not found!`);
+      console.log('Usage: node scripts/seed-efris-units.js [organization-slug]');
+      console.log('Example: node scripts/seed-efris-units.js demo-company');
+      process.exit(1);
+    }
+    
+    console.log(`📍 Organization: ${organization.name} (${orgSlug})\n`);
+    
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+    
+    for (const unit of efrisUnits) {
+      try {
+        const existing = await prisma.unitOfMeasure.findUnique({
+          where: {
+            organizationId_code: {
+              organizationId: organization.id,
+              code: unit.code,
+            },
+          },
+        });
+        
+        if (existing) {
+          // Update existing unit
+          await prisma.unitOfMeasure.update({
+            where: { id: existing.id },
+            data: {
+              name: unit.name,
+              abbreviation: unit.abbreviation,
+              category: unit.category,
+            },
+          });
+          updated++;
+          console.log(`✓ Updated: ${unit.name} (${unit.code})`);
+        } else {
+          // Create new unit
+          await prisma.unitOfMeasure.create({
+            data: {
+              organizationId: organization.id,
+              code: unit.code,
+              name: unit.name,
+              abbreviation: unit.abbreviation,
+              category: unit.category,
+              isActive: true,
+            },
+          });
+          created++;
+          console.log(`✓ Created: ${unit.name} (${unit.code})`);
+        }
+      } catch (error) {
+        console.error(`✗ Error processing ${unit.name}:`, error.message);
+        skipped++;
+      }
+    }
+    
+    console.log('\n' + '='.repeat(60));
+    console.log('✅ Seeding completed!');
+    console.log(`   Created: ${created} units`);
+    console.log(`   Updated: ${updated} units`);
+    console.log(`   Skipped: ${skipped} units`);
+    console.log(`   Total: ${efrisUnits.length} units processed`);
+    console.log('='.repeat(60) + '\n');
+    
+  } catch (error) {
+    console.error('❌ Error:', error);
+    process.exit(1);
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+// Export for use in other scripts
+module.exports = { efrisUnits };
+
+// If run directly, seed for demo-company
+if (require.main === module) {
+  main();
+}

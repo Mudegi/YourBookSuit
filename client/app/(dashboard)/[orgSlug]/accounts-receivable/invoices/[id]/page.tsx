@@ -18,6 +18,7 @@ import {
 import { useOrganization } from '@/hooks/useOrganization';
 import { formatCurrency } from '@/lib/utils';
 import { EfrisStatusBadge, EfrisStatusDetails } from '@/components/efris/EfrisStatus';
+import EfrisInvoiceDisplay from '@/components/efris/EfrisInvoiceDisplay';
 
 interface PaymentAllocation {
   id: string;
@@ -45,12 +46,14 @@ interface Invoice {
   notes: string | null;
   terms: string | null;
   reference?: string | null;
+  taxCalculationMethod: string; // EXCLUSIVE or INCLUSIVE
   // EFRIS fields
   efrisFDN: string | null;
   efrisVerificationCode: string | null;
   efrisQRCode: string | null;
   eInvoiceStatus: string | null;
   eInvoiceSubmittedAt: string | null;
+  eInvoiceResponse: any | null;
   // Optional transaction field
   transaction?: {
     transactionDate: string;
@@ -119,6 +122,8 @@ export default function InvoiceDetailsPage() {
 
       if (data.success) {
         setInvoice(data.data);
+      } else {
+        console.error('[Frontend] API Error:', data.error);
       }
     } catch (error) {
       console.error('Error fetching invoice:', error);
@@ -328,9 +333,21 @@ export default function InvoiceDetailsPage() {
         status={invoice.eInvoiceStatus}
         fdn={invoice.efrisFDN}
         verificationCode={invoice.efrisVerificationCode}
-        qrCode={invoice.efrisQRCode}
         submittedAt={invoice.eInvoiceSubmittedAt}
       />
+
+      {/* EFRIS Invoice Details - Show complete fiscalized invoice */}
+      {invoice.eInvoiceStatus === 'ACCEPTED' && invoice.eInvoiceResponse && (
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">EFRIS Fiscalized Invoice</h2>
+            <p className="text-sm text-gray-600">Complete invoice as submitted to Uganda Revenue Authority</p>
+          </div>
+          <div className="p-0">
+            <EfrisInvoiceDisplay data={invoice.eInvoiceResponse} />
+          </div>
+        </div>
+      )}
 
       {/* Payment Summary */}
       {invoice.payments && invoice.payments.length > 0 && (
@@ -500,19 +517,39 @@ export default function InvoiceDetailsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {invoice.items.map((item) => (
-                <tr key={item.id}>
-                  <td className="py-3 text-gray-900">{item.description}</td>
-                  <td className="py-3 text-right text-gray-900">{item.quantity}</td>
-                  <td className="py-3 text-right text-gray-900">
-                    {formatCurrency(item.unitPrice, currency)}
-                  </td>
-                  <td className="py-3 text-right text-gray-900">{item.taxRate}%</td>
-                  <td className="py-3 text-right font-medium text-gray-900">
-                    {formatCurrency(item.total, currency)}
-                  </td>
-                </tr>
-              ))}
+              {invoice.items.map((item) => {
+                // For URA compliance: show tax-inclusive unit price when invoice is tax-inclusive
+                const displayUnitPrice = invoice.taxCalculationMethod === 'INCLUSIVE'
+                  ? item.unitPrice * (1 + item.taxRate / 100)
+                  : item.unitPrice;
+                
+                // Debug log
+                console.log('[Invoice Display]', {
+                  description: item.description,
+                  taxCalculationMethod: invoice.taxCalculationMethod,
+                  storedUnitPrice: item.unitPrice,
+                  taxRate: item.taxRate,
+                  displayUnitPrice: displayUnitPrice,
+                  isInclusive: invoice.taxCalculationMethod === 'INCLUSIVE',
+                });
+                
+                return (
+                  <tr key={item.id}>
+                    <td className="py-3 text-gray-900">{item.description}</td>
+                    <td className="py-3 text-right text-gray-900">{item.quantity}</td>
+                    <td className="py-3 text-right text-gray-900">
+                      {formatCurrency(displayUnitPrice, currency)}
+                      {invoice.taxCalculationMethod === 'INCLUSIVE' && (
+                        <span className="text-xs text-gray-500 block">incl. tax</span>
+                      )}
+                    </td>
+                    <td className="py-3 text-right text-gray-900">{item.taxRate}%</td>
+                    <td className="py-3 text-right font-medium text-gray-900">
+                      {formatCurrency(item.total, currency)}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

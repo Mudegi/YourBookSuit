@@ -55,9 +55,7 @@ export default function NewGoodsReceiptPage() {
   const [accounts, setAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [submittingEfris, setSubmittingEfris] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [efrisEnabled, setEfrisEnabled] = useState(false);
   
   const [vendorSearch, setVendorSearch] = useState('');
   const [vendorDropdownOpen, setVendorDropdownOpen] = useState(false);
@@ -65,7 +63,6 @@ export default function NewGoodsReceiptPage() {
   const [productDropdownOpen, setProductDropdownOpen] = useState<Record<string, boolean>>({});
   
   const { currency, organization } = useOrganization();
-  const isUganda = organization?.homeCountry === 'UG' || organization?.homeCountry === 'UGANDA';
 
   const [formData, setFormData] = useState({
     vendorId: '',
@@ -99,26 +96,7 @@ export default function NewGoodsReceiptPage() {
 
   useEffect(() => {
     loadData();
-    checkEfrisConfig();
   }, [orgSlug]);
-
-  async function checkEfrisConfig() {
-    // Only check EFRIS for Uganda organizations
-    if (!isUganda) {
-      setEfrisEnabled(false);
-      return;
-    }
-    
-    try {
-      const res = await fetch(`/api/orgs/${orgSlug}/settings/efris`);
-      if (res.ok) {
-        const data = await res.json();
-        setEfrisEnabled(data.config?.isActive || false);
-      }
-    } catch (err) {
-      console.error('Failed to check EFRIS config:', err);
-    }
-  }
 
   async function loadData() {
     try {
@@ -255,13 +233,9 @@ export default function NewGoodsReceiptPage() {
     }
   }
 
-  async function handleSubmit(e: React.FormEvent, submitToEfris = false) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (submitToEfris) {
-      setSubmittingEfris(true);
-    } else {
-      setSubmitting(true);
-    }
+    setSubmitting(true);
     setError(null);
 
     try {
@@ -301,7 +275,6 @@ export default function NewGoodsReceiptPage() {
         notes: formData.notes || undefined,
         assetAccountId: formData.assetAccountId,
         apAccountId: formData.apAccountId,
-        submitToEfris,
         postToGL: true,
         createAPBill: false,
         landedCosts: hasLandedCosts ? landedCosts : undefined,
@@ -341,7 +314,6 @@ export default function NewGoodsReceiptPage() {
       setError(err.message);
     } finally {
       setSubmitting(false);
-      setSubmittingEfris(false);
     }
   }
 
@@ -806,7 +778,7 @@ export default function NewGoodsReceiptPage() {
 
               {/* Actions */}
               <div className="space-y-3">
-                <Button type="submit" disabled={submitting || submittingEfris} className="w-full h-11 text-base font-semibold">
+                <Button type="submit" disabled={submitting} className="w-full h-11 text-base font-semibold">
                   {submitting ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -816,24 +788,6 @@ export default function NewGoodsReceiptPage() {
                     'Create Goods Receipt'
                   )}
                 </Button>
-                
-                {isUganda && efrisEnabled && (
-                  <Button 
-                    type="button" 
-                    onClick={(e: any) => handleSubmit(e, true)}
-                    disabled={submitting || submittingEfris} 
-                    className="w-full h-11 text-base font-semibold bg-green-600 hover:bg-green-700"
-                  >
-                    {submittingEfris ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Adding Stock to EFRIS...
-                      </>
-                    ) : (
-                      'Save and Add Stock to EFRIS'
-                    )}
-                  </Button>
-                )}
                 
                 <Link href={`/${orgSlug}/inventory/goods-receipts`} className="block">
                   <Button type="button" variant="outline" className="w-full h-11">
@@ -845,7 +799,7 @@ export default function NewGoodsReceiptPage() {
               {/* Help Info */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <p className="text-xs text-gray-700 leading-relaxed">
-                  <span className="font-semibold text-blue-900">About Stock Purchases:</span> Use this form to record stock received from vendors. If EFRIS is enabled, you can register the purchase order directly with the tax authority.
+                  <span className="font-semibold text-blue-900">About Stock Purchases:</span> Use this form to record stock received from vendors. For EFRIS tax registration, use Bills instead.
                 </p>
               </div>
             </div>

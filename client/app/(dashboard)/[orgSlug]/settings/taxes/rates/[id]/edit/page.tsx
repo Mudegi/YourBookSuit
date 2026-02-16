@@ -68,6 +68,10 @@ export default function EditTaxRatePage() {
   const [reportingCategory, setReportingCategory] = useState('');
   const [isActive, setIsActive] = useState(true);
 
+  // EFRIS Tax Classification (Uganda)
+  const [efrisTaxCategoryCode, setEfrisTaxCategoryCode] = useState('');
+  const [efrisGoodsCategoryId, setEfrisGoodsCategoryId] = useState('');
+
   // Preview Calculator
   const [previewAmount, setPreviewAmount] = useState('1000000');
   const [previewMode, setPreviewMode] = useState<'EXCLUSIVE' | 'INCLUSIVE'>('EXCLUSIVE');
@@ -113,6 +117,9 @@ export default function EditTaxRatePage() {
         setExternalTaxCode(rateData.externalTaxCode || '');
         setReportingCategory(rateData.reportingCategory || '');
         setIsActive(rateData.isActive ?? true);
+        // EFRIS fields
+        setEfrisTaxCategoryCode(rateData.efrisTaxCategoryCode || '');
+        setEfrisGoodsCategoryId(rateData.efrisGoodsCategoryId || '');
       } else {
         const error = await rateRes.json();
         console.error('Failed to load tax rate:', error);
@@ -240,6 +247,9 @@ export default function EditTaxRatePage() {
           externalTaxCode: externalTaxCode || null,
           reportingCategory: reportingCategory || null,
           isActive,
+          // EFRIS fields
+          efrisTaxCategoryCode: efrisTaxCategoryCode || null,
+          efrisGoodsCategoryId: efrisGoodsCategoryId || null,
         }),
       });
 
@@ -519,6 +529,84 @@ export default function EditTaxRatePage() {
                           </option>
                         ))}
                     </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* EFRIS Tax Classification (Uganda) */}
+              <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg shadow border-2 border-green-200 p-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <FileText className="w-5 h-5 text-green-700" />
+                  <h2 className="text-lg font-semibold text-green-900">EFRIS Tax Classification</h2>
+                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Uganda</span>
+                </div>
+                
+                <p className="text-sm text-green-800 mb-4">
+                  Configure how this tax rate maps to EFRIS T109 invoice codes. This ensures proper tax reporting to URA.
+                </p>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      EFRIS Tax Category Code
+                    </label>
+                    <select
+                      value={efrisTaxCategoryCode}
+                      onChange={(e) => setEfrisTaxCategoryCode(e.target.value)}
+                      className="w-full px-3 py-2 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 bg-white"
+                    >
+                      <option value="">Auto-detect from rate...</option>
+                      <option value="01">01 - Standard (18%)</option>
+                      <option value="02">02 - Zero Rated (0%)</option>
+                      <option value="03">03 - Exempt (-)</option>
+                      <option value="04">04 - Deemed (18%)</option>
+                      <option value="05">05 - Excise Duty</option>
+                      <option value="06">06 - Over the Top Service (OTT)</option>
+                      <option value="07">07 - Stamp Duty</option>
+                      <option value="08">08 - Local Hotel Service Tax</option>
+                      <option value="09">09 - UCC Levy</option>
+                      <option value="10">10 - Others</option>
+                      <option value="11">11 - VAT Out of Scope</option>
+                    </select>
+                    <p className="mt-1 text-xs text-green-700">
+                      {efrisTaxCategoryCode === '01' && '✓ Standard VAT rate (most common)'}
+                      {efrisTaxCategoryCode === '02' && '✓ Zero-rated supplies (exports, exempt goods)'}
+                      {efrisTaxCategoryCode === '03' && '✓ VAT exempt items (no VAT charged)'}
+                      {efrisTaxCategoryCode === '04' && '✓ Deemed supplies (VAT deemed)'}
+                      {efrisTaxCategoryCode === '11' && '⚠️ Out of scope - check if your org is registered for this'}
+                      {!efrisTaxCategoryCode && 'System will auto-detect based on rate percentage'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Default Goods Category ID (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={efrisGoodsCategoryId}
+                      onChange={(e) => setEfrisGoodsCategoryId(e.target.value)}
+                      placeholder="e.g., 100000000"
+                      className="w-full px-3 py-2 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      VAT commodity category from T124. Leave empty to use product-specific categories.
+                    </p>
+                  </div>
+
+                  <div className="bg-green-100 border border-green-300 rounded-lg p-3">
+                    <div className="flex gap-2">
+                      <Info className="w-4 h-4 text-green-700 flex-shrink-0 mt-0.5" />
+                      <div className="text-xs text-green-800">
+                        <p className="font-medium mb-1">Important EFRIS Mappings:</p>
+                        <ul className="space-y-0.5 list-disc list-inside">
+                          <li><strong>Exempt (03)</strong>: VAT still applies, but rate is zero (use vatApplicableFlag=1)</li>
+                          <li><strong>Zero-rated (02)</strong>: For exports and specific goods at 0% VAT</li>
+                          <li><strong>Out of Scope (11)</strong>: VAT doesn't apply at all (use vatApplicableFlag=0)</li>
+                          <li>Setting this code ensures correct tax classification when submitting invoices to EFRIS</li>
+                        </ul>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

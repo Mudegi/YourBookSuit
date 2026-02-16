@@ -207,6 +207,8 @@ export const productSchema = z.object({
   reorderQuantity: z.number().min(0).optional(),
   taxable: z.boolean().default(true),
   defaultTaxRate: z.number().min(0).max(100).default(0),
+  exciseDutyCode: z.string().optional(), // EFRIS excise duty code
+  goodsCategoryId: z.string().optional(), // EFRIS VAT commodity category code
 });
 
 // ============================================================================

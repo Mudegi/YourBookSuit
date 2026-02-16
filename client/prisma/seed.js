@@ -1,18 +1,22 @@
 const { PrismaClient } = require('@prisma/client');
 const crypto = require('crypto');
+const { seedUnitsForOrganization } = require('./seed-units');
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('🌱 Starting seed...');
 
-  // Create admin user (password is 'admin123' hashed with bcrypt)
-  // This is the bcrypt hash for 'admin123'
-  const hashedPassword = '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy';
+  // Create admin user (password is 'password123' hashed with bcrypt)
+  // This is the bcrypt hash for 'password123'
+  const hashedPassword = '$2a$10$wbn6NXHJ5JTVkPyzrP2gt.XHKoIBUdazjWG2jbYXuVns4Za8azvWK';
   
   const user = await prisma.user.upsert({
     where: { email: 'admin@example.com' },
-    update: {},
+    update: {
+      passwordHash: hashedPassword,
+      isActive: true,
+    },
     create: {
       id: 'cmkr0wbdr0000vl95xh8awjum',
       email: 'admin@example.com',
@@ -59,6 +63,9 @@ async function main() {
   });
 
   console.log('✅ Linked user to organization');
+
+  // Seed units of measure for the organization
+  await seedUnitsForOrganization(organization.id);
 
   console.log('🎉 Seed completed!');
 }

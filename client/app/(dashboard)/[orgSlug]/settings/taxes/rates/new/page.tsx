@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Save, X, Calculator, AlertCircle, CheckCircle, Info,
-  DollarSign, Building2, Calendar, Settings, FileText
+  DollarSign, Building2, Calendar, Settings, FileText, Plus
 } from 'lucide-react';
 import Decimal from 'decimal.js';
 
@@ -45,6 +45,7 @@ export default function NewTaxRatePage() {
   const [displayName, setDisplayName] = useState('');
   const [taxAgencyId, setTaxAgencyId] = useState('');
   const [description, setDescription] = useState('');
+  const [taxType, setTaxType] = useState<'VAT' | 'GST' | 'SALES_TAX' | 'EXCISE' | 'IMPORT_DUTY' | 'WITHHOLDING' | 'PAYROLL' | 'DEEMED'>('VAT');
 
   // Calculation Logic
   const [calculationType, setCalculationType] = useState<'PERCENTAGE' | 'FIXED_AMOUNT'>('PERCENTAGE');
@@ -66,6 +67,10 @@ export default function NewTaxRatePage() {
   const [externalTaxCode, setExternalTaxCode] = useState('');
   const [reportingCategory, setReportingCategory] = useState('');
 
+  // EFRIS Tax Classification (Uganda)
+  const [efrisTaxCategoryCode, setEfrisTaxCategoryCode] = useState('');
+  const [efrisGoodsCategoryId, setEfrisGoodsCategoryId] = useState('');
+
   // Preview Calculator
   const [previewAmount, setPreviewAmount] = useState('1000000');
   const [previewMode, setPreviewMode] = useState<'EXCLUSIVE' | 'INCLUSIVE'>('EXCLUSIVE');
@@ -75,6 +80,17 @@ export default function NewTaxRatePage() {
     total: string;
   } | null>(null);
 
+  // New Agency Modal
+  const [showNewAgencyModal, setShowNewAgencyModal] = useState(false);
+  const [newAgencyData, setNewAgencyData] = useState({
+    name: '',
+    code: '',
+    country: 'UG',
+    taxType: 'VAT' as 'VAT' | 'SALES_TAX' | 'GST' | 'EXCISE' | 'WITHHOLDING' | 'CORPORATE' | 'INCOME' | 'PROPERTY' | 'CUSTOMS' | 'OTHER',
+    registrationNumber: '',
+    isActive: true,
+  });
+
   useEffect(() => {
     loadInitialData();
   }, [orgSlug]);
@@ -82,6 +98,21 @@ export default function NewTaxRatePage() {
   useEffect(() => {
     calculatePreview();
   }, [previewAmount, rate, fixedAmount, calculationType, previewMode, isCompoundTax]);
+
+  // Auto-suggest EFRIS category code based on tax rate
+  useEffect(() => {
+    if (!efrisTaxCategoryCode && rate && calculationType === 'PERCENTAGE') {
+      const rateNum = parseFloat(rate);
+      // Auto-suggest based on rate
+      if (rateNum === 0) {
+        setEfrisTaxCategoryCode('02'); // Zero-rated
+      } else if (rateNum === 18) {
+        setEfrisTaxCategoryCode('01'); // Standard 18%
+      } else if (rateNum < 0 || isNaN(rateNum)) {
+        setEfrisTaxCategoryCode('03'); // Exempt
+      }
+    }
+  }, [rate, calculationType]);
 
   const loadInitialData = async () => {
     setLoading(true);
@@ -180,8 +211,8 @@ export default function NewTaxRatePage() {
     e.preventDefault();
 
     // Validation
-    if (!name || !taxAgencyId) {
-      alert('Please fill in required fields');
+    if (!name) {
+      alert('Please enter a tax rate name');
       return;
     }
 
@@ -195,6 +226,7 @@ export default function NewTaxRatePage() {
       return;
     }
 
+    // GL accounts are ALWAYS required for proper accounting
     if (!salesTaxAccountId || !purchaseTaxAccountId) {
       alert('Please map GL accounts for both sales and purchases');
       return;
@@ -210,6 +242,7 @@ export default function NewTaxRatePage() {
           displayName: displayName || name,
           taxAgencyId,
           description,
+          taxType,
           calculationType,
           rate: calculationType === 'PERCENTAGE' ? parseFloat(rate) : 0,
           fixedAmount: calculationType === 'FIXED_AMOUNT' ? parseFloat(fixedAmount) : null,
@@ -225,6 +258,9 @@ export default function NewTaxRatePage() {
           externalTaxCode: externalTaxCode || null,
           reportingCategory: reportingCategory || null,
           isActive: true,
+          // EFRIS fields
+          efrisTaxCategoryCode: efrisTaxCategoryCode || null,
+          efrisGoodsCategoryId: efrisGoodsCategoryId || null,
         }),
       });
 
@@ -249,6 +285,38 @@ export default function NewTaxRatePage() {
       setApplicableContext(applicableContext.filter(c => c !== context));
     } else {
       setApplicableContext([...applicableContext, context]);
+    }
+  };
+
+  const handleCreateAgency = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await fetch(`/api/orgs/${orgSlug}/tax/agencies`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newAgencyData),
+      });
+
+      if (!res.ok) throw new Error('Failed to create tax agency');
+
+      const createdAgency = await res.json();
+      
+      // Add to agencies list and auto-select
+      setAgencies([...agencies, createdAgency]);
+      setTaxAgencyId(createdAgency.id);
+      
+      // Reset form and close modal
+      setShowNewAgencyModal(false);
+      setNewAgencyData({
+        name: '',
+        code: '',
+        country: 'UG',
+        taxType: 'VAT',
+        registrationNumber: '',
+        isActive: true,
+      });
+    } catch (err: any) {
+      alert(err.message || 'Failed to create agency');
     }
   };
 
@@ -323,19 +391,33 @@ export default function NewTaxRatePage() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Tax Agency <span className="text-red-500">*</span>
                     </label>
-                    <select
-                      value={taxAgencyId}
-                      onChange={(e) => setTaxAgencyId(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      required
-                    >
-                      <option value="">Select tax agency...</option>
-                      {agencies.map((agency) => (
-                        <option key={agency.id} value={agency.id}>
-                          {agency.name} ({agency.code})
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex gap-2">
+                      <select
+                        value={taxAgencyId}
+                        onChange={(e) => setTaxAgencyId(e.target.value)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        required
+                      >
+                        <option value="">Select tax agency...</option>
+                        {agencies.map((agency) => (
+                          <option key={agency.id} value={agency.id}>
+                            {agency.name} ({agency.code})
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setShowNewAgencyModal(true)}
+                        className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-1 whitespace-nowrap"
+                        title="Add new tax agency"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add
+                      </button>
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Not in the list? Click "Add" to create a new tax agency quickly.
+                    </p>
                   </div>
 
                   <div>
@@ -688,6 +770,84 @@ export default function NewTaxRatePage() {
                   </div>
                 </div>
               </div>
+
+              {/* Section 5: EFRIS Tax Classification (Uganda) */}
+              <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg shadow border-2 border-green-200 p-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <FileText className="w-5 h-5 text-green-700" />
+                  <h2 className="text-lg font-semibold text-green-900">EFRIS Tax Classification</h2>
+                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Uganda</span>
+                </div>
+                
+                <p className="text-sm text-green-800 mb-4">
+                  Configure how this tax rate maps to EFRIS T109 invoice codes. This ensures proper tax reporting to URA.
+                </p>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      EFRIS Tax Category Code <span className="text-green-600">*</span>
+                    </label>
+                    <select
+                      value={efrisTaxCategoryCode}
+                      onChange={(e) => setEfrisTaxCategoryCode(e.target.value)}
+                      className="w-full px-3 py-2 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 bg-white"
+                    >
+                      <option value="">Auto-detect from rate...</option>
+                      <option value="01">01 - Standard (18%)</option>
+                      <option value="02">02 - Zero Rated (0%)</option>
+                      <option value="03">03 - Exempt (-)</option>
+                      <option value="04">04 - Deemed (18%)</option>
+                      <option value="05">05 - Excise Duty</option>
+                      <option value="06">06 - Over the Top Service (OTT)</option>
+                      <option value="07">07 - Stamp Duty</option>
+                      <option value="08">08 - Local Hotel Service Tax</option>
+                      <option value="09">09 - UCC Levy</option>
+                      <option value="10">10 - Others</option>
+                      <option value="11">11 - VAT Out of Scope</option>
+                    </select>
+                    <p className="mt-1 text-xs text-green-700">
+                      {efrisTaxCategoryCode === '01' && '✓ Standard VAT rate (most common)'}
+                      {efrisTaxCategoryCode === '02' && '✓ Zero-rated supplies (exports, exempt goods)'}
+                      {efrisTaxCategoryCode === '03' && '✓ VAT exempt items (no VAT charged)'}
+                      {efrisTaxCategoryCode === '04' && '✓ Deemed supplies (VAT deemed)'}
+                      {efrisTaxCategoryCode === '11' && '⚠️ Out of scope - check if your org is registered for this'}
+                      {!efrisTaxCategoryCode && 'System will auto-detect based on rate percentage'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Default Goods Category ID (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={efrisGoodsCategoryId}
+                      onChange={(e) => setEfrisGoodsCategoryId(e.target.value)}
+                      placeholder="e.g., 100000000"
+                      className="w-full px-3 py-2 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      VAT commodity category from T124. Leave empty to use product-specific categories.
+                    </p>
+                  </div>
+
+                  <div className="bg-green-100 border border-green-300 rounded-lg p-3">
+                    <div className="flex gap-2">
+                      <Info className="w-4 h-4 text-green-700 flex-shrink-0 mt-0.5" />
+                      <div className="text-xs text-green-800">
+                        <p className="font-medium mb-1">Important EFRIS Mappings:</p>
+                        <ul className="space-y-0.5 list-disc list-inside">
+                          <li><strong>Exempt (03)</strong>: VAT still applies, but rate is zero (use vatApplicableFlag=1)</li>
+                          <li><strong>Zero-rated (02)</strong>: For exports and specific goods at 0% VAT</li>
+                          <li><strong>Out of Scope (11)</strong>: VAT doesn't apply at all (use vatApplicableFlag=0)</li>
+                          <li>If unsure, leave blank - system will auto-detect from your rate settings</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Right Column - Preview Calculator */}
@@ -854,6 +1014,119 @@ export default function NewTaxRatePage() {
           </div>
         </form>
       </div>
+
+      {/* New Tax Agency Modal */}
+      {showNewAgencyModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Add New Tax Agency</h2>
+              <form onSubmit={handleCreateAgency} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Agency Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newAgencyData.name}
+                    onChange={(e) => setNewAgencyData({ ...newAgencyData, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="e.g., Uganda Revenue Authority"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Code <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newAgencyData.code}
+                    onChange={(e) => setNewAgencyData({ ...newAgencyData, code: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="e.g., URA"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Country <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newAgencyData.country}
+                    onChange={(e) => setNewAgencyData({ ...newAgencyData, country: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="e.g., UG"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tax Type <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={newAgencyData.taxType}
+                    onChange={(e) => setNewAgencyData({ ...newAgencyData, taxType: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="VAT">VAT</option>
+                    <option value="GST">GST</option>
+                    <option value="SALES_TAX">Sales Tax</option>
+                    <option value="EXCISE">Excise</option>
+                    <option value="WITHHOLDING">Withholding Tax</option>
+                    <option value="CORPORATE">Corporate Tax</option>
+                    <option value="INCOME">Income Tax</option>
+                    <option value="PROPERTY">Property Tax</option>
+                    <option value="CUSTOMS">Customs Duty</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Registration Number
+                  </label>
+                  <input
+                    type="text"
+                    value={newAgencyData.registrationNumber}
+                    onChange={(e) => setNewAgencyData({ ...newAgencyData, registrationNumber: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Optional"
+                  />
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="agencyActive"
+                    checked={newAgencyData.isActive}
+                    onChange={(e) => setNewAgencyData({ ...newAgencyData, isActive: e.target.checked })}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="agencyActive" className="ml-2 block text-sm text-gray-900">
+                    Active
+                  </label>
+                </div>
+                <div className="flex justify-end space-x-3 mt-6">
+                  <button
+                    type="button"
+                    onClick={() => setShowNewAgencyModal(false)}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+                  >
+                    Create Agency
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

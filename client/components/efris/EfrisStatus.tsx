@@ -147,22 +147,6 @@ export function EfrisStatusDetails({
               )}
             </div>
           </div>
-
-          {qrCode && (
-            <div className="flex flex-col items-center">
-              <label className="text-xs font-medium text-gray-600 mb-2">QR Code</label>
-              <div className="bg-white p-2 rounded border border-gray-200">
-                <img 
-                  src={qrCode} 
-                  alt="EFRIS QR Code" 
-                  className="w-32 h-32"
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-2 text-center">
-                Scan to verify on EFRIS portal
-              </p>
-            </div>
-          )}
         </div>
       </div>
     );

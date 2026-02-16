@@ -14,7 +14,10 @@ export async function GET(_req: NextRequest, { params }: { params: { orgSlug: st
 
     const product = await prisma.product.findFirst({
       where: { id: params.id, organizationId: org.id },
-      include: { inventoryItems: true },
+      include: { 
+        inventoryItems: true,
+        unitOfMeasure: true,
+      },
     });
 
     if (!product) return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
@@ -27,9 +30,10 @@ export async function GET(_req: NextRequest, { params }: { params: { orgSlug: st
         id: product.id,
         sku: product.sku,
         name: product.name,
-        description: product.description,
+        description: product.description || '',
         productType: product.productType,
-        category: product.category,
+        category: product.category || '',
+        unitOfMeasureId: product.unitOfMeasureId || '',
         unitOfMeasure: product.unitOfMeasure,
         purchasePrice: Number(product.purchasePrice),
         sellingPrice: Number(product.sellingPrice),
@@ -38,6 +42,10 @@ export async function GET(_req: NextRequest, { params }: { params: { orgSlug: st
         reorderQuantity: product.reorderQuantity ? Number(product.reorderQuantity) : null,
         taxable: product.taxable,
         defaultTaxRate: Number(product.defaultTaxRate),
+        exciseDutyCode: product.exciseDutyCode || '',
+        goodsCategoryId: product.goodsCategoryId || '',
+        efrisProductCode: product.efrisProductCode,
+        efrisRegisteredAt: product.efrisRegisteredAt,
         isActive: product.isActive,
         quantityOnHand: inventory ? Number(inventory.quantityOnHand) : 0,
         quantityAvailable: inventory ? Number(inventory.quantityAvailable) : 0,
@@ -57,51 +65,84 @@ export async function PUT(req: NextRequest, { params }: { params: { orgSlug: str
     if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
     const { org } = await requireOrgMembership(user.id, params.orgSlug);
+    
+    const json = await req.json();
+    const parsed = productSchema.safeParse(json);
 
-    const body = await req.json();
-    const parsed = productSchema.partial().safeParse(body);
     if (!parsed.success) {
       return NextResponse.json({ success: false, error: parsed.error.flatten() }, { status: 400 });
     }
 
-    const data = parsed.data;
+    const input = parsed.data;
 
-    const existing = await prisma.product.findFirst({
-      where: { id: params.id, organizationId: org.id },
-    });
-    if (!existing) {
-      return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
-    }
-
-    await prisma.product.update({
-      where: { id: params.id },
-      data: {
-        sku: data.sku ?? existing.sku,
-        name: data.name ?? existing.name,
-        description: data.description ?? existing.description,
-        productType: (data as any).productType ?? existing.productType,
-        category: data.category ?? existing.category,
-        unitOfMeasure: data.unitOfMeasure ?? existing.unitOfMeasure,
-        purchasePrice: data.purchasePrice ?? existing.purchasePrice,
-        sellingPrice: data.sellingPrice ?? existing.sellingPrice,
-        trackInventory: data.trackInventory ?? existing.trackInventory,
-        reorderLevel: data.reorderLevel ?? existing.reorderLevel,
-        reorderQuantity: data.reorderQuantity ?? existing.reorderQuantity,
-        taxable: data.taxable ?? existing.taxable,
-        defaultTaxRate: data.defaultTaxRate ?? existing.defaultTaxRate,
-        isActive: (data as any).isActive ?? existing.isActive,
+    // Check if product exists and belongs to org
+    const existingProduct = await prisma.product.findFirst({
+      where: {
+        id: params.id,
+        organizationId: org.id,
       },
     });
 
-    return NextResponse.json({ success: true });
+    if (!existingProduct) {
+      return NextResponse.json({ success: false, error: 'Product not found' }, { status: 404 });
+    }
+
+    // Update product
+    const product = await prisma.product.update({
+      where: { id: params.id },
+      data: {
+        sku: input.sku,
+        name: input.name,
+        description: input.description,
+        productType: input.productType,
+        category: input.category,
+        unitOfMeasureId: input.unitOfMeasureId,
+        purchasePrice: input.purchasePrice,
+        sellingPrice: input.sellingPrice,
+        trackInventory: input.trackInventory,
+        reorderLevel: input.reorderLevel ?? null,
+        reorderQuantity: input.reorderQuantity ?? null,
+        taxable: input.taxable,
+        defaultTaxRate: input.defaultTaxRate,
+        exciseDutyCode: input.exciseDutyCode ?? null,
+        ...(input.goodsCategoryId !== undefined && { goodsCategoryId: input.goodsCategoryId ?? null }),
+      },
+    });
+
+    return NextResponse.json({ success: true, data: { id: product.id } });
   } catch (error: any) {
+    console.error('Error updating product:', error);
+    console.error('Error code:', error.code);
+    console.error('Error message:', error.message);
+    console.error('Error meta:', error.meta);
+    
     if (error.code === 'P2002') {
+      // P2002 = Unique constraint violation
+      // Note: SKU can be duplicated (it's a commodity category code shared by multiple products)
+      // Only specific fields like item codes should be unique
+      const target = error.meta?.target;
       return NextResponse.json(
-        { success: false, error: 'SKU already exists for this organization' },
+        { success: false, error: `Duplicate value for ${target || 'unique field'}. Please check your input.` },
         { status: 409 }
       );
     }
-    console.error('Error updating product', error);
-    return NextResponse.json({ success: false, error: 'Failed to update product' }, { status: 500 });
+    
+    // P2025 = Record not found
+    if (error.code === 'P2025') {
+      return NextResponse.json(
+        { success: false, error: 'Product not found' },
+        { status: 404 }
+      );
+    }
+    
+    // Check if it's a Prisma validation error
+    if (error.code && error.code.startsWith('P')) {
+      return NextResponse.json(
+        { success: false, error: `Database error: ${error.message}` },
+        { status: 500 }
+      );
+    }
+    
+    return NextResponse.json({ success: false, error: error.message || 'Failed to update product' }, { status: 500 });
   }
 }

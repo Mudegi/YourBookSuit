@@ -41,6 +41,8 @@ export async function GET(_req: NextRequest, { params }: { params: { orgSlug: st
         reorderQuantity: p.reorderQuantity ? Number(p.reorderQuantity) : null,
         taxable: p.taxable,
         defaultTaxRate: Number(p.defaultTaxRate),
+        exciseDutyCode: p.exciseDutyCode || null,
+        goodsCategoryId: p.goodsCategoryId || null,
         isActive: p.isActive,
         quantityOnHand: inventory ? Number(inventory.quantityOnHand) : 0,
         quantityAvailable: inventory ? Number(inventory.quantityAvailable) : 0,
@@ -91,6 +93,9 @@ export async function POST(request: NextRequest, { params }: { params: { orgSlug
         reorderQuantity: input.reorderQuantity ?? null,
         taxable: input.taxable,
         defaultTaxRate: input.defaultTaxRate,
+        exciseDutyCode: input.exciseDutyCode ?? null,
+        // Only include goodsCategoryId if defined (field may not exist in DB yet)
+        ...(input.goodsCategoryId !== undefined && { goodsCategoryId: input.goodsCategoryId ?? null }),
       },
     });
 
@@ -112,8 +117,12 @@ export async function POST(request: NextRequest, { params }: { params: { orgSlug
     return NextResponse.json({ success: true, data: { id: product.id } }, { status: 201 });
   } catch (error: any) {
     if (error.code === 'P2002') {
+      // P2002 = Unique constraint violation
+      // Note: SKU can be duplicated (it's a commodity category code)
+      // Only specific fields like item codes should be unique
+      const target = error.meta?.target;
       return NextResponse.json(
-        { success: false, error: 'SKU already exists for this organization' },
+        { success: false, error: `Duplicate value for ${target || 'unique field'}. Please check your input.` },
         { status: 409 }
       );
     }

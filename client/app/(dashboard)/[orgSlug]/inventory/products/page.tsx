@@ -19,6 +19,8 @@ interface Product {
   reorderQuantity?: number | null;
   taxable: boolean;
   defaultTaxRate: number;
+  efrisProductCode?: string | null;
+  efrisRegisteredAt?: string | null;
   isActive: boolean;
   quantityOnHand: number;
   quantityAvailable: number;
@@ -109,16 +111,16 @@ export default function ProductsPage() {
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Avg Cost</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Sale Price</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Reorder</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">EFRIS</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Status</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
             {products.map((p) => (
               <tr key={p.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-sm font-mono text-gray-800">{p.sku}</td>
-                <td className="px-4 py-3 text-sm text-blue-600 hover:underline">
-                  <Link href={`/${orgSlug}/inventory/products/${p.id}`}>{p.name}</Link>
-                </td>
+                <td className="px-4 py-3 text-sm text-gray-900">{p.name}</td>
                 <td className="px-4 py-3 text-sm text-gray-700">{p.productType}</td>
                 <td className="px-4 py-3 text-sm text-gray-700">{p.category || '—'}</td>
                 <td className="px-4 py-3 text-sm text-gray-900">{p.quantityOnHand}</td>
@@ -130,15 +132,34 @@ export default function ProductsPage() {
                   {p.reorderQuantity ? ` / Qty ${p.reorderQuantity}` : ''}
                 </td>
                 <td className="px-4 py-3 text-sm">
+                  {p.efrisProductCode ? (
+                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                      Registered
+                    </span>
+                  ) : (
+                    <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                      Not Registered
+                    </span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-sm">
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${p.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
                     {p.isActive ? 'Active' : 'Inactive'}
                   </span>
+                </td>
+                <td className="px-4 py-3 text-sm">
+                  <Link
+                    href={`/${orgSlug}/inventory/products/${p.id}/edit`}
+                    className="inline-flex items-center px-3 py-1 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100"
+                  >
+                    Edit
+                  </Link>
                 </td>
               </tr>
             ))}
             {products.length === 0 && (
               <tr>
-                <td className="px-4 py-6 text-sm text-gray-600" colSpan={10}>
+                <td className="px-4 py-6 text-sm text-gray-600" colSpan={12}>
                   No products yet. Create your first product to start tracking inventory.
                 </td>
               </tr>

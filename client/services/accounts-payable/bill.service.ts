@@ -8,7 +8,7 @@ interface BillItem {
   unitPrice: number;
   productId?: string;
   serviceId?: string;
-  accountId: string; // Expense account
+  accountId?: string; // Expense account (required only for non-inventory items)
   taxAmount: number;
   taxRate?: number; // VAT rate for this item
   taxCategory?: string; // 'STANDARD' (18%), 'ZERO' (0%), 'EXEMPT' for URA
@@ -29,17 +29,26 @@ interface CreateBillData {
   whtRate?: number;
   whtAmount?: number;
   efrisReceiptNo?: string;
+  stockInType?: string; // EFRIS: 101=Import, 102=Local, 103=Manufacture, 104=Opening
 }
 
 /**
  * BillService handles bill creation with automatic double-entry posting
  * 
  * Double-entry structure for a bill:
- * - DR: Expense Account (net of VAT for each line item)
+ * 
+ * For Inventory Purchases (stockInType: 101, 102, 103):
+ * - DR: Inventory Asset (1300) for items with productId
+ * - DR: Expense Account (from accountId) for non-inventory items
  * - DR: VAT Input / Recoverable (if claimable and tax applies)
  * - CR: Accounts Payable (total gross amount)
  * - [Optional] CR: WHT Payable (if withholding applies)
  * - [Optional] DR: Accounts Payable (to reduce for withheld amount)
+ * 
+ * For Opening Stock (stockInType: 104):
+ * - DR: Inventory Asset (1300)
+ * - CR: Opening Balance Equity (3900) - NOT Accounts Payable!
+ * - No expense accounts, no AP liability
  */
 export class BillService {
   /**
@@ -105,6 +114,39 @@ export class BillService {
       });
     }
 
+    // Find Inventory Asset account for inventory purchases (ASSET type)
+    // Common code: 1300 (Inventory / Stock)
+    const inventoryAssetAccount = await prisma.chartOfAccount.findFirst({
+      where: {
+        organizationId,
+        code: { startsWith: '1300' },
+        accountType: 'ASSET',
+        isActive: true,
+      },
+      orderBy: { code: 'asc' },
+    });
+
+    // Find Opening Balance Equity account for opening stock (EQUITY type)
+    // Common code: 3900 (Opening Balance Equity)
+    let openingBalanceEquityAccount = null;
+    if (data.stockInType === '104') {
+      openingBalanceEquityAccount = await prisma.chartOfAccount.findFirst({
+        where: {
+          organizationId,
+          code: { startsWith: '3900' },
+          accountType: 'EQUITY',
+          isActive: true,
+        },
+        orderBy: { code: 'asc' },
+      });
+
+      if (!openingBalanceEquityAccount) {
+        throw new Error(
+          'Opening Balance Equity account not found. Please create an EQUITY account with code starting with 3900 for opening stock.'
+        );
+      }
+    }
+
     // Calculate totals
     const subtotal = data.items.reduce(
       (sum, item) => sum + item.quantity * item.unitPrice,
@@ -121,12 +163,34 @@ export class BillService {
 
     // Build double-entry ledger entries
     const ledgerEntries: LedgerEntryInput[] = [];
+    const isOpeningStock = data.stockInType === '104';
 
-    // 1. DR: Expense accounts (one entry per line item, net of VAT)
+    // 1. DR: Inventory Asset (for inventory items) OR Expense Account (for non-inventory items)
     for (const item of data.items) {
       const lineNetAmount = item.quantity * item.unitPrice;
+      
+      // Determine which account to debit
+      let accountToDebit: string;
+      
+      if (item.productId) {
+        // Inventory item - use Inventory Asset account
+        if (!inventoryAssetAccount) {
+          throw new Error(
+            'Inventory Asset account not found. Please create an ASSET account with code starting with 1300 for inventory purchases.'
+          );
+        }
+        accountToDebit = inventoryAssetAccount.id;
+      } else if (item.accountId) {
+        // Non-inventory item - use provided expense account
+        accountToDebit = item.accountId;
+      } else {
+        throw new Error(
+          `Item "${item.description}" must have either a productId (for inventory) or accountId (for expenses).`
+        );
+      }
+      
       ledgerEntries.push({
-        accountId: item.accountId,
+        accountId: accountToDebit,
         entryType: EntryType.DEBIT,
         amount: lineNetAmount,
         description: item.description,
@@ -135,7 +199,8 @@ export class BillService {
     }
 
     // 2. DR: VAT Input / Recoverable (if applicable and account exists)
-    if (totalTaxAmount > 0 && vatInputAccount) {
+    // Skip VAT for opening stock as it's not a new purchase
+    if (!isOpeningStock && totalTaxAmount > 0 && vatInputAccount) {
       // Sum tax on items where claimable is true
       const claimableVat = data.items
         .filter((item) => item.claimInputTax !== false)
@@ -152,17 +217,29 @@ export class BillService {
       }
     }
 
-    // 3. CR: Accounts Payable (total gross)
-    ledgerEntries.push({
-      accountId: apAccount.id,
-      entryType: EntryType.CREDIT,
-      amount: totalGross,
-      description: `Bill ${billNumber} - ${vendor.companyName}`,
-      currency: 'USD',
-    });
+    // 3. CR: Opening Balance Equity (for opening stock) OR Accounts Payable (for purchases)
+    if (isOpeningStock) {
+      // Opening stock: CR Opening Balance Equity (no liability created)
+      ledgerEntries.push({
+        accountId: openingBalanceEquityAccount!.id,
+        entryType: EntryType.CREDIT,
+        amount: totalGross,
+        description: `Opening Stock - Bill ${billNumber}`,
+        currency: 'USD',
+      });
+    } else {
+      // Regular purchase: CR Accounts Payable (creates liability)
+      ledgerEntries.push({
+        accountId: apAccount.id,
+        entryType: EntryType.CREDIT,
+        amount: totalGross,
+        description: `Bill ${billNumber} - ${vendor.companyName}`,
+        currency: 'USD',
+      });
+    }
 
-    // 4. [Optional] CR: WHT Payable + DR: AP Reduction
-    if (whtAmount > 0 && whtPayableAccount) {
+    // 4. [Optional] CR: WHT Payable + DR: AP Reduction (not applicable for opening stock)
+    if (!isOpeningStock && whtAmount > 0 && whtPayableAccount) {
       ledgerEntries.push({
         accountId: whtPayableAccount.id,
         entryType: EntryType.CREDIT,
@@ -217,10 +294,10 @@ export class BillService {
           whtRate: data.whtRate || 0,
           whtAmount: whtAmount > 0 ? whtAmount.toString() : '0',
           efrisReceiptNo: data.efrisReceiptNo || null,
+          stockInType: data.stockInType || null,
           transactionId: transaction.id,
           items: {
             create: data.items.map((item, index) => ({
-              lineNumber: index + 1,
               description: item.description,
               quantity: item.quantity.toString(),
               unitPrice: item.unitPrice.toString(),

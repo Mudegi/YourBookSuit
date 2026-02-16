@@ -193,7 +193,7 @@ export default function DashboardLayout({
     { name: 'Onboarding', href: '/onboarding' },
     { name: 'Integrations', href: `/${orgSlug}/settings/integrations` },
     { name: 'Webhooks', href: `/${orgSlug}/integrations/webhooks` },
-    ...(organization?.homeCountry === 'UG' ? [{ name: 'EFRIS Integration', href: `/${orgSlug}/settings/efris` }] : []),
+    ...(organization?.homeCountry?.toUpperCase() === 'UG' || organization?.homeCountry?.toUpperCase() === 'UGANDA' ? [{ name: 'EFRIS Integration', href: `/${orgSlug}/settings/efris` }] : []),
     { name: 'Users & Roles', href: `/${orgSlug}/settings/users` },
   ];
 
@@ -241,6 +241,7 @@ export default function DashboardLayout({
         { name: 'Stock Purchases', href: `/${orgSlug}/inventory/goods-receipts` },
         { name: 'Stock Movements', href: `/${orgSlug}/inventory/movements` },
         { name: 'Adjustments', href: `/${orgSlug}/inventory/adjustments` },
+        { name: 'Stock Decrease', href: `/${orgSlug}/inventory/stock-decrease` },
         { name: 'Warehouses', href: `/${orgSlug}/warehouse/warehouses` },
         { name: 'Transfer Orders', href: `/${orgSlug}/warehouse/transfer-orders` },
         { name: 'Cycle Counts', href: `/${orgSlug}/inventory/cycle-counts` },

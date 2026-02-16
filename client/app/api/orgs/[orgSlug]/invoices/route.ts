@@ -113,29 +113,67 @@ export async function POST(
     }
 
     // Fetch tax rates if taxRateId is provided to get the actual rate percentage
-    // Note: taxRateId refers to TaxAgencyRate.id in this context
+    // Determine which tax system to use based on organization settings
+    
+    // Check organization country and EFRIS status
+    const organization = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { 
+        homeCountry: true,
+        eInvoiceConfig: {
+          select: {
+            isActive: true,
+            provider: true,
+          },
+        },
+      },
+    });
+
+    const isUganda = organization?.homeCountry === 'UG';
+    const efrisEnabled = isUganda && 
+                         organization?.eInvoiceConfig?.isActive && 
+                         organization?.eInvoiceConfig?.provider === 'EFRIS';
+    
     const taxRatesMap = new Map<string, number>();
     const uniqueTaxRateIds = [...new Set(body.items.map((item: any) => item.taxRateId).filter(Boolean))];
     
     console.log('🔍 Tax Rate IDs found:', uniqueTaxRateIds);
+    console.log('🌍 Tax System:', efrisEnabled ? 'EFRIS (TaxRate)' : 'Legacy (TaxAgencyRate)');
     
     if (uniqueTaxRateIds.length > 0) {
-      // Query TaxAgencyRate table (not TaxRate)
-      const taxRates = await prisma.taxAgencyRate.findMany({
-        where: {
-          id: { in: uniqueTaxRateIds },
-          taxAgency: {
+      if (efrisEnabled) {
+        // Uganda with EFRIS - Use TaxRate table
+        const rates = await prisma.taxRate.findMany({
+          where: {
+            id: { in: uniqueTaxRateIds },
             organizationId,
           },
-        },
-        select: {
-          id: true,
-          rate: true,
-        },
-      });
+          select: {
+            id: true,
+            rate: true,
+          },
+        });
+        
+        rates.forEach(tr => taxRatesMap.set(tr.id, Number(tr.rate)));
+      } else {
+        // All other cases - Use TaxAgencyRate table
+        const rates = await prisma.taxAgencyRate.findMany({
+          where: {
+            id: { in: uniqueTaxRateIds },
+            taxAgency: {
+              organizationId,
+            },
+          },
+          select: {
+            id: true,
+            rate: true,
+          },
+        });
+        
+        rates.forEach(tr => taxRatesMap.set(tr.id, Number(tr.rate)));
+      }
       
-      console.log('📊 Tax Rates fetched:', taxRates);
-      taxRates.forEach(tr => taxRatesMap.set(tr.id, Number(tr.rate)));
+      console.log('📊 Tax Rates fetched:', Array.from(taxRatesMap.entries()));
     }
 
     // Use InvoiceService to create invoice
@@ -148,11 +186,22 @@ export async function POST(
       discount: item.discount || 0,
       discountType: item.discountType || 'AMOUNT',
       taxRate: item.taxRateId ? (taxRatesMap.get(item.taxRateId) || 0) : 0,
-      taxRateId: item.taxRateId,
+      // Set the appropriate foreign key based on tax system
+      taxRateId: efrisEnabled ? item.taxRateId : undefined,
+      taxAgencyRateId: !efrisEnabled ? item.taxRateId : undefined,
       taxLines: item.taxLines || [],
     }));
     
     console.log('🧾 Mapped items with tax:', mappedItems);
+    console.log('💰 Tax Calculation Method:', body.taxCalculationMethod || 'EXCLUSIVE');
+    console.log('📝 First item details:', {
+      description: mappedItems[0]?.description,
+      quantity: mappedItems[0]?.quantity,
+      unitPrice: mappedItems[0]?.unitPrice,
+      taxRate: mappedItems[0]?.taxRate,
+      method: body.taxCalculationMethod || 'EXCLUSIVE',
+      isInclusive: body.taxCalculationMethod === 'INCLUSIVE',
+    });
     
     const result = await InvoiceService.createInvoice({
       organizationId,

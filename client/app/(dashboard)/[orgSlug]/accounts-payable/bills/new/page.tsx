@@ -1,17 +1,16 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Plus, Trash2, ChevronDown, Loader2 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select } from '@/components/ui/select';
 import { Alert } from '@/components/ui/alert';
 import Loading from '@/components/ui/loading';
 import { useOrganization } from '@/hooks/useOrganization';
+import { useAuth } from '@/hooks/useAuth';
 import { formatCurrency } from '@/lib/utils';
 import { Modal } from '@/components/ui/modal';
 
@@ -58,6 +57,7 @@ interface BillItem {
   accountId: string;
   taxLines?: TaxLine[];
   taxAmount: number;
+  taxRate?: number; // The selected tax rate percentage
 }
 
 export default function NewBillPage() {
@@ -70,14 +70,15 @@ export default function NewBillPage() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [expenseAccounts, setExpenseAccounts] = useState<Account[]>([]);
+  const [allAccounts, setAllAccounts] = useState<Account[]>([]);
   const [taxRates, setTaxRates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [vendorSearch, setVendorSearch] = useState('');
   const [vendorDropdownOpen, setVendorDropdownOpen] = useState(false);
-  const [productSearch, setProductSearch] = useState<Record<string, string>>({});
-  const [productDropdownOpen, setProductDropdownOpen] = useState<Record<string, boolean>>({});
+  const [productSearch, setProductSearch] = useState('');
+  const [showProductSearch, setShowProductSearch] = useState<string | null>(null);
   const [productResults, setProductResults] = useState<Record<string, Product[]>>({});
   const [productSearchLoading, setProductSearchLoading] = useState<Set<string>>(new Set());
   const [accountSearch, setAccountSearch] = useState<Record<string, string>>({});
@@ -93,8 +94,11 @@ export default function NewBillPage() {
   });
   const [vendorFormError, setVendorFormError] = useState<string | null>(null);
   const [vendorFormLoading, setVendorFormLoading] = useState(false);
+  const [submittingEfris, setSubmittingEfris] = useState(false);
+  const [efrisEnabled, setEfrisEnabled] = useState(false);
   const { currency, organization } = useOrganization();
-  const isUganda = organization?.homeCountry === 'UG' || organization?.homeCountry === 'UGANDA';
+  const { user } = useAuth();
+  const isUganda = organization?.homeCountry?.toUpperCase() === 'UG' || organization?.homeCountry?.toUpperCase() === 'UGANDA';
 
   const [formData, setFormData] = useState({
     vendorId: preselectedVendorId || '',
@@ -103,6 +107,7 @@ export default function NewBillPage() {
     billNumber: '',
     referenceNumber: '',
     efrisReceiptNo: '',
+    stockInType: '102', // Default: Local Purchase
     notes: '',
   });
 
@@ -117,6 +122,7 @@ export default function NewBillPage() {
       accountId: '',
       taxLines: [],
       taxAmount: 0,
+      taxRate: 0,
     },
   ]);
   const [expandedTaxRows, setExpandedTaxRows] = useState<Set<string>>(new Set());
@@ -175,9 +181,9 @@ export default function NewBillPage() {
     return vendors.filter((v) => v.name?.toLowerCase().includes(term));
   }, [vendors, vendorSearch]);
 
-  // Client-side product filter for each item
-  const getDisplayProducts = React.useCallback((itemId: string): Product[] => {
-    const term = productSearch[itemId]?.trim().toLowerCase() || '';
+  // Client-side product filter
+  const getDisplayProducts = React.useMemo((): Product[] => {
+    const term = productSearch.trim().toLowerCase() || '';
     if (!term) return products;
     return products.filter((p) => 
       p.name?.toLowerCase().includes(term) || 
@@ -188,6 +194,23 @@ export default function NewBillPage() {
   useEffect(() => {
     fetchData();
   }, [orgSlug]);
+
+  // Check EFRIS configuration
+  useEffect(() => {
+    const checkEfris = async () => {
+      if (!organization || !isUganda) return;
+      try {
+        const res = await fetch(`/api/orgs/${orgSlug}/settings/efris`);
+        if (res.ok) {
+          const data = await res.json();
+          setEfrisEnabled(data.config?.isActive === true);
+        }
+      } catch (err) {
+        console.error('[EFRIS] Error checking config:', err);
+      }
+    };
+    checkEfris();
+  }, [orgSlug, organization, isUganda]);
 
   useEffect(() => {
     // Auto-calculate due date when vendor or bill date changes
@@ -236,11 +259,13 @@ export default function NewBillPage() {
         : [];
 
       const taxRatesData = await taxRatesRes.json();
-      const taxRatesList = taxRatesData.success && taxRatesData.data ? taxRatesData.data : [];
+      const taxRatesList = taxRatesData.success && taxRatesData.data ? taxRatesData.data : (Array.isArray(taxRatesData) ? taxRatesData : []);
+      console.log('[Bills] Tax rates loaded:', taxRatesList.length, taxRatesList);
 
       setVendors(vendorsList);
       setProducts(productsList);
       setTaxRates(taxRatesList);
+      setAllAccounts(accountsList.filter((acc: any) => acc.isActive !== false));
       // Filter for EXPENSE accounts only
       setExpenseAccounts(
         accountsList.filter(
@@ -373,6 +398,7 @@ export default function NewBillPage() {
         accountId: '',
         taxLines: [],
         taxAmount: 0,
+        taxRate: 0,
       },
     ]);
   }
@@ -480,11 +506,49 @@ export default function NewBillPage() {
     };
   }, [accountSearch, orgSlug]);
 
+  // Auto-select Opening Balance Equity (3900) for opening stock items
+  useEffect(() => {
+    if (formData.stockInType === '104' && allAccounts.length > 0) {
+      const openingBalanceAccount = allAccounts.find(acc => acc.code === '3900');
+      if (openingBalanceAccount) {
+        setItems((prev) =>
+          prev.map((item) => {
+            // Auto-select for inventory items without an account
+            if (item.productId && !item.accountId) {
+              return { ...item, accountId: openingBalanceAccount.id };
+            }
+            return item;
+          })
+        );
+      }
+    }
+  }, [formData.stockInType, allAccounts]);
+
   function updateItem(id: string, field: keyof BillItem, value: any) {
     setItems((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, [field]: value } : item
-      )
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        
+        const updated = { ...item, [field]: value };
+        
+        // Recalculate tax amount when quantity, unitPrice, or taxRate changes
+        if (field === 'quantity' || field === 'unitPrice' || field === 'taxRate') {
+          const taxRate = field === 'taxRate' ? value : (item.taxRate || 0);
+          const quantity = field === 'quantity' ? value : item.quantity;
+          const unitPrice = field === 'unitPrice' ? value : item.unitPrice;
+          updated.taxAmount = quantity * unitPrice * (taxRate / 100);
+        }
+        
+        // Auto-select Opening Balance Equity for opening stock items
+        if (field === 'productId' && value && formData.stockInType === '104') {
+          const openingBalanceAccount = allAccounts.find(acc => acc.code === '3900');
+          if (openingBalanceAccount) {
+            updated.accountId = openingBalanceAccount.id;
+          }
+        }
+        
+        return updated;
+      })
     );
   }
 
@@ -504,6 +568,13 @@ export default function NewBillPage() {
     return calculateSubtotal() + calculateTaxTotal();
   }
 
+  function getAmountFontSize(formattedAmount: string): string {
+    const length = formattedAmount.length;
+    if (length <= 12) return 'text-lg';
+    if (length <= 15) return 'text-base';
+    return 'text-sm';
+  }
+
   const validateField = (field: string, value: string) => {
     let error = '';
     if (field === 'vendorId' && !value) error = 'Vendor is required.';
@@ -512,9 +583,13 @@ export default function NewBillPage() {
     setFormErrors((prev) => ({ ...prev, [field]: error }));
   };
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent, submitToEfris = false) {
     e.preventDefault();
-    setSubmitting(true);
+    if (submitToEfris) {
+      setSubmittingEfris(true);
+    } else {
+      setSubmitting(true);
+    }
     setError(null);
 
     try {
@@ -532,8 +607,9 @@ export default function NewBillPage() {
         if (!item.name) {
           throw new Error('All items must have a name');
         }
-        if (!item.accountId) {
-          throw new Error('All items must have an expense account');
+        // Only require accountId for non-inventory items
+        if (!item.productId && !item.accountId) {
+          throw new Error('Non-inventory items must have an expense account');
         }
         if (item.quantity <= 0) {
           throw new Error('All items must have a positive quantity');
@@ -547,20 +623,26 @@ export default function NewBillPage() {
         billNumber: formData.billNumber || undefined,
         referenceNumber: formData.referenceNumber || undefined,
         efrisReceiptNo: formData.efrisReceiptNo || undefined,
+        stockInType: formData.stockInType || undefined,
         notes: formData.notes || undefined,
+        submitToEfris: submitToEfris,
         items: items.map((item) => ({
           description: item.name,
           productId: item.productId || undefined,
           quantity: Number(item.quantity),
           unitPrice: Number(item.unitPrice),
-          accountId: item.accountId,
+          accountId: item.accountId || undefined,  // Optional for inventory items
           taxAmount: Number(item.taxAmount || 0),
         })),
       };
 
       const response = await fetch(`/api/orgs/${orgSlug}/bills`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-organization-id': organization?.id || '',
+          'x-user-id': user?.id || '',
+        },
         body: JSON.stringify(payload),
       });
 
@@ -576,6 +658,7 @@ export default function NewBillPage() {
       setError(err.message);
     } finally {
       setSubmitting(false);
+      setSubmittingEfris(false);
     }
   }
 
@@ -605,15 +688,13 @@ export default function NewBillPage() {
 
         {error && <Alert variant="error" className="mb-6">{error}</Alert>}
 
-        <form onSubmit={(e) => { e.preventDefault(); handleSubmit(e); }} className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
+        <form onSubmit={(e) => { e.preventDefault(); handleSubmit(e); }}>
           {/* Main Content Area */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="space-y-6">
             {/* Bill Header */}
-            <Card className="shadow-sm">
-              <CardHeader className="bg-white border-b">
-                <CardTitle className="text-xl">Bill Information</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6 space-y-6">
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h3 className="text-lg font-semibold mb-6">Bill Information</h3>
+              <div className="space-y-6">
               {/* Vendor Section */}
               <div className="space-y-4">
                 <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
@@ -713,6 +794,18 @@ export default function NewBillPage() {
                   {formErrors.billDate && <div className="text-xs text-red-600 mt-1">{formErrors.billDate}</div>}
                 </div>
 
+                <div className="md:col-span-2">
+                  <Label htmlFor="notes" className="text-sm font-semibold">Notes</Label>
+                  <textarea
+                    id="notes"
+                    value={formData.notes}
+                    onChange={(e) => handleChange('notes', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none text-sm"
+                    rows={2}
+                    placeholder="Add any notes or special instructions..."
+                  />
+                </div>
+
                 <div>
                   <Label htmlFor="dueDate" className="text-sm font-semibold">Due Date *</Label>
                   <Input
@@ -737,156 +830,211 @@ export default function NewBillPage() {
                   />
                 </div>
 
-                {isUganda && (
-                  <div className="md:col-span-2">
-                    <Label htmlFor="efrisReceiptNo" className="text-sm font-semibold">
-                      Vendor EFRIS Receipt No
-                      <span className="ml-2 text-xs font-normal text-muted-foreground">(Optional - for VAT credit)</span>
-                    </Label>
-                    <Input
-                      id="efrisReceiptNo"
-                      value={formData.efrisReceiptNo || ''}
-                      onChange={(e) => handleChange('efrisReceiptNo', e.target.value)}
-                      placeholder="Vendor's EFRIS Fiscal Document Number"
-                      className="h-10"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Enter the vendor's EFRIS FDN to claim Input VAT credit on this bill
-                    </p>
-                  </div>
+                {isUganda && efrisEnabled && (
+                  <>
+                    <div className="md:col-span-2">
+                      <Label htmlFor="efrisReceiptNo" className="text-sm font-semibold">
+                        Vendor EFRIS Receipt No
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">(Optional - for VAT credit)</span>
+                      </Label>
+                      <Input
+                        id="efrisReceiptNo"
+                        value={formData.efrisReceiptNo || ''}
+                        onChange={(e) => handleChange('efrisReceiptNo', e.target.value)}
+                        placeholder="Vendor's EFRIS Fiscal Document Number"
+                        className="h-10"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Enter the vendor's EFRIS FDN to claim Input VAT credit on this bill
+                      </p>
+                    </div>
+                    
+                    <div className="md:col-span-2">
+                      <Label htmlFor="stockInType" className="text-sm font-semibold">
+                        Stock Source Type *
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">(Required for EFRIS submission)</span>
+                      </Label>
+                      <select
+                        id="stockInType"
+                        value={formData.stockInType}
+                        onChange={(e) => handleChange('stockInType', e.target.value)}
+                        className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="101">Import - Goods from outside Uganda (customs cleared)</option>
+                        <option value="102">Local Purchase - Bought from local supplier (default)</option>
+                        <option value="103">Manufacture/Assembly - Produced in-house</option>
+                        <option value="104">Opening Stock - Initial inventory when starting EFRIS</option>
+                      </select>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Required by URA to track where goods came from and verify tax was paid correctly. Most purchases use "Local Purchase".
+                        {formData.stockInType === '104' && (
+                          <span className="block mt-1 text-amber-600 font-medium">
+                            ⓘ Opening Stock: Select account 3900 (Opening Balance Equity) for inventory items. Stock won't be doubled - just reported to EFRIS.
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </>
                 )}
               </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
             {/* Line Items */}
-            <Card className="shadow-sm">
-              <CardHeader className="bg-white border-b flex flex-row items-center justify-between">
-                <CardTitle className="text-xl">Line Items</CardTitle>
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold">Line Items</h3>
                 <Button type="button" variant="outline" size="sm" onClick={addItem} className="gap-1">
                   <Plus className="w-4 h-4" />
                   Add Item
                 </Button>
-              </CardHeader>
-              <CardContent className="pt-6">
-                <div className="overflow-visible">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr className="bg-gray-50 border-b-2 border-gray-200">
-                        <th className="text-left p-3 text-sm font-semibold text-gray-700 min-w-[250px]">Product *</th>
-                        <th className="text-left p-3 text-sm font-semibold text-gray-700 min-w-[200px]">Expense Account *</th>
-                        <th className="text-right p-3 text-sm font-semibold text-gray-700 w-24">Quantity *</th>
-                        <th className="text-right p-3 text-sm font-semibold text-gray-700 w-28">Unit Price *</th>
-                        <th className="text-left p-3 text-sm font-semibold text-gray-700 min-w-[180px]">Tax Rate</th>
-                        <th className="text-right p-3 text-sm font-semibold text-gray-700 w-32">Line Total</th>
-                        <th className="text-center p-3 text-sm font-semibold text-gray-700 w-16">Action</th>
+              </div>
+              <div className="border border-gray-300 rounded-lg" style={{ overflow: 'visible' }}>
+                <div className="overflow-x-auto" style={{ overflow: 'visible' }}>
+                  <table className="w-full" style={{ overflow: 'visible' }}>
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-300">
+                        <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Product *</th>
+                        <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase">
+                          Account {formData.stockInType === '104' ? '(Opening Stock)' : '(Services only)'}
+                        </th>
+                        <th className="px-2 py-3 text-right text-xs font-semibold text-gray-700 uppercase" style={{ width: '70px' }}>Quantity *</th>
+                        <th className="px-2 py-3 text-right text-xs font-semibold text-gray-700 uppercase" style={{ width: '140px' }}>Unit Price *</th>
+                        <th className="px-2 py-3 text-left text-xs font-semibold text-gray-700 uppercase" style={{ width: '160px' }}>Tax Rate</th>
+                        <th className="px-2 py-3 text-right text-xs font-semibold text-gray-700 uppercase" style={{ width: '140px' }}>Line Total</th>
+                        <th className="px-1 py-3" style={{ width: '40px' }}></th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="bg-white divide-y divide-gray-200">
                       {items.map((item, index) => (
-                        <tr key={item.id} className="border-b border-gray-200 hover:bg-gray-50">
+                        <tr key={item.id} className="hover:bg-blue-50/50 transition-colors">
                           {/* Product */}
-                          <td className="p-3">
+                          <td className="px-3 py-3">
                             <div className="relative">
                               <Input
-                                className="h-9 text-sm"
+                                className="w-full px-3 py-2 text-sm border rounded focus:ring-2 focus:ring-blue-500"
                                 placeholder="Search products..."
-                                value={productSearch[item.id] || item.name || ''}
-                                onChange={(e) =>
-                                  setProductSearch((prev) => ({
-                                    ...prev,
-                                    [item.id]: e.target.value,
-                                  }))
-                                }
-                                onFocus={() => setProductDropdownOpen((prev) => ({ ...prev, [item.id]: true }))}
-                                onBlur={() => setTimeout(() => setProductDropdownOpen((prev) => ({ ...prev, [item.id]: false })), 200)}
+                                value={item.name || ''}
+                                onChange={(e) => {
+                                  updateItem(item.id, 'name', e.target.value);
+                                  setProductSearch(e.target.value);
+                                  setShowProductSearch(item.id);
+                                }}
+                                onFocus={() => {
+                                  setProductSearch('');
+                                  setShowProductSearch(item.id);
+                                }}
+                                onBlur={() => setTimeout(() => setShowProductSearch(null), 200)}
                                 autoComplete="off"
                               />
-                              {productDropdownOpen[item.id] && getDisplayProducts(item.id).length > 0 && (
-                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-48 overflow-y-auto">
-                                  {getDisplayProducts(item.id).map((product: Product) => (
-                                    <button
-                                      key={product.id}
-                                      type="button"
-                                      onClick={() => {
-                                        updateItem(item.id, 'productId', product.id);
-                                        updateItem(item.id, 'name', product.name);
-                                        updateItem(item.id, 'unitPrice', product.purchasePrice);
-                                        setProductSearch((prev) => ({
-                                          ...prev,
-                                          [item.id]: '',
-                                        }));
-                                        setProductDropdownOpen((prev) => ({ ...prev, [item.id]: false }));
-                                      }}
-                                      className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors border-b last:border-b-0 text-sm"
-                                    >
-                                      <div className="font-medium text-gray-900">{product.name}</div>
-                                      <div className="text-xs text-gray-600">SKU: {product.sku}</div>
-                                    </button>
-                                  ))}
+                              
+                              {showProductSearch === item.id && (
+                                <div 
+                                  className="absolute z-[9999] w-full mt-1 bg-white border-2 border-gray-300 rounded-lg shadow-2xl max-h-64 overflow-y-auto left-0 top-full" 
+                                  style={{ minWidth: '300px' }}
+                                  onMouseDown={(e) => e.preventDefault()}
+                                >
+                                  {getDisplayProducts.length > 0 ? (
+                                    getDisplayProducts.map((product) => (
+                                      <button
+                                        key={product.id}
+                                        type="button"
+                                        onClick={() => {
+                                          updateItem(item.id, 'productId', product.id);
+                                          updateItem(item.id, 'name', product.name);
+                                          updateItem(item.id, 'unitPrice', product.purchasePrice);
+                                          setProductSearch('');
+                                          setShowProductSearch(null);
+                                        }}
+                                        className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b last:border-0"
+                                      >
+                                        <div className="flex justify-between">
+                                          <span className="font-medium text-sm">{product.name}</span>
+                                          <span className="text-sm text-gray-600">{formatCurrency(product.purchasePrice, currency)}</span>
+                                        </div>
+                                        <div className="text-xs text-gray-500">SKU: {product.sku}</div>
+                                      </button>
+                                    ))
+                                  ) : (
+                                    <div className="px-3 py-2 text-sm text-gray-500">
+                                      No products found (Total: {products.length})
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
                           </td>
 
                           {/* Expense Account */}
-                          <td className="p-3">
+                          <td className="px-3 py-3">
                             <select
                               value={item.accountId}
                               onChange={(e) => updateItem(item.id, 'accountId', e.target.value)}
-                              required
-                              className="h-9 w-full rounded-md border border-gray-300 bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              required={!item.productId}
+                              className="w-full px-2 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                             >
                               <option value="">Select...</option>
-                              {expenseAccounts.slice(0, 50).map((account) => (
+                              {/* Show Opening Balance Equity for opening stock */}
+                              {formData.stockInType === '104' && allAccounts
+                                .filter(acc => acc.code === '3900')
+                                .map((account) => (
+                                  <option key={account.id} value={account.id}>
+                                    {account.code} - {account.name} (Opening Stock)
+                                  </option>
+                                ))}
+                              {/* Show expense accounts for non-inventory items */}
+                              {!item.productId && expenseAccounts.slice(0, 50).map((account) => (
                                 <option key={account.id} value={account.id}>
                                   {account.code} - {account.name}
                                 </option>
                               ))}
+                              {/* Note for inventory items */}
+                              {item.productId && formData.stockInType !== '104' && (
+                                <option value="" disabled>
+                                  (Inventory items use account 1300 automatically)
+                                </option>
+                              )}
                             </select>
+                            {item.productId && formData.stockInType === '104' && !item.accountId && (
+                              <p className="text-xs text-amber-600 mt-1">⚠️ Select Opening Balance Equity (3900)</p>
+                            )}
                           </td>
 
                           {/* Quantity */}
-                          <td className="p-3">
-                            <Input
+                          <td className="px-2 py-3">
+                            <input
                               type="number"
                               min="0"
                               step="0.01"
                               value={item.quantity}
                               onChange={(e) => updateItem(item.id, 'quantity', parseFloat(e.target.value) || 0)}
                               required
-                              className="h-9 text-sm text-right"
+                              className="w-full px-2 py-2 text-sm text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                             />
                           </td>
 
                           {/* Unit Price */}
-                          <td className="p-3">
-                            <Input
+                          <td className="px-2 py-3">
+                            <input
                               type="number"
                               min="0"
                               step="0.01"
                               value={item.unitPrice}
                               onChange={(e) => updateItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
                               required
-                              className="h-9 text-sm text-right"
+                              className="w-full px-2 py-2 text-sm text-right border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                             />
                           </td>
 
                           {/* Tax Rate */}
-                          <td className="p-3">
+                          <td className="px-2 py-3">
                             <select
-                              value={item.taxAmount}
+                              value={item.taxRate || 0}
                               onChange={(e) => {
-                                const selectedRate = taxRates.find(r => r.rate?.toString() === e.target.value);
-                                if (selectedRate) {
-                                  const rate = parseFloat(selectedRate.rate) / 100;
-                                  const taxAmount = item.quantity * item.unitPrice * rate;
-                                  updateItem(item.id, 'taxAmount', taxAmount);
-                                } else {
-                                  updateItem(item.id, 'taxAmount', 0);
-                                }
+                                const selectedRateValue = parseFloat(e.target.value);
+                                updateItem(item.id, 'taxRate', selectedRateValue);
                               }}
-                              className="h-9 w-full rounded-md border border-gray-300 bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              className="w-full px-2 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                             >
                               <option value="0">No Tax (0%)</option>
                               {taxRates.map((rate) => (
@@ -898,12 +1046,12 @@ export default function NewBillPage() {
                           </td>
 
                           {/* Line Total */}
-                          <td className="p-3 text-right font-semibold text-gray-900">
-                            {formatCurrency(calculateLineTotal(item), currency)}
+                          <td className="px-2 py-3 text-right">
+                            <span className="text-sm font-medium">{formatCurrency(calculateLineTotal(item), currency)}</span>
                           </td>
 
                           {/* Remove Button */}
-                          <td className="p-3 text-center">
+                          <td className="px-1 py-3 text-center">
                             {items.length > 1 && (
                               <Button
                                 type="button"
@@ -921,77 +1069,72 @@ export default function NewBillPage() {
                     </tbody>
                   </table>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
-            {/* Notes */}
-            <Card className="shadow-sm">
-              <CardHeader className="bg-white border-b">
-                <CardTitle className="text-xl">Additional Notes</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6">
-              <textarea
-                value={formData.notes}
-                onChange={(e) => handleChange('notes', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                rows={4}
-                placeholder="Add any notes, special instructions, or payment terms related to this bill..."
-              />
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Right Sidebar - Sticky Summary */}
-          <div className="lg:col-span-1">
-            <div className="space-y-6 lg:sticky lg:top-6">
-              {/* Summary Card */}
-              <Card className="shadow-md bg-gradient-to-br from-blue-50 to-white border-blue-100">
-                <CardHeader className="bg-white border-b">
-                  <CardTitle className="text-lg">Summary</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  <div className="space-y-4">
+            {/* Summary & Actions */}
+            <div className="bg-white rounded-lg shadow-sm p-6 mt-6">
+              <h3 className="text-lg font-semibold mb-4">Summary</h3>
+              <div>
+                  <div className="space-y-3">
                     <div className="flex justify-between items-center py-2">
-                      <span className="text-gray-700">Subtotal:</span>
-                      <span className="text-lg font-semibold">{formatCurrency(calculateSubtotal(), currency)}</span>
+                      <span className="text-sm text-gray-700">Subtotal:</span>
+                      <span className={`${getAmountFontSize(formatCurrency(calculateSubtotal(), currency))} font-medium break-words`}>{formatCurrency(calculateSubtotal(), currency)}</span>
                     </div>
                     <div className="flex justify-between items-center py-2">
-                      <span className="text-gray-700">Tax:</span>
-                      <span className="text-lg font-semibold text-orange-600">{formatCurrency(calculateTaxTotal(), currency)}</span>
+                      <span className="text-sm text-gray-700">Tax:</span>
+                      <span className={`${getAmountFontSize(formatCurrency(calculateTaxTotal(), currency))} font-medium text-orange-600 break-words`}>{formatCurrency(calculateTaxTotal(), currency)}</span>
                     </div>
-                    <div className="flex justify-between items-center pt-4 pb-2 border-t-2 border-gray-300">
-                      <span className="text-gray-900 font-bold text-lg">Total:</span>
-                      <span className="text-2xl font-bold text-blue-600">{formatCurrency(calculateTotal(), currency)}</span>
+                    <div className="flex justify-between items-center pt-3 pb-2 border-t border-gray-200">
+                      <span className="text-base font-semibold">Total:</span>
+                      <span className={`${getAmountFontSize(formatCurrency(calculateTotal(), currency))} font-bold text-blue-600 break-words`}>{formatCurrency(calculateTotal(), currency)}</span>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
 
               {/* Action Buttons */}
-              <div className="space-y-3">
+              <div className="flex flex-wrap gap-3 mt-6">
                 <Button 
-                  type="submit"
-                  disabled={submitting} 
-                  className="w-full h-11 text-base font-semibold"
+                  type="button"
+                  onClick={(e) => handleSubmit(e, false)}
+                  disabled={submitting || submittingEfris} 
+                  className="px-6 py-2"
                 >
                   {submitting ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Creating...
+                      Saving...
                     </>
                   ) : (
-                    'Create Bill'
+                    'Save'
                   )}
                 </Button>
-                <Link href={`/${orgSlug}/accounts-payable/bills`} className="block">
-                  <Button type="button" variant="outline" className="w-full h-11">
+                {isUganda && efrisEnabled && (
+                  <Button 
+                    type="button"
+                    onClick={(e) => handleSubmit(e, true)}
+                    disabled={submitting || submittingEfris}
+                    className="px-6 py-2 bg-green-600 hover:bg-green-700"
+                  >
+                    {submittingEfris ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Submitting to EFRIS...
+                      </>
+                    ) : (
+                      'Save and add stock to EFRIS'
+                    )}
+                  </Button>
+                )}
+                <Link href={`/${orgSlug}/accounts-payable/bills`}>
+                  <Button type="button" variant="outline" className="px-6 py-2">
                     Cancel
                   </Button>
                 </Link>
               </div>
 
               {/* Help Info */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-6">
                 <p className="text-xs text-gray-700 leading-relaxed">
                   <span className="font-semibold text-blue-900">Tip:</span> The due date is automatically calculated based on vendor payment terms. You can adjust it manually if needed.
                 </p>
@@ -1000,6 +1143,7 @@ export default function NewBillPage() {
           </div>
         </form>
       </div>
+      
       {isVendorModalOpen && (
         <Modal
           isOpen={true}

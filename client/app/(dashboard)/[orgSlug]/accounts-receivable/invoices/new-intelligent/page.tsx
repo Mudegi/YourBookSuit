@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useOrganization } from '@/hooks/useOrganization';
 import { formatCurrency } from '@/lib/utils';
+import { EfrisFiscalInvoice } from '@/components/invoices/EfrisFiscalInvoice';
 
 interface Customer {
   id: string;
@@ -31,6 +32,8 @@ interface Product {
   unitPrice: number;
   quantityOnHand?: number;
   description?: string;
+  exciseDutyCode?: string | null;
+  goodsCategoryId?: string | null;
 }
 
 interface Service {
@@ -69,6 +72,9 @@ interface InvoiceLineItem {
   subtotal: number;
   taxAmount: number;
   total: number;
+  // EFRIS excise duty fields
+  exciseDutyCode?: string | null;
+  goodsCategoryId?: string | null;
 }
 
 interface ValidationResult {
@@ -108,6 +114,11 @@ export default function IntelligentInvoicePage() {
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState<InvoiceLineItem[]>([]);
   const [attachments, setAttachments] = useState<File[]>([]);
+  
+  // EFRIS fields
+  const [buyerType, setBuyerType] = useState<string>('1'); // Default to B2C
+  const [paymentMethod, setPaymentMethod] = useState<string>('102'); // Default to Cash
+  const [customerTin, setCustomerTin] = useState<string>(''); // For capturing TIN if needed
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -125,6 +136,9 @@ export default function IntelligentInvoicePage() {
   const [showRecurringSetup, setShowRecurringSetup] = useState(false);
   const [showCustomisation, setShowCustomisation] = useState(false);
   const [showQuickAddCustomer, setShowQuickAddCustomer] = useState(false);
+  const [showEfrisFiscalInvoice, setShowEfrisFiscalInvoice] = useState(false);
+  const [efrisFiscalData, setEfrisFiscalData] = useState<any>(null);
+  const [createdInvoiceId, setCreatedInvoiceId] = useState<string | null>(null);
   
   // Quick add customer form
   const [quickCustomerForm, setQuickCustomerForm] = useState({
@@ -244,7 +258,9 @@ export default function IntelligentInvoicePage() {
           sku: p.sku,
           unitPrice: p.sellingPrice || p.unitPrice || 0,
           quantityOnHand: p.quantityOnHand || p.quantityAvailable || 0,
-          description: p.description || ''
+          description: p.description || '',
+          exciseDutyCode: p.exciseDutyCode || null,
+          goodsCategoryId: p.goodsCategoryId || null,
         }));
         console.log('Products loaded:', formatted.length, formatted);
         setProducts(formatted);
@@ -384,9 +400,35 @@ export default function IntelligentInvoicePage() {
           // Exclusive or no tax: displayRate = unitPrice
           updated.unitPrice = updated.displayRate;
         }
-      } else if (updates.unitPrice !== undefined) {
-        // If unitPrice was updated directly, sync displayRate
+      } else if (updates.unitPrice !== undefined && updates.displayRate === undefined) {
+        // If unitPrice was updated directly (not via displayRate), sync displayRate
         updated.displayRate = updated.unitPrice || 0;
+      }
+      
+      // IMPORTANT: Recalculate displayRate when tax rate changes or when we need to apply tax method
+      // This ensures displayRate is always correct for the current tax calculation method
+      const shouldRecalculateDisplay = updates.taxRateId !== undefined || 
+                                        updates.unitPrice !== undefined ||
+                                        (!updated.displayRate && updated.unitPrice);
+      
+      if (shouldRecalculateDisplay) {
+        const selectedTaxRate = updated.taxRateId 
+          ? taxRates.find(tr => tr.id === updated.taxRateId)
+          : null;
+        
+        if (selectedTaxRate && taxCalculationMethod === 'INCLUSIVE' && updated.unitPrice) {
+          // Calculate tax-inclusive displayRate
+          if (selectedTaxRate.calculationType === 'PERCENTAGE') {
+            const taxRate = selectedTaxRate.rate / 100;
+            updated.displayRate = updated.unitPrice * (1 + taxRate);
+          } else if (selectedTaxRate.calculationType === 'FIXED_AMOUNT') {
+            const fixedTaxAmount = selectedTaxRate.fixedAmount || 0;
+            updated.displayRate = updated.unitPrice + (fixedTaxAmount / updated.quantity);
+          }
+        } else if (!selectedTaxRate || taxCalculationMethod === 'EXCLUSIVE') {
+          // For exclusive or no tax, displayRate = unitPrice
+          updated.displayRate = updated.unitPrice || 0;
+        }
       }
       
       // Import tax calculation logic
@@ -411,19 +453,6 @@ export default function IntelligentInvoicePage() {
           fixedTaxAmount = selectedTaxRate.fixedAmount || 0;
         }
       }
-      
-      // Calculate displayRate based on unitPrice and tax method
-      let displayRate = updated.unitPrice || 0;
-      if (selectedTaxRate && displayRate > 0 && isInclusive) {
-        // Inclusive: displayRate should include tax
-        if (selectedTaxRate.calculationType === 'PERCENTAGE') {
-          displayRate = displayRate * (1 + taxRate);
-        } else if (selectedTaxRate.calculationType === 'FIXED_AMOUNT') {
-          // For fixed amount, add per-unit tax
-          displayRate = displayRate + (fixedTaxAmount / updated.quantity);
-        }
-      }
-      // Exclusive: displayRate = unitPrice (no change needed)
       
       // Calculate discount amount based on discount type
       let discountAmount = 0;
@@ -465,7 +494,6 @@ export default function IntelligentInvoicePage() {
 
       return {
         ...updated,
-        displayRate: displayRate,
         subtotal: lineCalc.lineSubtotal,
         discount: lineCalc.lineDiscount,
         taxAmount: selectedTaxRate ? lineCalc.lineTax : 0,
@@ -584,12 +612,27 @@ export default function IntelligentInvoicePage() {
       }
     }
 
+    // Calculate displayRate based on current tax method
+    const currentItem = items.find(i => i.id === itemId);
+    let displayRate = unitPrice;
+    
+    if (currentItem?.taxRateId && taxCalculationMethod === 'INCLUSIVE') {
+      const selectedTaxRate = taxRates.find(tr => tr.id === currentItem.taxRateId);
+      if (selectedTaxRate && selectedTaxRate.calculationType === 'PERCENTAGE') {
+        const taxRate = selectedTaxRate.rate / 100;
+        displayRate = unitPrice * (1 + taxRate);
+      }
+    }
+
     updateLineItem(itemId, {
       productId,
       description: product.name,
       unitPrice,
+      displayRate,
       listPrice: product.unitPrice,
       availableStock,
+      exciseDutyCode: product.exciseDutyCode,
+      goodsCategoryId: product.goodsCategoryId,
     });
 
     setShowProductSearch(null);
@@ -600,10 +643,23 @@ export default function IntelligentInvoicePage() {
     const service = services.find(s => s.id === serviceId);
     if (!service) return;
 
+    // Calculate displayRate based on current tax method
+    const currentItem = items.find(i => i.id === itemId);
+    let displayRate = service.rate;
+    
+    if (currentItem?.taxRateId && taxCalculationMethod === 'INCLUSIVE') {
+      const selectedTaxRate = taxRates.find(tr => tr.id === currentItem.taxRateId);
+      if (selectedTaxRate && selectedTaxRate.calculationType === 'PERCENTAGE') {
+        const taxRate = selectedTaxRate.rate / 100;
+        displayRate = service.rate * (1 + taxRate);
+      }
+    }
+
     updateLineItem(itemId, {
       serviceId,
       description: service.name,
       unitPrice: service.rate,
+      displayRate,
     });
 
     setShowProductSearch(null);
@@ -869,12 +925,19 @@ export default function IntelligentInvoicePage() {
           reference,
           notes,
           attachments: attachmentUrls,
+          // EFRIS fields
+          buyerType: efrisEnabled ? buyerType : undefined,
+          paymentMethod: efrisEnabled ? paymentMethod : undefined,
+          customerTin: efrisEnabled ? (customerTin || selectedCustomer?.taxIdNumber) : undefined,
           items: items.map(item => ({
             productId: item.productId,
             serviceId: item.serviceId,
             description: item.description,
             quantity: item.quantity,
-            unitPrice: item.unitPrice,
+            // When INCLUSIVE, send displayRate (user-entered tax-inclusive price)
+            // When EXCLUSIVE, send unitPrice (tax-exclusive price)
+            // Backend will extract tax from displayRate when taxCalculationMethod is INCLUSIVE
+            unitPrice: taxCalculationMethod === 'INCLUSIVE' ? item.displayRate : item.unitPrice,
             discount: item.discount,
             discountType: item.discountType,
             taxRateId: item.taxRateId,
@@ -903,6 +966,17 @@ export default function IntelligentInvoicePage() {
               router.push(`/${orgSlug}/accounts-receivable/invoices/${invoiceId}`);
               return;
             }
+            
+            // Get the fiscal invoice data from response
+            const efrisData = await efrisRes.json();
+            console.log('[Invoice Creation] EFRIS fiscal data received:', efrisData);
+            
+            // Show the EFRIS fiscal invoice immediately
+            setEfrisFiscalData(efrisData);
+            setCreatedInvoiceId(invoiceId);
+            setShowEfrisFiscalInvoice(true);
+            setLoading(false);
+            return; // Don't navigate yet, show the fiscal receipt first
           } catch (efrisErr) {
             alert('Invoice created but EFRIS fiscalization failed');
             router.push(`/${orgSlug}/accounts-receivable/invoices/${invoiceId}`);
@@ -1086,6 +1160,84 @@ export default function IntelligentInvoicePage() {
             )}
           </div>
 
+          {/* EFRIS Buyer Classification & Payment Method */}
+          {efrisEnabled && selectedCustomer && (
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">EFRIS Tax Compliance</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Buyer Type <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={buyerType}
+                    onChange={(e) => {
+                      setBuyerType(e.target.value);
+                      // Clear TIN if switching to B2C
+                      if (e.target.value === '1') {
+                        setCustomerTin('');
+                      }
+                    }}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="1">B2C (Business to Consumer)</option>
+                    <option value="0">B2B (Business to Business - TIN required)</option>
+                    <option value="3">B2G (Business to Government - TIN required)</option>
+                    <option value="2">Foreigner (Non-resident)</option>
+                  </select>
+                  <p className="mt-1 text-xs text-gray-600">
+                    {buyerType === '0' && 'Business customer - TIN is mandatory'}
+                    {buyerType === '1' && 'Retail/walk-in customer - TIN optional'}
+                    {buyerType === '2' && 'Non-resident customer'}
+                    {buyerType === '3' && 'Government entity - TIN is mandatory'}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Payment Method <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="102">Cash</option>
+                    <option value="101">Credit (Invoice)</option>
+                    <option value="105">Mobile Money</option>
+                    <option value="106">Visa/Master Card</option>
+                    <option value="108">POS</option>
+                    <option value="107">EFT (Bank Transfer)</option>
+                    <option value="103">Cheque</option>
+                    <option value="104">Demand Draft</option>
+                    <option value="109">RTGS</option>
+                    <option value="110">Swift Transfer</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* TIN field - required for B2B and B2G */}
+              {(buyerType === '0' || buyerType === '3') && (
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Customer TIN <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={customerTin || selectedCustomer?.taxIdNumber || ''}
+                    onChange={(e) => setCustomerTin(e.target.value)}
+                    placeholder="Enter customer TIN number"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                  <p className="mt-1 text-xs text-red-600">
+                    TIN is required for {buyerType === '0' ? 'business' : 'government'} customers per EFRIS regulations
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Invoice Details */}
           <div className="grid grid-cols-3 gap-4 mb-6">
             <div>
@@ -1198,7 +1350,12 @@ export default function IntelligentInvoicePage() {
                       <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700 uppercase" style={{ width: '40px' }}>#</th>
                       <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Product/Service</th>
                       <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700 uppercase" style={{ width: '70px' }}>Qty</th>
-                      <th className="px-2 py-3 text-right text-xs font-semibold text-gray-700 uppercase" style={{ width: '140px' }}>Rate</th>
+                      <th className="px-2 py-3 text-right text-xs font-semibold text-gray-700 uppercase" style={{ width: '140px' }}>
+                        Rate
+                        {taxCalculationMethod === 'INCLUSIVE' && (
+                          <span className="ml-1 text-[10px] font-normal text-blue-600">(incl. tax)</span>
+                        )}
+                      </th>
                       <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700 uppercase" style={{ width: '95px' }}>Disc</th>
                       <th className="px-2 py-3 text-right text-xs font-semibold text-gray-700 uppercase" style={{ width: '140px' }}>Amount</th>
                       <th className="px-2 py-3 text-left text-xs font-semibold text-gray-700 uppercase" style={{ width: '160px' }}>Tax</th>
@@ -1959,6 +2116,22 @@ export default function IntelligentInvoicePage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* EFRIS Fiscal Invoice Modal */}
+      {showEfrisFiscalInvoice && efrisFiscalData && (
+        <div className="fixed inset-0 z-50 bg-white overflow-auto">
+          <EfrisFiscalInvoice
+            fiscalData={efrisFiscalData}
+            onClose={() => {
+              setShowEfrisFiscalInvoice(false);
+              // Navigate to the invoice detail page
+              if (createdInvoiceId) {
+                router.push(`/${orgSlug}/accounts-receivable/invoices/${createdInvoiceId}`);
+              }
+            }}
+          />
         </div>
       )}
     </div>

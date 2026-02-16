@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Alert } from '@/components/ui/alert';
 import Loading from '@/components/ui/loading';
 import { useOrganization } from '@/hooks/useOrganization';
+import { useAuth } from '@/hooks/useAuth';
 import { formatCurrency } from '@/lib/utils';
 import { Loader2, ArrowLeft, Plus, Trash2 } from 'lucide-react';
 
@@ -44,7 +45,8 @@ export default function EditBillPage() {
   const router = useRouter();
   const orgSlug = params.orgSlug as string;
   const billId = params.id as string;
-  const { currency } = useOrganization();
+  const { currency, organization } = useOrganization();
+  const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,58 +70,65 @@ export default function EditBillPage() {
   const [items, setItems] = useState<BillItemForm[]>([]);
 
   useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        const [billRes, accountsRes, productsRes] = await Promise.all([
-          fetch(`/api/orgs/${orgSlug}/bills/${billId}`),
-          fetch(`/api/orgs/${orgSlug}/chart-of-accounts`),
-          fetch(`/api/${orgSlug}/inventory/products`),
-        ]);
-        if (!billRes.ok || !accountsRes.ok || !productsRes.ok) {
-          throw new Error('Failed to load bill data');
+    if (organization?.id && user?.id) {
+      (async () => {
+        try {
+          setLoading(true);
+          const [billRes, accountsRes, productsRes] = await Promise.all([
+            fetch(`/api/orgs/${orgSlug}/bills/${billId}`, {
+              headers: {
+                'x-organization-id': organization?.id || '',
+                'x-user-id': user?.id || '',
+              },
+            }),
+            fetch(`/api/orgs/${orgSlug}/chart-of-accounts`),
+            fetch(`/api/${orgSlug}/inventory/products`),
+          ]);
+          if (!billRes.ok || !accountsRes.ok || !productsRes.ok) {
+            throw new Error('Failed to load bill data');
+          }
+          const bill = await billRes.json();
+          const accountsData = await accountsRes.json();
+          const productsData = await productsRes.json();
+
+          const accountsList: Account[] = Array.isArray(accountsData.accounts)
+            ? accountsData.accounts
+            : Array.isArray(accountsData.data)
+            ? accountsData.data
+            : [];
+          setExpenseAccounts(accountsList.filter((a: any) => a.accountType === 'EXPENSE' && a.isActive !== false));
+
+          const productsList: Product[] = productsData.success && productsData.data ? productsData.data : [];
+          setProducts(productsList);
+
+          setFormData({
+            vendorId: bill.vendor?.id || '',
+            billDate: bill.billDate ? new Date(bill.billDate).toISOString().split('T')[0] : '',
+            dueDate: bill.dueDate ? new Date(bill.dueDate).toISOString().split('T')[0] : '',
+            billNumber: bill.billNumber || '',
+            referenceNumber: bill.referenceNumber || '',
+            notes: bill.notes || '',
+          });
+
+          setItems(
+            (bill.items || []).map((it: any) => ({
+              id: it.id,
+              productId: it.productId || undefined,
+              name: it.description || '',
+              quantity: Number(it.quantity) || 0,
+              unitPrice: Number(it.unitPrice) || 0,
+              accountId: it.account?.id || undefined,
+              taxAmount: Number(it.taxAmount) || 0,
+            }))
+          );
+        } catch (err: any) {
+          setError(err.message || 'Failed to load');
+        } finally {
+          setLoading(false);
         }
-        const bill = await billRes.json();
-        const accountsData = await accountsRes.json();
-        const productsData = await productsRes.json();
-
-        const accountsList: Account[] = Array.isArray(accountsData.accounts)
-          ? accountsData.accounts
-          : Array.isArray(accountsData.data)
-          ? accountsData.data
-          : [];
-        setExpenseAccounts(accountsList.filter((a: any) => a.accountType === 'EXPENSE' && a.isActive !== false));
-
-        const productsList: Product[] = productsData.success && productsData.data ? productsData.data : [];
-        setProducts(productsList);
-
-        setFormData({
-          vendorId: bill.vendor?.id || '',
-          billDate: bill.billDate ? new Date(bill.billDate).toISOString().split('T')[0] : '',
-          dueDate: bill.dueDate ? new Date(bill.dueDate).toISOString().split('T')[0] : '',
-          billNumber: bill.billNumber || '',
-          referenceNumber: bill.referenceNumber || '',
-          notes: bill.notes || '',
-        });
-
-        setItems(
-          (bill.items || []).map((it: any) => ({
-            id: it.id,
-            productId: it.productId || undefined,
-            name: it.description || '',
-            quantity: Number(it.quantity) || 0,
-            unitPrice: Number(it.unitPrice) || 0,
-            accountId: it.account?.id || undefined,
-            taxAmount: Number(it.taxAmount) || 0,
-          }))
-        );
-      } catch (err: any) {
-        setError(err.message || 'Failed to load');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [orgSlug, billId]);
+      })();
+    }
+  }, [orgSlug, billId, organization?.id, user?.id]);
 
   function updateItem(id: string, field: keyof BillItemForm, value: any) {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, [field]: value } : it)));
@@ -187,7 +196,11 @@ export default function EditBillPage() {
 
       const res = await fetch(`/api/orgs/${orgSlug}/bills/${billId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-organization-id': organization?.id || '',
+          'x-user-id': user?.id || '',
+        },
         body: JSON.stringify(payload),
       });
       if (!res.ok) {

@@ -29,7 +29,7 @@ export default function EfrisSettingsPage() {
   
   const [formData, setFormData] = useState<EfrisConfig>({
     provider: 'EFRIS',
-    apiEndpoint: 'http://localhost:8001/api/external/efris',
+    apiEndpoint: 'https://efrisintegration.nafacademy.com/api/external/efris',
     efrisApiKey: '',
     efrisApiSecret: '',
     efrisDeviceNo: '',

@@ -15,7 +15,7 @@ export async function POST(
     const { organizationId } = await requireAuth(params.orgSlug);
     const billId = params.id;
 
-    // Fetch the bill with vendor
+    // Fetch the bill with items
     const bill = await prisma.bill.findFirst({
       where: {
         id: billId,
@@ -23,6 +23,11 @@ export async function POST(
       },
       include: {
         vendor: true,
+        items: {
+          include: {
+            product: true,
+          },
+        },
       },
     });
 
@@ -66,22 +71,63 @@ export async function POST(
       enabled: config.isActive,
     });
 
-    // Prepare purchase order data for EFRIS
-    const efrisResponse = await efrisService.submitPurchaseOrder({
-      po_number: bill.billNumber || `PO-${bill.id}`,
-      vendor_name: bill.vendor.name,
-      vendor_tin: (bill.vendor as any).taxId || '',
-      order_date: bill.billDate.toISOString().split('T')[0],
-      items: [],
-      total_amount: bill.total?.toNumber() || 0,
-    });
+    // Prepare stock increase data for EFRIS (goods receipt)
+    // Must fetch products to get their stored EFRIS item codes
+    const billItemsWithProducts = await Promise.all(
+      bill.items.map(async (item: any) => {
+        let efrisItemCode = item.description || 'UNKNOWN';
+        
+        if (item.productId) {
+          const product = await prisma.product.findUnique({
+            where: { id: item.productId },
+            select: { efrisItemCode: true, sku: true, name: true, description: true },
+          });
+          
+          if (product?.efrisItemCode) {
+            // Use the stored EFRIS item code from product registration
+            efrisItemCode = product.efrisItemCode;
+          } else if (product) {
+            // Fallback: use product description or name (same logic as registration)
+            efrisItemCode = (product.description && product.description.trim())
+              ? product.description.trim()
+              : product.name || 'UNKNOWN';
+          }
+        }
+        
+        return {
+          item_code: efrisItemCode,
+          quantity: parseFloat(item.quantity?.toString() || '0'),
+          unit_price: parseFloat(item.unitPrice?.toString() || '0'),
+          remarks: item.description || 'Purchase from supplier',
+        };
+      })
+    );
 
-    // Update bill with EFRIS submission info if needed
-    // (You might want to add fields to store EFRIS PO ID)
+    const stockIncreaseData = {
+      stock_movement_date: bill.billDate.toISOString().split('T')[0],
+      supplier_name: bill.vendor.companyName,
+      supplier_tin: bill.vendor.taxId || '',
+      stock_in_type: (bill as any).stockInType || \"102\", // Use bill's stockInType or default to Local Purchase
+      items: billItemsWithProducts,
+      remarks: `Bill ${bill.billNumber} - Purchase from ${bill.vendor.companyName}`,
+    };
+
+    // Submit stock increase to EFRIS
+    const efrisResponse = await efrisService.stockIncrease(stockIncreaseData);
+
+    // Update bill with EFRIS submission info
+    await prisma.bill.update({
+      where: { id: bill.id },
+      data: {
+        efrisSubmitted: true,
+        efrisStatus: efrisResponse.success ? 'SUBMITTED' : 'FAILED',
+        efrisReference: efrisResponse.message,
+      },
+    });
 
     return NextResponse.json({
       success: true,
-      message: 'Purchase order submitted to EFRIS successfully',
+      message: 'Stock increase submitted to EFRIS successfully',
       efrisResponse,
     });
   } catch (error: any) {

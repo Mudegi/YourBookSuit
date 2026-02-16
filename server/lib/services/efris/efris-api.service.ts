@@ -8,14 +8,45 @@
  */
 
 export interface EfrisInvoiceItem {
-  item_name: string;
-  item_code?: string;
-  quantity: number;
-  unit_price: number;
-  total: number;
-  tax_rate: number;
-  tax_amount: number;
-  discount?: number;
+  item: string;                     // Product display name
+  itemCode: string;                 // EFRIS registered item code
+  qty: string;                      // Quantity as string
+  unitOfMeasure: string;            // Unit code (101, 102, etc.)
+  unitPrice: string;                // Unit price as string
+  total: string;                    // Line total as string
+  taxRate: string;                  // Tax rate as string (e.g., "0.18")
+  tax: string;                      // Tax amount as string
+  orderNumber: string;              // Sequential order number starting from "1"
+  discountFlag: string;             // "1"=has discount, "2"=no discount
+  deemedFlag: string;               // "2"=not deemed (standard)
+  exciseFlag: string;               // "1"=has excise, "2"=no excise
+  goodsCategoryId: string;          // Commodity code (SKU)
+  goodsCategoryName?: string;       // Category display name
+  vatApplicableFlag: string;        // "1"=VAT applies, "0"=no VAT
+  discountTotal?: string;           // Discount amount (if discountFlag="1")
+  discountTaxRate?: string;         // Discount tax rate (if discountFlag="1")
+  // Excise fields (if exciseFlag="1")
+  categoryId?: string;              // Excise duty code
+  categoryName?: string;            // "Excise Duty"
+  exciseRate?: string;              // Excise rate as string
+  exciseRule?: string;              // "1"=percentage, "2"=quantity
+  exciseTax?: string;               // Excise tax amount as string
+  exciseUnit?: string;              // Excise unit code
+  exciseCurrency?: string;          // "UGX"
+  exciseRateName?: string;          // Display name for excise rate
+  pack?: string;                    // Package value (if exciseRule="2")
+  stick?: string;                   // Piece value (if exciseRule="2")
+}
+
+export interface EfrisTaxDetail {
+  taxCategoryCode: string;          // "01"=VAT, "05"=Excise
+  netAmount: string;                // Net amount for this tax category
+  taxRate: string;                  // Tax rate as string ("0.18" for VAT, "0" for fixed excise)
+  taxAmount: string;                // Tax amount for this category
+  grossAmount: string;              // Gross amount for this category
+  taxRateName?: string;             // Display name for the tax
+  exciseUnit?: string;              // Excise unit (for excise categories)
+  exciseCurrency?: string;          // Excise currency (for excise categories)
 }
 
 export interface EfrisInvoiceRequest {
@@ -26,11 +57,13 @@ export interface EfrisInvoiceRequest {
   customer_address?: string;
   customer_email?: string;
   customer_phone?: string;
+  buyer_type: string;               // "0"=Business, "1"=Individual, "2"=Government
+  payment_method: string;           // Payment mode code (101=Cash, 102=Credit, etc.)
+  currency: string;                 // "UGX"
   items: EfrisInvoiceItem[];
+  tax_details: EfrisTaxDetail[];    // Tax breakdown by category
   total_amount: number;
   total_tax: number;
-  currency: string;
-  payment_mode?: string;
   notes?: string;
 }
 

@@ -220,7 +220,6 @@ export class BillService {
           transactionId: transaction.id,
           items: {
             create: data.items.map((item, index) => ({
-              lineNumber: index + 1,
               description: item.description,
               quantity: item.quantity.toString(),
               unitPrice: item.unitPrice.toString(),

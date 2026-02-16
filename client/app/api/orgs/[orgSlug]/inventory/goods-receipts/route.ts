@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { requireOrgMembership } from '@/lib/access';
 import prisma from '@/lib/prisma';
-import { EfrisApiService } from '@/lib/services/efris/efris-api.service';
 import { GoodsReceiptService } from '@/services/procurement/goods-receipt.service';
 
 // GET /api/orgs/[orgSlug]/inventory/goods-receipts
@@ -78,7 +77,6 @@ export async function POST(
       landedCosts,
       postToGL = true,
       createAPBill = false,
-      submitToEfris = false,
       assetAccountId,
       apAccountId,
     } = body;
@@ -137,96 +135,13 @@ export async function POST(
         } : undefined,
         postToGL,
         createAPBill,
-        submitToEfris: false, // Handle EFRIS separately
       },
       user.id
     );
 
-    // Submit to EFRIS if requested
-    let efrisResponse = null;
-    if (submitToEfris) {
-      try {
-        const efrisConfig = await prisma.eInvoiceConfig.findUnique({
-          where: { organizationId: org.id },
-        });
-
-        if (!efrisConfig || !efrisConfig.isActive) {
-          return NextResponse.json(
-            {
-              success: true,
-              data: result,
-              warning: 'EFRIS integration is not configured or not active',
-            },
-            { status: 200 }
-          );
-        }
-
-        const efrisService = new EfrisApiService(
-          efrisConfig.apiEndpoint,
-          efrisConfig.apiKey,
-          efrisConfig.tin
-        );
-
-        const vendor = await prisma.vendor.findUnique({
-          where: { id: vendorId },
-        });
-
-        // Prepare EFRIS payload
-        const productsData = await Promise.all(
-          items.map(async (item: any) => {
-            const product = await prisma.product.findUnique({
-              where: { id: item.productId },
-            });
-            return {
-              productId: product?.sku || product?.id || '',
-              productName: product?.name || '',
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              taxRate: item.taxRate || 0,
-            };
-          })
-        );
-
-        const efrisPayload = {
-          po_number: result.goodsReceipt.receiptNumber,
-          po_date: receiptDate,
-          vendor_name: vendor?.companyName || vendor?.contactName || '',
-          vendor_tin: vendor?.taxIdNumber || '',
-          total_amount: Number(result.goodsReceipt.total),
-          currency: result.goodsReceipt.currency || 'UGX',
-          items: productsData,
-        };
-
-        efrisResponse = await efrisService.submitPurchaseOrder(efrisPayload);
-
-        // Update goods receipt with EFRIS info
-        await prisma.goodsReceipt.update({
-          where: { id: result.goodsReceipt.id },
-          data: {
-            efrisSubmitted: true,
-            efrisStatus: 'SUBMITTED',
-            efrisReference: efrisResponse.reference_number || null,
-          },
-        });
-      } catch (efrisError: any) {
-        console.error('EFRIS submission error:', efrisError);
-        return NextResponse.json(
-          {
-            success: true,
-            data: result,
-            warning: `Goods receipt created but EFRIS submission failed: ${efrisError.message}`,
-          },
-          { status: 200 }
-        );
-      }
-    }
-
     return NextResponse.json({
       success: true,
-      data: {
-        ...result,
-        efrisResponse,
-      },
+      data: result,
     });
   } catch (error: any) {
     console.error('Error creating goods receipt:', error);

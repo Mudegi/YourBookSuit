@@ -14,7 +14,7 @@ export default function NewCreditNotePage() {
   const router = useRouter();
   const orgSlug = params.orgSlug as string;
   const { organization } = useOrganization();
-  const isUganda = organization?.homeCountry === 'UG' || organization?.homeCountry === 'UGANDA';
+  const isUganda = organization?.homeCountry?.toUpperCase() === 'UG' || organization?.homeCountry?.toUpperCase() === 'UGANDA';
 
   const [loading, setLoading] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -34,8 +34,14 @@ export default function NewCreditNotePage() {
 
   useEffect(() => { 
     fetchCustomers();
-    checkEfrisConfig();
   }, []);
+  
+  useEffect(() => {
+    if (organization) {
+      checkEfrisConfig();
+    }
+  }, [organization]);
+  
   useEffect(() => { if (formData.customerId) fetchInvoices(); }, [formData.customerId]);
 
   const checkEfrisConfig = async () => {
@@ -278,7 +284,7 @@ export default function NewCreditNotePage() {
               disabled={loading} 
               className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 flex items-center gap-2"
             >
-              <Save className="w-4 h-4" /> {loading ? 'Saving...' : 'Save and Send to EFRIS'}
+              <Save className="w-4 h-4" /> {loading ? 'Saving...' : 'Save and apply to EFRIS'}
             </button>
           )}
         </div>

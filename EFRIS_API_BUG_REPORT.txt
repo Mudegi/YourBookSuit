@@ -1,0 +1,172 @@
+================================================================================
+URGENT - EFRIS API Bug Report
+================================================================================
+
+To: EFRIS Integration API Development Team
+Date: February 13, 2026
+Priority: HIGH - BLOCKING PRODUCTION
+
+================================================================================
+ISSUE SUMMARY
+================================================================================
+
+Endpoint: POST /api/external/efris/submit-invoice
+Error: HTTP 500 Internal Server Error
+Message: {"detail":"Internal error: 'Company' object has no attribute 'address'"}
+
+================================================================================
+WHAT'S HAPPENING
+================================================================================
+
+When processing invoice submissions, your backend code is trying to access 
+company.address but the Company database model/object doesn't have an 
+'address' field/attribute.
+
+The API identifies the company from the API key (X-API-Key, X-API-Secret), 
+then tries to extract company details to send to EFRIS. Somewhere in your 
+code, you're accessing company.address which doesn't exist.
+
+================================================================================
+REPRODUCTION STEPS
+================================================================================
+
+1. Authenticate with valid API credentials
+2. Send POST request to /api/external/efris/submit-invoice
+3. Request body (minimal example):
+   {
+     "invoice_number": "INV-2026-0001",
+     "invoice_date": "2026-02-13",
+     "currency": "UGX",
+     "buyer_type": "1",
+     "customer_name": "Test Customer",
+     "items": [
+       {
+         "item": "Test Product",
+         "itemCode": "TEST-001",
+         "qty": "1",
+         "unitPrice": "1000.00",
+         "taxRate": "18"
+       }
+     ],
+     "payment_method": "102"
+   }
+4. Receive HTTP 500 error
+
+================================================================================
+REQUIRED FIXES
+================================================================================
+
+OPTION 1 - Add Missing Field (RECOMMENDED):
+-------------------------------------------
+
+Add 'address' field to your Company model:
+
+Python/Django Example:
+```python
+class Company(models.Model):
+    name = models.CharField(max_length=255)
+    tin = models.CharField(max_length=50)
+    address = models.TextField(blank=True, null=True)  # ADD THIS LINE
+    phone = models.CharField(max_length=50, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+    # ... other fields
+```
+
+After adding the field:
+1. Create database migration
+2. Run migration
+3. Update existing company records with address data
+
+
+OPTION 2 - Handle Missing Attribute Gracefully:
+------------------------------------------------
+
+In your invoice submission handler, wherever you access company.address:
+
+INSTEAD OF (will crash):
+```python
+company_address = company.address  # ❌
+```
+
+USE ONE OF THESE (safe):
+```python
+# Method 1: getattr with default
+company_address = getattr(company, 'address', '') or ''
+
+# Method 2: hasattr check
+company_address = company.address if hasattr(company, 'address') else ''
+
+# Method 3: try/except
+try:
+    company_address = company.address
+except AttributeError:
+    company_address = ''
+```
+
+================================================================================
+EXPECTED BEHAVIOR AFTER FIX
+================================================================================
+
+1. API should retrieve company details from API key credentials
+2. If company has address field: use it
+3. If company has no address or field doesn't exist: use empty string
+4. Invoice submission should succeed and return:
+   {
+     "success": true,
+     "fdn": "1014409555027...",
+     "verification_code": "ABC123...",
+     "qr_code": "base64_encoded_qr...",
+     "invoice_number": "INV-2026-0001",
+     "fiscalized_at": "2026-02-13T10:30:00"
+   }
+
+================================================================================
+TEST VERIFICATION
+================================================================================
+
+After implementing the fix, please test with:
+
+1. Company WITH address set
+2. Company WITHOUT address (null/empty)
+3. Multiple invoice submissions
+4. Different buyer types (B2B, B2C)
+
+Confirm all scenarios return HTTP 200 with FDN, not HTTP 500.
+
+================================================================================
+IMPACT
+================================================================================
+
+This bug is currently BLOCKING:
+- All invoice fiscalization for Custom ERP clients
+- EFRIS compliance for active businesses
+- Production revenue processing
+
+Estimated affected users: ALL users attempting invoice submission
+
+================================================================================
+ADDITIONAL INFORMATION
+================================================================================
+
+Error Stack Trace Location:
+- File: [Your backend invoice handler]
+- Function: [Invoice submission function]
+- Line: [Where company.address is accessed]
+
+If you need:
+- Full error stack trace
+- Sample company data
+- Additional test cases
+- API key for testing
+
+Please contact immediately.
+
+================================================================================
+CONTACT
+================================================================================
+
+Reporter: [Your Name/Company]
+API Key: [Your API Key - if safe to include]
+Environment: Production (https://efrisintegration.nafacademy.com)
+
+================================================================================
