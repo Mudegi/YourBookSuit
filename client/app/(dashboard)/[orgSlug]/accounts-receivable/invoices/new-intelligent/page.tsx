@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useOrganization } from '@/hooks/useOrganization';
 import { formatCurrency } from '@/lib/utils';
-import { EfrisFiscalInvoice } from '@/components/invoices/EfrisFiscalInvoice';
+import EfrisInvoiceDisplay from '@/components/efris/EfrisInvoiceDisplay';
 
 interface Customer {
   id: string;
@@ -971,8 +971,8 @@ export default function IntelligentInvoicePage() {
             const efrisData = await efrisRes.json();
             console.log('[Invoice Creation] EFRIS fiscal data received:', efrisData);
             
-            // Show the EFRIS fiscal invoice immediately
-            setEfrisFiscalData(efrisData);
+            // Show the EFRIS fiscal invoice immediately using the full response data
+            setEfrisFiscalData(efrisData.fullEfrisResponse || efrisData);
             setCreatedInvoiceId(invoiceId);
             setShowEfrisFiscalInvoice(true);
             setLoading(false);
@@ -2121,17 +2121,46 @@ export default function IntelligentInvoicePage() {
 
       {/* EFRIS Fiscal Invoice Modal */}
       {showEfrisFiscalInvoice && efrisFiscalData && (
-        <div className="fixed inset-0 z-50 bg-white overflow-auto">
-          <EfrisFiscalInvoice
-            fiscalData={efrisFiscalData}
-            onClose={() => {
-              setShowEfrisFiscalInvoice(false);
-              // Navigate to the invoice detail page
-              if (createdInvoiceId) {
-                router.push(`/${orgSlug}/accounts-receivable/invoices/${createdInvoiceId}`);
-              }
-            }}
-          />
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            {/* Header */}
+            <div className="bg-white border-b px-6 py-4 flex justify-between items-center">
+              <h2 className="text-xl font-semibold text-gray-900">EFRIS Fiscalized Invoice</h2>
+              <button 
+                onClick={() => {
+                  setShowEfrisFiscalInvoice(false);
+                  // Navigate to the invoice detail page
+                  if (createdInvoiceId) {
+                    router.push(`/${orgSlug}/accounts-receivable/invoices/${createdInvoiceId}`);
+                  }
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            {/* EFRIS Invoice Display */}
+            <div className="overflow-y-auto max-h-[calc(90vh-80px)] p-6">
+              <EfrisInvoiceDisplay data={efrisFiscalData} />
+            </div>
+            
+            {/* Footer */}
+            <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3 border-t">
+              <button
+                onClick={() => {
+                  setShowEfrisFiscalInvoice(false);
+                  // Navigate to the invoice detail page
+                  if (createdInvoiceId) {
+                    router.push(`/${orgSlug}/accounts-receivable/invoices/${createdInvoiceId}`);
+                  }
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Continue to Invoice Details
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

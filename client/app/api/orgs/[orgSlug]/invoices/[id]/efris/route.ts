@@ -487,6 +487,8 @@ export async function POST(
       qrCode: efrisResponse.fiscal_data?.qr_code || efrisResponse.qr_code,
       fiscalizedAt: efrisResponse.fiscalized_at,
       invoiceNumber: invoice.invoiceNumber,
+      // Include the full EFRIS response for display purposes
+      fullEfrisResponse: efrisResponse,
     });
 
   } catch (error: any) {

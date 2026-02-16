@@ -18,7 +18,6 @@ import {
 import { useOrganization } from '@/hooks/useOrganization';
 import { formatCurrency } from '@/lib/utils';
 import { EfrisStatusBadge, EfrisStatusDetails } from '@/components/efris/EfrisStatus';
-import EfrisInvoiceDisplay from '@/components/efris/EfrisInvoiceDisplay';
 
 interface PaymentAllocation {
   id: string;
@@ -53,7 +52,6 @@ interface Invoice {
   efrisQRCode: string | null;
   eInvoiceStatus: string | null;
   eInvoiceSubmittedAt: string | null;
-  eInvoiceResponse: any | null;
   // Optional transaction field
   transaction?: {
     transactionDate: string;
@@ -335,19 +333,6 @@ export default function InvoiceDetailsPage() {
         verificationCode={invoice.efrisVerificationCode}
         submittedAt={invoice.eInvoiceSubmittedAt}
       />
-
-      {/* EFRIS Invoice Details - Show complete fiscalized invoice */}
-      {invoice.eInvoiceStatus === 'ACCEPTED' && invoice.eInvoiceResponse && (
-        <div className="bg-white rounded-lg shadow">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">EFRIS Fiscalized Invoice</h2>
-            <p className="text-sm text-gray-600">Complete invoice as submitted to Uganda Revenue Authority</p>
-          </div>
-          <div className="p-0">
-            <EfrisInvoiceDisplay data={invoice.eInvoiceResponse} />
-          </div>
-        </div>
-      )}
 
       {/* Payment Summary */}
       {invoice.payments && invoice.payments.length > 0 && (
