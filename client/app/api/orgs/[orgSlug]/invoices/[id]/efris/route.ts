@@ -119,6 +119,34 @@ export async function POST(
       testMode: credentials?.efrisTestMode ?? efrisConfig.testMode ?? true,
     });
 
+    // Pre-compute excise data for each invoice item from Product model (DB-registered EFRIS data)
+    // This makes excise amounts accessible in items, tax_details, and summary sections
+    const itemExciseData = invoice.items.map((item) => {
+      const exciseDutyCode = item.product?.exciseDutyCode;
+      if (!exciseDutyCode) {
+        return { hasExcise: false, exciseTax: 0, exciseRate: 0, exciseRule: '1', exciseDutyCode: '', exciseUnit: '' };
+      }
+
+      const quantity = parseFloat(item.quantity.toString());
+      const netAmount = parseFloat(item.netAmount?.toString() || '0');
+      const exciseRate = parseFloat(item.product?.exciseRate?.toString() || '0');
+      const exciseRule = item.product?.exciseRule || '1';
+      const exciseUnit = item.product?.exciseUnit || '102';
+
+      let exciseTax = 0;
+      if (exciseRule === '1') {
+        // Percentage-based excise
+        exciseTax = netAmount * exciseRate;
+      } else if (exciseRule === '2') {
+        // Quantity-based excise
+        const pack = parseFloat(item.product?.pack?.toString() || '1');
+        const stick = parseFloat(item.product?.stick?.toString() || '1');
+        exciseTax = quantity * exciseRate * pack * stick;
+      }
+
+      return { hasExcise: true, exciseTax, exciseRate, exciseRule, exciseDutyCode, exciseUnit };
+    });
+
     // Build complete EFRIS invoice payload (T109 format)
     const efrisInvoiceData = {
       invoice_number: invoice.invoiceNumber,
@@ -274,9 +302,9 @@ export async function POST(
           item.product?.unitOfMeasure?.name
         );
 
-        // Check if item has excise duty
-        const exciseDutyCode = item.exciseDutyCode || item.product?.exciseDutyCode;
-        const hasExcise = !!exciseDutyCode;
+        // Check if item has excise duty - use pre-computed data from Product model
+        const exciseInfo = itemExciseData[index];
+        const hasExcise = exciseInfo.hasExcise;
 
         const itemData: any = {
           item: item.description,                                    // Product display name
@@ -291,8 +319,8 @@ export async function POST(
           discountFlag: discount > 0 ? "1" : "2",                  // 1=has discount, 2=no discount
           deemedFlag: "2",                                          // 2=not deemed (standard)
           exciseFlag: hasExcise ? "1" : "2",                       // 1=has excise, 2=no excise
-          goodsCategoryId: item.product?.sku,                      // SKU as commodity code
-          goodsCategoryName: "Computer or office equipment",        // Category name (could be dynamic)
+          goodsCategoryId: item.product?.goodsCategoryId || item.product?.sku || "", // EFRIS commodity category from DB
+          goodsCategoryName: item.product?.category || item.product?.name || "General", // Product category from DB
           vatApplicableFlag: taxAmount > 0 ? "1" : "0",            // 1=VAT applies, 0=no VAT
         };
 
@@ -302,141 +330,129 @@ export async function POST(
           itemData.discountTaxRate = item.taxRate ? (parseFloat(item.taxRate.toString()) / 100).toFixed(2) : '0.00';
         }
 
-        // Add excise fields if product has excise
-        if (exciseDutyCode) {
-          const exciseRate = parseFloat(item.exciseRate?.toString() || item.product?.exciseRate?.toString() || '0');
-          const exciseRule = item.exciseRule || item.product?.exciseRule || '1';
-          
-          // Calculate excise tax
-          let exciseTax = 0;
-          if (exciseRule === '1') {
-            // Percentage-based
-            exciseTax = netAmount * exciseRate;
-          } else if (exciseRule === '2') {
-            // Quantity-based
-            const pack = parseFloat(item.pack?.toString() || item.product?.pack?.toString() || '1');
-            const stick = parseFloat(item.stick?.toString() || item.product?.stick?.toString() || '1');
-            exciseTax = quantity * exciseRate * pack * stick;
-          }
+        // Add excise fields from Product model's registered EFRIS data
+        if (hasExcise) {
+          const exciseRate = exciseInfo.exciseRate;
+          const exciseRule = exciseInfo.exciseRule;
+          const exciseTax = exciseInfo.exciseTax;
 
-          itemData.categoryId = exciseDutyCode;                     // Excise duty code
+          itemData.categoryId = exciseInfo.exciseDutyCode;          // Excise duty code from DB
           itemData.categoryName = "Excise Duty";                    // Standard excise category name
-          itemData.exciseRate = exciseRate.toString();              // Excise rate as string
-          itemData.exciseRule = exciseRule;                         // 1=percentage, 2=quantity
-          itemData.exciseTax = exciseTax.toFixed(2);               // Excise tax amount as string
-          itemData.exciseUnit = item.exciseUnit || item.product?.exciseUnit || unitOfMeasure; // Use same as unit of measure
+          itemData.exciseRate = exciseRate.toString();              // Excise rate from DB
+          itemData.exciseRule = exciseRule;                         // 1=percentage, 2=quantity from DB
+          itemData.exciseTax = exciseTax.toFixed(2);               // Computed excise tax amount
+          itemData.exciseUnit = exciseInfo.exciseUnit || unitOfMeasure; // Excise unit from DB
           itemData.exciseCurrency = "UGX";                          // Currency
-          itemData.exciseRateName = exciseRule === '1' ? `${(exciseRate * 100).toFixed(1)}%` : `UGX${exciseRate} per unit`; // Display name
+          itemData.exciseRateName = exciseRule === '1' 
+            ? `${(exciseRate * 100).toFixed(1)}%` 
+            : `UGX${exciseRate} per unit`;
           
           if (exciseRule === '2') {
-            itemData.pack = item.pack?.toString() || item.product?.pack?.toString() || '1';
-            itemData.stick = item.stick?.toString() || item.product?.stick?.toString() || '1';
+            itemData.pack = item.product?.pack?.toString() || '1';
+            itemData.stick = item.product?.stick?.toString() || '1';
           }
         }
 
         return itemData;
       }),
       
-      // Add tax details array - required for T109
-      tax_details: (() => {
+      // Compute tax_details and summary together to guarantee consistency
+      // EFRIS requires: summary.taxAmount === sum of all taxDetails[].taxAmount
+      ...(() => {
+        // === TAX DETAILS ===
         const taxDetails: any[] = [];
-        const totalNetAmount = parseFloat(invoice.subtotal.toString()); // Subtotal is the net amount (before tax)
-        const totalTaxAmount = parseFloat(invoice.taxAmount.toString());
-        const totalGrossAmount = totalNetAmount + totalTaxAmount; // Net + Tax = Gross
 
-        // VAT category (always present for taxable items)
-        if (totalTaxAmount > 0) {
-          taxDetails.push({
-            taxCategoryCode: "01",                    // VAT category
-            netAmount: totalNetAmount.toFixed(2),     // Net amount (before tax)
-            taxRate: "0.18",                          // 18% VAT rate as string
-            taxAmount: totalTaxAmount.toFixed(2),     // Total tax amount
-            grossAmount: totalGrossAmount.toFixed(2), // Total including tax
-            taxRateName: "Standard Rate (18%)"        // Display name
-          });
-        }
-
-        // Excise category (if any items have excise)
-        const totalExciseTax = invoice.items.reduce((sum, item) => {
-          const exciseTax = parseFloat(item.exciseTax?.toString() || '0');
-          return sum + exciseTax;
+        // Calculate VAT amounts from items
+        const totalVATAmount = invoice.items.reduce((sum, item) => {
+          return sum + parseFloat(item.taxAmount?.toString() || '0');
         }, 0);
 
-        if (totalExciseTax > 0) {
-          taxDetails.push({
-            taxCategoryCode: "05",                    // Excise category
-            netAmount: totalNetAmount.toFixed(2),     // Base amount for excise calculation
-            taxRate: "0",                             // 0 for fixed rate excise
-            taxAmount: totalExciseTax.toFixed(2),     // Total excise tax
-            grossAmount: (totalNetAmount + totalExciseTax).toFixed(2), // Amount after excise
-            exciseUnit: "101",                        // Default excise unit
-            exciseCurrency: "UGX",                    // Currency
-            taxRateName: "Excise Duty"                // Display name
-          });
-        }
-
-        return taxDetails;
-      })(),
-      
-      // Add summary section - required for T109
-      summary: (() => {
-        // Calculate totals by summing from tax_details (excluding excise duty)
-        let totalNetAmount = 0;
-        let totalTaxAmount = 0;
-        let totalGrossAmount = 0;
-        
-        // Get the tax_details we just calculated
-        const taxDetails = [];
-        
-        // VAT category (if any items have VAT)
+        // Calculate net amount for VAT (before any taxes)
         const totalVATNetAmount = invoice.items.reduce((sum, item) => {
-          // Tax-inclusive pricing: gross total is the line total
           const grossTotal = parseFloat(item.total.toString());
-          // Calculate net from tax-inclusive price
-          const netAmount = Math.round((grossTotal / 1.18) * 100) / 100;
-          return sum + netAmount;
+          return sum + Math.round((grossTotal / 1.18) * 100) / 100;
         }, 0);
 
-        const totalVATTaxAmount = invoice.items.reduce((sum, item) => {
+        // VAT category
+        if (totalVATAmount > 0) {
+          taxDetails.push({
+            taxCategoryCode: "01",
+            netAmount: totalVATNetAmount.toFixed(2),
+            taxRate: "0.18",
+            taxAmount: totalVATAmount.toFixed(2),
+            grossAmount: (totalVATNetAmount + totalVATAmount).toFixed(2),
+            taxRateName: "Standard Rate (18%)"
+          });
+        }
+
+        // Calculate excise amounts from pre-computed product excise data
+        const totalExciseTax = itemExciseData.reduce((sum, excise) => sum + excise.exciseTax, 0);
+
+        // Excise category
+        if (totalExciseTax > 0) {
+          // For excise: netAmount is base BEFORE excise (not before VAT)
+          const exciseNetAmount = invoice.items.reduce((sum, item, idx) => {
+            if (itemExciseData[idx].hasExcise) {
+              const grossTotal = parseFloat(item.total.toString());
+              const baseBeforeVAT = Math.round((grossTotal / 1.18) * 100) / 100;
+              // Subtract excise to get base before excise
+              return sum + (baseBeforeVAT - itemExciseData[idx].exciseTax);
+            }
+            return sum;
+          }, 0);
+
+          const firstExciseProduct = invoice.items.find((_, idx) => itemExciseData[idx].hasExcise)?.product;
+
+          taxDetails.push({
+            taxCategoryCode: "05",
+            netAmount: exciseNetAmount.toFixed(2),
+            taxRate: "0",
+            taxAmount: totalExciseTax.toFixed(2),
+            grossAmount: (exciseNetAmount + totalExciseTax).toFixed(2),
+            exciseUnit: firstExciseProduct?.exciseUnit || "102",
+            exciseCurrency: "UGX",
+            taxRateName: "Excise Duty"
+          });
+        }
+
+        // === SUMMARY ===
+        // For items with excise: netAmount must be base BEFORE all taxes (excise + VAT)
+        // grossAmount must equal the actual invoice total (not netAmount + taxAmount)
+        const summaryNetAmount = invoice.items.reduce((sum, item, idx) => {
           const grossTotal = parseFloat(item.total.toString());
-          const netAmount = Math.round((grossTotal / 1.18) * 100) / 100;
-          const taxAmount = Math.round((netAmount * 0.18) * 100) / 100;
-          return sum + taxAmount;
+          const baseBeforeVAT = Math.round((grossTotal / 1.18) * 100) / 100;
+          // If item has excise, subtract it to get base before ALL taxes
+          const exciseTax = itemExciseData[idx].exciseTax;
+          return sum + (baseBeforeVAT - exciseTax);
         }, 0);
-
-        const totalVATGrossAmount = totalVATNetAmount + totalVATTaxAmount;
-
-        // Add VAT amounts to totals
-        totalNetAmount += totalVATNetAmount;
-        totalTaxAmount += totalVATTaxAmount;
-        
-        // For summary, only include non-excise grossAmount (per EFRIS requirement)
-        totalGrossAmount += totalVATGrossAmount;
-
-        // Excise category amounts (if any) - these are NOT included in summary grossAmount per EFRIS spec
-        const totalExciseTax = invoice.items.reduce((sum, item) => {
-          const exciseTax = parseFloat(item.exciseTax?.toString() || '0');
-          return sum + exciseTax;
+        const summaryTaxAmount = taxDetails.reduce((sum, td) => sum + parseFloat(td.taxAmount), 0);
+        // grossAmount should be the actual invoice total (all items' gross totals)
+        const summaryGrossAmount = invoice.items.reduce((sum, item) => {
+          return sum + parseFloat(item.total.toString());
         }, 0);
-
-        // If there's excise tax, add it to tax amount but NOT to gross amount for summary
-        totalTaxAmount += totalExciseTax;
-
-        const itemCount = invoice.items.length;
 
         return {
-          netAmount: Math.round(totalNetAmount).toString(),      // Net amount (before tax) - whole number
-          taxAmount: Math.round(totalTaxAmount).toString(),      // Tax amount (VAT + excise) - whole number
-          grossAmount: Math.round(totalGrossAmount).toString(),  // Gross amount (VAT only, excludes excise per EFRIS spec) - whole number
-          itemCount: itemCount.toString(),           // Number of items as string
-          modeCode: "0",                            // Standard mode
-          remarks: invoice.notes || "",             // Invoice notes or empty
-          qrCode: ""                                // QR code (will be filled by EFRIS)
+          tax_details: taxDetails,
+          summary: {
+            netAmount: Math.round(summaryNetAmount).toString(),        // Whole number per T109 spec
+            taxAmount: Math.round(summaryTaxAmount).toString(),        // Whole number per T109 spec
+            grossAmount: Math.round(summaryGrossAmount).toString(),    // Whole number per T109 spec
+            itemCount: invoice.items.length.toString(),
+            modeCode: "0",
+            remarks: invoice.notes || "",
+            qrCode: ""
+          }
         };
       })(),
       
-      total_amount: parseFloat(invoice.subtotal.toString()) + parseFloat(invoice.taxAmount.toString()), // GROSS amount (net + tax)
-      total_tax: parseFloat(invoice.taxAmount.toString()),    // Tax amount
+      // Use invoice.total directly - it already includes all taxes (VAT + excise if applicable)
+      // Don't recalculate to avoid adding excise twice
+      total_amount: parseFloat(invoice.total.toString()),
+      total_tax: (() => {
+        const vatTax = parseFloat(invoice.taxAmount.toString());
+        const totalExcise = itemExciseData.reduce((sum, e) => sum + e.exciseTax, 0);
+        return vatTax + totalExcise;
+      })(),
       currency: invoice.currency,
       notes: invoice.notes || undefined,
     };

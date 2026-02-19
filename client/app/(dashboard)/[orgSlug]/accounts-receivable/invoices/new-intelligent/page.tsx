@@ -33,6 +33,11 @@ interface Product {
   quantityOnHand?: number;
   description?: string;
   exciseDutyCode?: string | null;
+  exciseRate?: number | null;
+  exciseRule?: string | null;
+  exciseUnit?: string | null;
+  pack?: number | null;
+  stick?: number | null;
   goodsCategoryId?: string | null;
 }
 
@@ -74,6 +79,8 @@ interface InvoiceLineItem {
   total: number;
   // EFRIS excise duty fields
   exciseDutyCode?: string | null;
+  exciseRate?: number | null;
+  exciseUnit?: string | null;
   goodsCategoryId?: string | null;
 }
 
@@ -176,6 +183,45 @@ export default function IntelligentInvoicePage() {
   const totalTax = items.reduce((sum, item) => sum + item.taxAmount, 0);
   const total = subtotal - totalDiscount + totalTax;
 
+  // EFRIS tax breakdown for ALL items — shows how the invoice total is composed
+  const efrisBreakdown = items.map(item => {
+    const selectedTaxRate = item.taxRateId ? taxRates.find(tr => tr.id === item.taxRateId) : null;
+    const vatRate = selectedTaxRate?.calculationType === 'PERCENTAGE' ? selectedTaxRate.rate / 100 : 0;
+    const grossPerUnit = item.displayRate || 0;
+    const qty = item.quantity;
+    const hasExcise = !!(item.exciseDutyCode && item.exciseRate);
+    const excisePerUnit = hasExcise ? (item.exciseRate || 0) : 0;
+
+    // Tax-inclusive: sellingPrice = (netBase + excise) × (1 + VAT)
+    // So: netBase = sellingPrice / (1 + VAT) - excise
+    // VAT is on the full pre-VAT base (net + excise), NOT just net
+    const beforeVATPerUnit = vatRate > 0 ? grossPerUnit / (1 + vatRate) : grossPerUnit;
+    const netPerUnit = beforeVATPerUnit - excisePerUnit;
+    const vatPerUnit = beforeVATPerUnit * vatRate; // VAT on (net + excise)
+
+    return {
+      itemId: item.id,
+      description: item.description,
+      hasExcise,
+      exciseDutyCode: item.exciseDutyCode || null,
+      exciseUnit: item.exciseUnit || null,
+      qty,
+      grossPerUnit,
+      netPerUnit,
+      excisePerUnit,
+      vatPerUnit: vatPerUnit,
+      netTotal: netPerUnit * qty,
+      exciseTotal: excisePerUnit * qty,
+      vatTotal: vatPerUnit * qty,
+      lineTotal: grossPerUnit * qty,
+    };
+  });
+  const grandNet = efrisBreakdown.reduce((s, b) => s + b.netTotal, 0);
+  const grandExcise = efrisBreakdown.reduce((s, b) => s + b.exciseTotal, 0);
+  const grandVAT = efrisBreakdown.reduce((s, b) => s + b.vatTotal, 0);
+  const grandTotal = grandNet + grandExcise + grandVAT;
+  const hasAnyExcise = efrisBreakdown.some(b => b.hasExcise);
+
   useEffect(() => {
     fetchCustomers();
     fetchProducts();
@@ -260,6 +306,11 @@ export default function IntelligentInvoicePage() {
           quantityOnHand: p.quantityOnHand || p.quantityAvailable || 0,
           description: p.description || '',
           exciseDutyCode: p.exciseDutyCode || null,
+          exciseRate: p.exciseRate ? Number(p.exciseRate) : null,
+          exciseRule: p.exciseRule || null,
+          exciseUnit: p.exciseUnit || null,
+          pack: p.pack ? Number(p.pack) : null,
+          stick: p.stick ? Number(p.stick) : null,
           goodsCategoryId: p.goodsCategoryId || null,
         }));
         console.log('Products loaded:', formatted.length, formatted);
@@ -632,6 +683,8 @@ export default function IntelligentInvoicePage() {
       listPrice: product.unitPrice,
       availableStock,
       exciseDutyCode: product.exciseDutyCode,
+      exciseRate: product.exciseRate,
+      exciseUnit: product.exciseUnit,
       goodsCategoryId: product.goodsCategoryId,
     });
 
@@ -1403,7 +1456,14 @@ export default function IntelligentInvoicePage() {
                                           <span className="font-medium text-sm">{product.name}</span>
                                           <span className="text-sm text-gray-600">{formatCurrency(product.unitPrice, currency)}</span>
                                         </div>
-                                        <div className="text-xs text-gray-500">SKU: {product.sku}</div>
+                                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                                          <span>SKU: {product.sku}</span>
+                                          {product.exciseDutyCode && (
+                                            <span className="px-1 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-semibold">
+                                              EXCISE {product.exciseDutyCode}
+                                            </span>
+                                          )}
+                                        </div>
                                       </button>
                                     ))
                                   ) : (
@@ -1440,6 +1500,28 @@ export default function IntelligentInvoicePage() {
                                 Stock: {item.availableStock} available
                               </div>
                             )}
+                            {/* Excise Duty Badge & Breakdown */}
+                            {(() => {
+                              const eb = efrisBreakdown.find(b => b.itemId === item.id);
+                              if (!eb?.hasExcise) return null;
+                              return (
+                                <div className="mt-1.5 p-1.5 bg-amber-50 border border-amber-200 rounded text-xs">
+                                  <div className="flex items-center gap-1 mb-1">
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300">
+                                      EXCISE {eb.exciseDutyCode}
+                                    </span>
+                                    <span className="text-amber-700 font-medium">
+                                      {formatCurrency(eb.excisePerUnit, currency)}/{eb.exciseUnit || 'unit'}
+                                    </span>
+                                  </div>
+                                  <div className="text-[10px] text-amber-700 space-y-0.5">
+                                    <div>Net: {formatCurrency(eb.netPerUnit, currency)} × {item.quantity} = {formatCurrency(eb.netTotal || 0, currency)}</div>
+                                    <div>Excise: {formatCurrency(eb.excisePerUnit, currency)} × {item.quantity} = {formatCurrency(eb.exciseTotal, currency)}</div>
+                                    <div>VAT: {formatCurrency(eb.vatPerUnit, currency)} × {item.quantity} = {formatCurrency(eb.vatTotal || 0, currency)}</div>
+                                  </div>
+                                </div>
+                              );
+                            })()}
                         </td>
                         <td className="px-2 py-3" style={{ width: '70px' }}>
                           <input
@@ -1601,7 +1683,7 @@ export default function IntelligentInvoicePage() {
             )}
 
             <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Tax</span>
+              <span className="text-gray-600">Tax (VAT)</span>
               <span className="font-medium">{formatCurrency(totalTax, currency)}</span>
             </div>
 
@@ -1613,6 +1695,100 @@ export default function IntelligentInvoicePage() {
             </div>
           </div>
         </div>
+
+        {/* EFRIS Tax Breakdown — shows how the invoice total is composed */}
+        {hasAnyExcise && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-6">
+            <h3 className="text-sm font-semibold text-amber-800 mb-3 flex items-center gap-2">
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+              EFRIS Tax Breakdown — How this invoice total is arrived at
+            </h3>
+
+            {/* Per-item breakdown table */}
+            <div className="overflow-x-auto mb-4">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-amber-300 text-amber-700">
+                    <th className="text-left py-1.5 pr-2">Item</th>
+                    <th className="text-right py-1.5 px-2">Price/Unit</th>
+                    <th className="text-center py-1.5 px-2">Qty</th>
+                    <th className="text-right py-1.5 px-2">Net Amount</th>
+                    <th className="text-right py-1.5 px-2">Excise</th>
+                    <th className="text-right py-1.5 px-2">VAT (18%)</th>
+                    <th className="text-right py-1.5 pl-2">Line Total</th>
+                  </tr>
+                </thead>
+                <tbody className="text-amber-900">
+                  {efrisBreakdown.map((b, idx) => (
+                    <tr key={idx} className="border-b border-amber-100">
+                      <td className="py-1.5 pr-2">
+                        <span>{b.description || 'Item'}</span>
+                        {b.hasExcise && (
+                          <span className="ml-1 px-1 py-0.5 rounded bg-amber-200 text-amber-800 text-[9px] font-bold">
+                            {b.exciseDutyCode}
+                          </span>
+                        )}
+                      </td>
+                      <td className="text-right py-1.5 px-2">{formatCurrency(b.grossPerUnit, currency)}</td>
+                      <td className="text-center py-1.5 px-2">{b.qty}</td>
+                      <td className="text-right py-1.5 px-2">{formatCurrency(b.netTotal, currency)}</td>
+                      <td className="text-right py-1.5 px-2">
+                        {b.hasExcise ? (
+                          <span className="text-amber-700 font-medium">{formatCurrency(b.exciseTotal, currency)}</span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="text-right py-1.5 px-2">{formatCurrency(b.vatTotal, currency)}</td>
+                      <td className="text-right py-1.5 pl-2 font-medium">{formatCurrency(b.lineTotal, currency)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-amber-300 font-semibold text-amber-900">
+                    <td className="py-2 pr-2" colSpan={3}>Totals</td>
+                    <td className="text-right py-2 px-2">{formatCurrency(grandNet, currency)}</td>
+                    <td className="text-right py-2 px-2 text-amber-700">{formatCurrency(grandExcise, currency)}</td>
+                    <td className="text-right py-2 px-2">{formatCurrency(grandVAT, currency)}</td>
+                    <td className="text-right py-2 pl-2">{formatCurrency(grandTotal, currency)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {/* Final formula */}
+            <div className="bg-white/60 rounded-md p-3 border border-amber-200">
+              <div className="text-xs text-amber-800 font-medium mb-2">How the total is calculated:</div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                <div className="flex flex-col items-center">
+                  <span className="text-[10px] text-amber-600">Net Amount</span>
+                  <span className="font-semibold text-amber-900">{formatCurrency(grandNet, currency)}</span>
+                </div>
+                <span className="text-amber-400 font-bold text-lg">+</span>
+                <div className="flex flex-col items-center">
+                  <span className="text-[10px] text-amber-600">Excise Duty</span>
+                  <span className="font-semibold text-amber-700">{formatCurrency(grandExcise, currency)}</span>
+                </div>
+                <span className="text-amber-400 font-bold text-lg">+</span>
+                <div className="flex flex-col items-center">
+                  <span className="text-[10px] text-amber-600">VAT (18%)</span>
+                  <span className="font-semibold text-amber-900">{formatCurrency(grandVAT, currency)}</span>
+                </div>
+                <span className="text-amber-400 font-bold text-lg">=</span>
+                <div className="flex flex-col items-center">
+                  <span className="text-[10px] text-blue-600 font-bold">INVOICE TOTAL</span>
+                  <span className="font-bold text-blue-700 text-base">{formatCurrency(grandTotal, currency)}</span>
+                </div>
+              </div>
+              {efrisBreakdown.filter(b => b.hasExcise).map((b, idx) => (
+                <div key={idx} className="text-[10px] text-amber-600 mt-2">
+                  <span className="font-medium">{b.description}:</span> {formatCurrency(b.grossPerUnit, currency)}/unit = 
+                  {formatCurrency(b.netPerUnit, currency)} net + {formatCurrency(b.excisePerUnit, currency)} excise + {formatCurrency(b.vatPerUnit, currency)} VAT
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="bg-white rounded-lg shadow-sm p-6 mt-6">

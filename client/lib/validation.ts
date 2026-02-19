@@ -208,6 +208,11 @@ export const productSchema = z.object({
   taxable: z.boolean().default(true),
   defaultTaxRate: z.number().min(0).max(100).default(0),
   exciseDutyCode: z.string().optional(), // EFRIS excise duty code
+  exciseRate: z.number().min(0).optional(), // Excise rate (% or amount per unit)
+  exciseRule: z.string().optional(), // 1=by percentage, 2=by quantity
+  exciseUnit: z.string().optional(), // 101=per stick, 102=per litre, 103=per kg
+  pack: z.number().min(0).optional(), // Package value for excise calculation
+  stick: z.number().min(0).optional(), // Piece value for excise calculation
   goodsCategoryId: z.string().optional(), // EFRIS VAT commodity category code
 });
 
