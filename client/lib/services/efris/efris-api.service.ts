@@ -81,19 +81,12 @@ export interface EfrisInvoiceResponse {
 export interface EfrisProductRequest {
   item_code: string;              // Required: Unique product identifier (SKU)
   item_name: string;              // Required: Product/service name
-  unit_price: string;             // Required: Unit price in UGX (STRING per T130 spec)
+  unit_price: string;             // Required: Unit price as STRING (original working format)
   commodity_code: string;         // Required: EFRIS commodity category ID
   unit_of_measure?: string;       // Optional: Default "102" (Pieces)
   have_excise_tax?: string;       // Optional: "101" = Yes, "102" = No (default)
   excise_duty_code?: string;      // Conditional: Required if have_excise_tax = "101"
-  // Excise duty piece unit fields (required when have_excise_tax = "101")
-  // CRITICAL: All numeric fields are STRINGS per T130 spec
-  have_piece_unit?: string;       // "101" = Yes (required when have_excise_tax = "101")
-  piece_measure_unit?: string;    // Excise unit (same as unit_of_measure for most cases)
-  piece_unit_price?: string;      // Price per piece unit (STRING per T130 spec)
-  package_scaled_value?: string;  // Scaling factor (usually "1")
-  piece_scaled_value?: string;    // Scaling factor (usually "1")
-  stock_quantity?: string;        // Optional: Low stock warning threshold (STRING per T130 spec)
+  stock_quantity?: string;        // Optional: Stock quantity as STRING
   description?: string;           // Optional: Product description/remarks
 }
 
@@ -332,7 +325,8 @@ export class EfrisApiService {
           errorData = { message: errorText };
         }
         
-        throw new Error(errorData.message || errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+        // Middleware returns errors in 'detail' field
+        throw new Error(errorData.detail || errorData.message || errorData.error || `HTTP ${response.status}: ${response.statusText}`);
       }
 
       const result: EfrisInvoiceResponse = await response.json();
@@ -381,7 +375,8 @@ export class EfrisApiService {
           statusText: response.statusText,
           errorData,
         });
-        throw new Error(errorData.message || errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+        // Middleware returns errors in 'detail' field
+        throw new Error(errorData.detail || errorData.message || errorData.error || `HTTP ${response.status}: ${response.statusText}`);
       }
 
       const result: EfrisProductResponse = await response.json();

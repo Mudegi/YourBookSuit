@@ -238,43 +238,36 @@ export async function POST(
       return defaultCode;
     };
 
-    const efrisProductData = {
-      item_code: itemCode,                              // Description or Name (fallback)
-      item_name: product.name,                          // Product name
-      unit_price: product.purchasePrice ? product.purchasePrice.toString() : "0", // STRING per T130 spec
-      commodity_code: product.sku,                      // SKU as commodity category ID (EFRIS accepts 8-digit codes like "50202310")
-      unit_of_measure: mapToEfrisUnitCode(
+    const efrisUnitCode = mapToEfrisUnitCode(
         product.unitOfMeasure?.code, 
         product.unitOfMeasure?.abbreviation,
         product.unitOfMeasure?.name
-      ),
-      have_excise_tax: product.exciseDutyCode ? "101" : "102", // 101=Yes, 102=No
-      excise_duty_code: product.exciseDutyCode || undefined, // Include when have_excise_tax = "101"
-      
-      // Excise duty fields (required when have_excise_tax = "101")
-      // Per T130 spec: when haveExciseTax is 101, havePieceUnit must be 101
-      // CRITICAL: All numeric fields must be sent as STRINGS per T130 spec
-      ...(product.exciseDutyCode && {
-        have_piece_unit: "101",  // Yes - excise duty has unit of measurement
-        piece_measure_unit: mapToEfrisUnitCode(
-          product.unitOfMeasure?.code, 
-          product.unitOfMeasure?.abbreviation,
-          product.unitOfMeasure?.name
-        ), // Same as measure unit for most cases
-        piece_unit_price: product.purchasePrice ? product.purchasePrice.toString() : "0", // STRING per T130 spec
-        package_scaled_value: "1", // When measureUnit equals excise unit, must be 1
-        piece_scaled_value: "1",   // When measureUnit equals excise unit, must be 1
-      }),
-      
-      stock_quantity: product.reorderLevel ? product.reorderLevel.toString() : undefined, // STRING per T130 spec
+      );
+
+    const hasExcise = !!product.exciseDutyCode;
+
+    // Build payload matching the ORIGINAL working format
+    // The middleware handles T130-level details (currency, pieceUnit, etc.) internally
+    const efrisProductData: Record<string, any> = {
+      item_code: itemCode,
+      item_name: product.name,
+      unit_price: product.purchasePrice ? product.purchasePrice.toString() : "0",
+      commodity_code: product.sku,
+      unit_of_measure: efrisUnitCode,
+      have_excise_tax: hasExcise ? "101" : "102",
       description: product.description || undefined,
+      stock_quantity: product.reorderLevel ? product.reorderLevel.toString() : undefined,
     };
+
+    // Excise-only field — only include when have_excise_tax = "101"
+    if (hasExcise) {
+      efrisProductData.excise_duty_code = product.exciseDutyCode;
+    }
     
     console.log('[EFRIS] Product data being sent:', JSON.stringify(efrisProductData, null, 2));
 
     // Validate required fields (unit_price is a string, parse it for validation)
-    const unitPriceNum = parseFloat(efrisProductData.unit_price);
-    if (!efrisProductData.commodity_code || !efrisProductData.item_code || !efrisProductData.item_name || isNaN(unitPriceNum) || unitPriceNum <= 0) {
+    if (!efrisProductData.commodity_code || !efrisProductData.item_code || !efrisProductData.item_name || !efrisProductData.unit_price || parseFloat(efrisProductData.unit_price) <= 0) {
       return NextResponse.json(
         { 
           error: 'Product must have SKU (commodity code), name, and a valid purchase price (cost price) to register with EFRIS',

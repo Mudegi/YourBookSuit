@@ -321,7 +321,7 @@ export async function POST(
           exciseFlag: hasExcise ? "1" : "2",                       // 1=has excise, 2=no excise
           goodsCategoryId: item.product?.goodsCategoryId || item.product?.sku || "", // EFRIS commodity category from DB
           goodsCategoryName: item.product?.category || item.product?.name || "General", // Product category from DB
-          vatApplicableFlag: taxAmount > 0 ? "1" : "0",            // 1=VAT applies, 0=no VAT
+          vatApplicableFlag: (item.taxRateConfig?.efrisTaxCategoryCode === "11") ? "0" : "1", // 0 only for VAT out of scope
         };
 
         // Add discount fields if item has discount
@@ -358,45 +358,84 @@ export async function POST(
       
       // Compute tax_details and summary together to guarantee consistency
       // EFRIS requires: summary.taxAmount === sum of all taxDetails[].taxAmount
+      // Must handle different tax categories: Standard(01), Zero-rated(02), Exempt(03), Deemed(04), Excise(05), etc.
       ...(() => {
         // === TAX DETAILS ===
         const taxDetails: any[] = [];
 
-        // Calculate VAT amounts from items
-        const totalVATAmount = invoice.items.reduce((sum, item) => {
-          return sum + parseFloat(item.taxAmount?.toString() || '0');
-        }, 0);
+        // --- Group items by EFRIS VAT tax category ---
+        const vatGroups: Record<string, {
+          taxCategoryCode: string;
+          taxRate: number;
+          taxRateName: string;
+          netAmount: number;   // Before VAT (but after excise)
+          taxAmount: number;   // VAT only
+          grossAmount: number; // Full gross
+        }> = {};
 
-        // Calculate net amount for VAT (before any taxes)
-        const totalVATNetAmount = invoice.items.reduce((sum, item) => {
+        const categoryNames: Record<string, string> = {
+          '01': 'Standard Rate (18%)',
+          '02': 'Zero Rate (0%)',
+          '03': 'Exempt',
+          '04': 'Deemed (18%)',
+          '11': 'VAT out of Scope',
+        };
+
+        invoice.items.forEach((item, index) => {
+          // Determine EFRIS tax category from TaxRate config, or fall back to rate-based detection
+          const efrisTaxCategory = item.taxRateConfig?.efrisTaxCategoryCode ||
+            (parseFloat(item.taxRate?.toString() || '0') > 0 ? '01' : '02');
+
+          const itemTaxRateDecimal = parseFloat(item.taxRate?.toString() || '0') / 100;
           const grossTotal = parseFloat(item.total.toString());
-          return sum + Math.round((grossTotal / 1.18) * 100) / 100;
-        }, 0);
+          const taxAmount = parseFloat(item.taxAmount?.toString() || '0');
 
-        // VAT category
-        if (totalVATAmount > 0) {
+          // netAmount for VAT = grossTotal minus VAT
+          // This correctly includes excise (excise is part of the VAT base)
+          const netBeforeVAT = grossTotal - taxAmount;
+
+          if (!vatGroups[efrisTaxCategory]) {
+            vatGroups[efrisTaxCategory] = {
+              taxCategoryCode: efrisTaxCategory,
+              taxRate: itemTaxRateDecimal,
+              taxRateName: categoryNames[efrisTaxCategory] || `Tax Category ${efrisTaxCategory}`,
+              netAmount: 0,
+              taxAmount: 0,
+              grossAmount: 0,
+            };
+          }
+
+          vatGroups[efrisTaxCategory].netAmount += netBeforeVAT;
+          vatGroups[efrisTaxCategory].taxAmount += taxAmount;
+          vatGroups[efrisTaxCategory].grossAmount += grossTotal;
+        });
+
+        // Add a tax_details entry for each VAT category group
+        for (const group of Object.values(vatGroups)) {
           taxDetails.push({
-            taxCategoryCode: "01",
-            netAmount: totalVATNetAmount.toFixed(2),
-            taxRate: "0.18",
-            taxAmount: totalVATAmount.toFixed(2),
-            grossAmount: (totalVATNetAmount + totalVATAmount).toFixed(2),
-            taxRateName: "Standard Rate (18%)"
+            taxCategoryCode: group.taxCategoryCode,
+            netAmount: group.netAmount.toFixed(2),
+            taxRate: group.taxRate.toFixed(2),
+            taxAmount: group.taxAmount.toFixed(2),
+            grossAmount: group.grossAmount.toFixed(2),
+            exciseUnit: "",
+            exciseCurrency: "UGX",
+            taxRateName: group.taxRateName,
           });
         }
 
-        // Calculate excise amounts from pre-computed product excise data
+        // --- Excise category (05) ---
         const totalExciseTax = itemExciseData.reduce((sum, excise) => sum + excise.exciseTax, 0);
 
-        // Excise category
         if (totalExciseTax > 0) {
           // For excise: netAmount is base BEFORE excise (not before VAT)
           const exciseNetAmount = invoice.items.reduce((sum, item, idx) => {
             if (itemExciseData[idx].hasExcise) {
               const grossTotal = parseFloat(item.total.toString());
-              const baseBeforeVAT = Math.round((grossTotal / 1.18) * 100) / 100;
+              const taxAmount = parseFloat(item.taxAmount?.toString() || '0');
+              const netBeforeVAT = grossTotal - taxAmount;
               // Subtract excise to get base before excise
-              return sum + (baseBeforeVAT - itemExciseData[idx].exciseTax);
+              return sum + (netBeforeVAT - itemExciseData[idx].exciseTax);
             }
             return sum;
           }, 0);
@@ -416,20 +455,14 @@ export async function POST(
         }
 
         // === SUMMARY ===
-        // For items with excise: netAmount must be base BEFORE all taxes (excise + VAT)
-        // grossAmount must equal the actual invoice total (not netAmount + taxAmount)
-        const summaryNetAmount = invoice.items.reduce((sum, item, idx) => {
-          const grossTotal = parseFloat(item.total.toString());
-          const baseBeforeVAT = Math.round((grossTotal / 1.18) * 100) / 100;
-          // If item has excise, subtract it to get base before ALL taxes
-          const exciseTax = itemExciseData[idx].exciseTax;
-          return sum + (baseBeforeVAT - exciseTax);
-        }, 0);
-        const summaryTaxAmount = taxDetails.reduce((sum, td) => sum + parseFloat(td.taxAmount), 0);
-        // grossAmount should be the actual invoice total (all items' gross totals)
+        // grossAmount = actual invoice total
         const summaryGrossAmount = invoice.items.reduce((sum, item) => {
           return sum + parseFloat(item.total.toString());
         }, 0);
+        // taxAmount = sum of ALL tax_details entries (VAT + excise)
+        const summaryTaxAmount = taxDetails.reduce((sum, td) => sum + parseFloat(td.taxAmount), 0);
+        // netAmount = grossAmount minus ALL taxes (base before any tax)
+        const summaryNetAmount = summaryGrossAmount - summaryTaxAmount;
 
         return {
           tax_details: taxDetails,
