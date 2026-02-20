@@ -34,7 +34,16 @@ export async function POST(request: NextRequest) {
         organizations: {
           where: { isActive: true },
           include: {
-            organization: true,
+            organization: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                subscriptionStatus: true,
+                trialEndDate: true,
+                onboardingCompleted: true,
+              },
+            },
           },
         },
       },
@@ -93,11 +102,14 @@ export async function POST(request: NextRequest) {
           firstName: user.firstName,
           lastName: user.lastName,
           avatar: user.avatar,
+          isSystemAdmin: user.isSystemAdmin || false,
         },
         organization: {
           id: defaultOrg.organization.id,
           name: defaultOrg.organization.name,
           slug: defaultOrg.organization.slug,
+          subscriptionStatus: defaultOrg.organization.subscriptionStatus,
+          trialEndDate: defaultOrg.organization.trialEndDate,
         },
         role: defaultOrg.role,
       },

@@ -57,6 +57,9 @@ export async function POST(request: NextRequest) {
     });
 
     // Create a default organization for the user
+    const trialStart = new Date();
+    const trialEnd = new Date(trialStart.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
     const organization = await prisma.organization.create({
       data: {
         name: `${firstName}'s Company`,
@@ -64,6 +67,9 @@ export async function POST(request: NextRequest) {
         baseCurrency: 'USD',
         fiscalYearStart: 1,
         isActive: true,
+        subscriptionStatus: 'TRIAL',
+        trialStartDate: trialStart,
+        trialEndDate: trialEnd,
       },
     });
 

@@ -27,6 +27,16 @@ model Organization {
   industry                String?
   businessModel           String                   @default("GENERAL")
   
+  // Subscription & Trial
+  subscriptionStatus      SubscriptionStatus       @default(TRIAL)
+  trialStartDate          DateTime?                @default(now())
+  trialEndDate            DateTime?                // Calculated: trialStartDate + 7 days
+  subscriptionStartDate   DateTime?
+  subscriptionEndDate     DateTime?
+  approvedAt              DateTime?                // When system admin approved the org
+  approvedById            String?                  // System admin who approved
+  suspendedReason         String?
+
   // Multi-Currency Settings
   fxGainAccountId         String?
   fxLossAccountId         String?
@@ -366,6 +376,7 @@ model User {
   avatar                     String?
   isActive                   Boolean                 @default(true)
   emailVerified              Boolean                 @default(false)
+  isSystemAdmin              Boolean                 @default(false) // Platform-level admin (system owner)
   lastLoginAt                DateTime?
   createdAt                  DateTime                @default(now())
   updatedAt                  DateTime                @updatedAt
@@ -5050,6 +5061,15 @@ enum UserRole {
   ACCOUNTANT
   MANAGER
   VIEWER
+}
+
+enum SubscriptionStatus {
+  TRIAL          // 7-day free trial (default for new orgs)
+  TRIAL_EXPIRED  // Trial ended, awaiting payment
+  PENDING_APPROVAL // User has paid, waiting for system admin approval
+  ACTIVE         // Approved and paid — full access
+  SUSPENDED      // Suspended by system admin
+  CANCELLED      // User cancelled their subscription
 }
 
 // Invitation lifecycle for org onboarding

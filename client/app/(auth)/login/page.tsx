@@ -37,6 +37,15 @@ export default function LoginPage() {
       const organizations = await getOrganizations();
       console.log('📊 Organizations:', organizations);
       
+      // Check if user is a system admin — redirect to admin panel
+      const sessionRes = await fetch('/api/auth/session');
+      const sessionData = await sessionRes.json();
+      if (sessionData?.data?.user?.isSystemAdmin) {
+        console.log('🔄 System admin detected, redirecting to admin panel');
+        router.push('/system-admin');
+        return;
+      }
+
       if (organizations.length > 0) {
         // Redirect to first organization's dashboard
         console.log('🔄 Redirecting to:', `/${organizations[0].slug}/dashboard`);

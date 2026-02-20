@@ -16,6 +16,7 @@ import {
   Settings,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   LogOut,
   Menu,
   X,
@@ -36,6 +37,10 @@ import {
   Repeat,
   PieChart,
   LayoutGrid,
+  Keyboard,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Rows3,
 } from 'lucide-react';
 import { getBusinessModelProfile, isFeatureEnabledForBusiness, type BusinessModel } from '@/lib/business-models';
 import { fetchWithAuth } from '@/lib/fetch-client';
@@ -45,6 +50,7 @@ interface User {
   email: string;
   firstName: string;
   lastName: string;
+  isSystemAdmin?: boolean;
 }
 
 interface Organization {
@@ -55,6 +61,8 @@ interface Organization {
   industry?: string;
   businessModel?: string;
   homeCountry?: string;
+  subscriptionStatus?: string;
+  trialEndDate?: string;
 }
 
 export default function DashboardLayout({
@@ -82,12 +90,42 @@ export default function DashboardLayout({
     }
     return 'light';
   });
+  const [fontFamily, setFontFamily] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('app-font') || "'Inter', sans-serif";
+    }
+    return "'Inter', sans-serif";
+  });
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [density, setDensity] = useState<'comfortable' | 'compact' | 'cozy'>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('app-density') as any) || 'comfortable';
+    }
+    return 'comfortable';
+  });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('sidebar-collapsed') === 'true';
+    }
+    return false;
+  });
   const categoryRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const createMenuRef = useRef<HTMLDivElement>(null);
+
+  const fontOptions = [
+    { label: 'Inter', value: "'Inter', sans-serif" },
+    { label: 'Poppins', value: "'Poppins', sans-serif" },
+    { label: 'Roboto', value: "'Roboto', sans-serif" },
+    { label: 'Open Sans', value: "'Open Sans', sans-serif" },
+    { label: 'Nunito', value: "'Nunito', sans-serif" },
+    { label: 'Merriweather', value: "'Merriweather', serif" },
+    { label: 'Times New Roman', value: "'Times New Roman', Times, serif" },
+  ];
 
   useEffect(() => {
     fetchSession();
@@ -122,27 +160,77 @@ export default function DashboardLayout({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === '/' && document.activeElement?.tagName !== 'INPUT') {
+      const isInput = document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA' || document.activeElement?.tagName === 'SELECT';
+      if (e.key === '/' && !isInput) {
         e.preventDefault();
         setSearchOpen(true);
         setTimeout(() => searchInputRef.current?.focus(), 10);
       }
-      if (e.key === 'g') {
+      if (e.key === '?' && !isInput) {
+        e.preventDefault();
+        setShortcutsOpen(prev => !prev);
+      }
+      if (e.key === 'Escape' && shortcutsOpen) {
+        setShortcutsOpen(false);
+      }
+      if (e.key === 'Escape' && preferencesOpen) {
+        setPreferencesOpen(false);
+      }
+      if (e.key === 'b' && !isInput) {
+        setSidebarCollapsed(prev => !prev);
+      }
+      if (e.key === 'g' && !isInput) {
         (window as any).__pendingShortcut = true;
         setTimeout(() => ((window as any).__pendingShortcut = false), 500);
       }
       if ((window as any).__pendingShortcut && e.key === 'i') {
         router.push(`/${orgSlug}/accounts-receivable/invoices`);
       }
+      if ((window as any).__pendingShortcut && e.key === 'd') {
+        router.push(`/${orgSlug}/dashboard`);
+      }
+      if ((window as any).__pendingShortcut && e.key === 'b') {
+        router.push(`/${orgSlug}/accounts-payable/bills`);
+      }
+      if ((window as any).__pendingShortcut && e.key === 'c') {
+        router.push(`/${orgSlug}/accounts-receivable/customers`);
+      }
+      if ((window as any).__pendingShortcut && e.key === 'r') {
+        router.push(`/${orgSlug}/reports`);
+      }
+      if ((window as any).__pendingShortcut && e.key === 's') {
+        router.push(`/${orgSlug}/settings`);
+      }
+      if (e.key === 'n' && !isInput) {
+        setCreateMenuOpen(prev => !prev);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [orgSlug, router]);
+  }, [orgSlug, router, shortcutsOpen]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
     localStorage.setItem('theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty('--app-font', fontFamily);
+    localStorage.setItem('app-font', fontFamily);
+  }, [fontFamily]);
+
+
+
+  // Density: apply CSS class to html element
+  useEffect(() => {
+    document.documentElement.setAttribute('data-density', density);
+    localStorage.setItem('app-density', density);
+  }, [density]);
+
+  // Sidebar collapse: persist
+  useEffect(() => {
+    localStorage.setItem('sidebar-collapsed', String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
 
   const fetchSession = async () => {
     try {
@@ -170,6 +258,10 @@ export default function DashboardLayout({
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
+    // Strip user preferences from DOM so they don't affect unauthenticated pages
+    document.documentElement.classList.remove('dark');
+    document.documentElement.style.removeProperty('--app-font');
+    document.documentElement.removeAttribute('data-density');
     router.push('/login');
   };
 
@@ -190,6 +282,66 @@ export default function DashboardLayout({
   // Render full-screen pages without sidebar/header
   if (isFullScreenPage) {
     return <>{children}</>;
+  }
+
+  // Trial / subscription enforcement
+  const subStatus = organization?.subscriptionStatus;
+  const trialEnd = organization?.trialEndDate ? new Date(organization.trialEndDate) : null;
+  const isTrialExpired = subStatus === 'TRIAL' && trialEnd && trialEnd < new Date();
+  const isBlocked = subStatus === 'TRIAL_EXPIRED' || subStatus === 'SUSPENDED' || subStatus === 'CANCELLED' || isTrialExpired;
+  const isPendingApproval = subStatus === 'PENDING_APPROVAL';
+
+  if (isBlocked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-lg border border-gray-200 p-8 text-center">
+          <div className="text-5xl mb-4">{subStatus === 'SUSPENDED' ? '🚫' : '⏰'}</div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            {subStatus === 'SUSPENDED' ? 'Account Suspended' : 'Trial Expired'}
+          </h2>
+          <p className="text-gray-500 mb-6">
+            {subStatus === 'SUSPENDED'
+              ? 'Your organization has been suspended. Please contact support for assistance.'
+              : 'Your 7-day free trial has ended. To continue using YourBooks, please subscribe to our Enterprise plan.'}
+          </p>
+          <div className="space-y-3">
+            <a
+              href="mailto:support@yourbooks.app?subject=Subscription%20Payment"
+              className="block w-full py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition"
+            >
+              Contact Us to Subscribe
+            </a>
+            <button
+              onClick={handleLogout}
+              className="block w-full py-3 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isPendingApproval) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-lg border border-gray-200 p-8 text-center">
+          <div className="text-5xl mb-4">⏳</div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Pending Approval</h2>
+          <p className="text-gray-500 mb-6">
+            Your payment has been received! We&apos;re reviewing your account and will activate it shortly.
+            You&apos;ll be able to access your dashboard once approved.
+          </p>
+          <button
+            onClick={handleLogout}
+            className="block w-full py-3 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition"
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
+    );
   }
 
   // Filter Settings children based on country - EFRIS only for Uganda
@@ -364,17 +516,223 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Keyboard Shortcuts Modal */}
+      {shortcutsOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShortcutsOpen(false)} />
+          <div className="relative bg-white dark:bg-slate-800 rounded-xl shadow-2xl border dark:border-slate-600 w-full max-w-lg mx-4 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b dark:border-slate-700">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <Keyboard className="h-5 w-5 text-blue-500" />
+                Keyboard Shortcuts
+              </h2>
+              <button onClick={() => setShortcutsOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="px-6 py-4 space-y-5">
+              <div>
+                <h3 className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider mb-2">Global</h3>
+                <div className="space-y-2">
+                  {[
+                    { keys: ['?'], desc: 'Show this help' },
+                    { keys: ['/'], desc: 'Focus search' },
+                    { keys: ['N'], desc: 'Open create menu' },
+                    { keys: ['B'], desc: 'Toggle sidebar' },
+                    { keys: ['Esc'], desc: 'Close modals & menus' },
+                  ].map(s => (
+                    <div key={s.desc} className="flex items-center justify-between">
+                      <span className="text-sm text-gray-700 dark:text-slate-300">{s.desc}</span>
+                      <div className="flex items-center gap-1">
+                        {s.keys.map(k => (
+                          <kbd key={k} className="px-2 py-1 text-xs font-mono bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300 rounded border border-gray-200 dark:border-slate-600 min-w-[28px] text-center">{k}</kbd>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <h3 className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider mb-2">Navigation (press G then...)</h3>
+                <div className="space-y-2">
+                  {[
+                    { keys: ['G', 'D'], desc: 'Go to Dashboard' },
+                    { keys: ['G', 'I'], desc: 'Go to Invoices' },
+                    { keys: ['G', 'B'], desc: 'Go to Bills' },
+                    { keys: ['G', 'C'], desc: 'Go to Customers' },
+                    { keys: ['G', 'R'], desc: 'Go to Reports' },
+                    { keys: ['G', 'S'], desc: 'Go to Settings' },
+                  ].map(s => (
+                    <div key={s.desc} className="flex items-center justify-between">
+                      <span className="text-sm text-gray-700 dark:text-slate-300">{s.desc}</span>
+                      <div className="flex items-center gap-1">
+                        {s.keys.map((k, i) => (
+                          <span key={i} className="flex items-center gap-1">
+                            <kbd className="px-2 py-1 text-xs font-mono bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300 rounded border border-gray-200 dark:border-slate-600 min-w-[28px] text-center">{k}</kbd>
+                            {i < s.keys.length - 1 && <span className="text-gray-400 text-xs">then</span>}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-3 bg-gray-50 dark:bg-slate-700/50 text-xs text-gray-500 dark:text-slate-400 rounded-b-xl">
+              Press <kbd className="px-1.5 py-0.5 text-xs font-mono bg-gray-200 dark:bg-slate-600 rounded">?</kbd> anytime to toggle this panel
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preferences Modal */}
+      {preferencesOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setPreferencesOpen(false)} />
+          <div className="relative bg-white dark:bg-slate-800 rounded-xl shadow-2xl border dark:border-slate-600 w-full max-w-md mx-4 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-800 rounded-t-xl z-10">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <Settings className="h-5 w-5 text-blue-500" />
+                Preferences
+              </h2>
+              <button onClick={() => setPreferencesOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-300">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-6">
+
+              {/* Theme */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                  Appearance
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setTheme('light')}
+                    className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition ${
+                      theme === 'light'
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                        : 'border-gray-200 dark:border-slate-600 hover:border-gray-300 dark:hover:border-slate-500'
+                    }`}
+                  >
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-300 to-orange-400 flex items-center justify-center text-lg">☀️</div>
+                    <span className={`text-sm font-medium ${theme === 'light' ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-slate-300'}`}>Light</span>
+                  </button>
+                  <button
+                    onClick={() => setTheme('dark')}
+                    className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition ${
+                      theme === 'dark'
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                        : 'border-gray-200 dark:border-slate-600 hover:border-gray-300 dark:hover:border-slate-500'
+                    }`}
+                  >
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-600 to-slate-800 flex items-center justify-center text-lg">🌙</div>
+                    <span className={`text-sm font-medium ${theme === 'dark' ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-slate-300'}`}>Dark</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Font */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
+                  Font Family
+                </h3>
+                <div className="space-y-1">
+                  {fontOptions.map((font) => (
+                    <button
+                      key={font.label}
+                      onClick={() => setFontFamily(font.value)}
+                      className={`w-full text-left px-3 py-2.5 text-sm rounded-lg transition flex items-center justify-between ${
+                        fontFamily === font.value
+                          ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-semibold ring-1 ring-blue-200 dark:ring-blue-700'
+                          : 'text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700'
+                      }`}
+                      style={{ fontFamily: font.value }}
+                    >
+                      <span>{font.label}</span>
+                      {fontFamily === font.value && <span className="text-blue-500">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Density */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
+                  Display Density
+                </h3>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { label: 'Compact', value: 'compact' as const, icon: '▪️' },
+                    { label: 'Default', value: 'comfortable' as const, icon: '◾' },
+                    { label: 'Cozy', value: 'cozy' as const, icon: '⬛' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setDensity(opt.value)}
+                      className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 transition text-center ${
+                        density === opt.value
+                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                          : 'border-gray-200 dark:border-slate-600 hover:border-gray-300 dark:hover:border-slate-500'
+                      }`}
+                    >
+                      <Rows3 className={`h-5 w-5 ${density === opt.value ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-slate-500'}`} />
+                      <span className={`text-xs font-medium ${density === opt.value ? 'text-blue-700 dark:text-blue-300' : 'text-gray-600 dark:text-slate-400'}`}>{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sidebar */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
+                  Sidebar
+                </h3>
+                <button
+                  onClick={() => setSidebarCollapsed(prev => !prev)}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border transition ${
+                    sidebarCollapsed
+                      ? 'border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20'
+                      : 'border-gray-200 dark:border-slate-600 hover:border-gray-300 dark:hover:border-slate-500'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    {sidebarCollapsed ? <PanelLeftOpen className="h-5 w-5 text-blue-600 dark:text-blue-400" /> : <PanelLeftClose className="h-5 w-5 text-gray-500 dark:text-slate-400" />}
+                    <div className="text-left">
+                      <div className={`text-sm font-medium ${sidebarCollapsed ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-slate-300'}`}>
+                        {sidebarCollapsed ? 'Sidebar collapsed' : 'Sidebar expanded'}
+                      </div>
+                      <div className="text-xs text-gray-400 dark:text-slate-500">Press B to toggle</div>
+                    </div>
+                  </div>
+                  <div className={`w-10 h-6 rounded-full flex items-center transition-colors ${sidebarCollapsed ? 'bg-blue-500 justify-end' : 'bg-gray-300 dark:bg-slate-600 justify-start'}`}>
+                    <div className="w-4 h-4 bg-white rounded-full mx-1 shadow-sm" />
+                  </div>
+                </button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-56 bg-slate-900 border-r border-slate-700 transform transition-transform duration-200 ease-in-out flex flex-col overflow-visible ${
+        className={`fixed inset-y-0 left-0 z-50 ${sidebarCollapsed ? 'w-16' : 'w-56'} bg-slate-900 border-r border-slate-700 transform transition-all duration-200 ease-in-out flex flex-col overflow-visible ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         } lg:translate-x-0`}
       >
         {/* Logo */}
-        <div className="h-16 flex items-center justify-between px-6 border-b border-slate-700">
-          <Link href={`/${orgSlug}/dashboard`} className="text-xl font-bold text-blue-400">
-            YourBooks
-          </Link>
+        <div className="h-16 flex items-center justify-between px-4 border-b border-slate-700">
+          {!sidebarCollapsed ? (
+            <Link href={`/${orgSlug}/dashboard`} className="text-xl font-bold text-blue-400">
+              YourBooks
+            </Link>
+          ) : (
+            <Link href={`/${orgSlug}/dashboard`} className="text-xl font-bold text-blue-400 mx-auto">
+              YB
+            </Link>
+          )}
           <button
             onClick={() => setSidebarOpen(false)}
             className="lg:hidden text-slate-400 hover:text-slate-200"
@@ -384,6 +742,7 @@ export default function DashboardLayout({
         </div>
 
         {/* Organization */}
+        {!sidebarCollapsed && (
         <div className="px-4 py-3 border-b border-slate-700">
           <div className="flex items-center justify-between">
             <div className="flex-1 min-w-0">
@@ -395,6 +754,7 @@ export default function DashboardLayout({
             <ChevronDown className="h-4 w-4 text-slate-400" />
           </div>
         </div>
+        )}
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto min-h-0">
@@ -444,24 +804,25 @@ export default function DashboardLayout({
                 onMouseLeave={handleMouseLeave}
               >
                 {item.children ? (
-                  <div className="flex items-center justify-between px-3 py-2 text-sm font-medium text-slate-300 rounded-md hover:bg-slate-800 cursor-pointer group">
+                  <div className={`flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-3'} py-2 text-sm font-medium text-slate-300 rounded-md hover:bg-slate-800 cursor-pointer group`} title={sidebarCollapsed ? item.name : undefined}>
                     <div className="flex items-center">
-                      <item.icon className="h-5 w-5 mr-3 text-slate-400" />
-                      <span>{item.name}</span>
+                      <item.icon className={`h-5 w-5 ${sidebarCollapsed ? '' : 'mr-3'} text-slate-400`} />
+                      {!sidebarCollapsed && <span>{item.name}</span>}
                     </div>
-                    <ChevronRight className="h-4 w-4 text-slate-500 group-hover:text-slate-400" />
+                    {!sidebarCollapsed && <ChevronRight className="h-4 w-4 text-slate-500 group-hover:text-slate-400" />}
                   </div>
                 ) : (
                   <Link
                     href={item.href!}
-                    className={`flex items-center px-3 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+                    className={`flex items-center ${sidebarCollapsed ? 'justify-center px-2' : 'px-3'} py-2 text-sm font-medium rounded-md transition-all duration-200 ${
                       pathname === item.href
                         ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/50'
                         : 'text-slate-300 hover:bg-slate-800'
                     }`}
+                    title={sidebarCollapsed ? item.name : undefined}
                   >
-                    <item.icon className="h-5 w-5 mr-3" />
-                    <span>{item.name}</span>
+                    <item.icon className={`h-5 w-5 ${sidebarCollapsed ? '' : 'mr-3'}`} />
+                    {!sidebarCollapsed && <span>{item.name}</span>}
                   </Link>
                 )}
               </div>
@@ -504,14 +865,22 @@ export default function DashboardLayout({
           )}
         </nav>
 
-        {/* Logout Button - Fixed at Bottom */}
-        <div className="mt-auto border-t border-slate-700 p-4">
+        {/* Collapse Toggle + Logout - Fixed at Bottom */}
+        <div className="mt-auto border-t border-slate-700 p-2 space-y-1">
+          <button
+            onClick={() => setSidebarCollapsed(prev => !prev)}
+            className={`hidden lg:flex items-center w-full ${sidebarCollapsed ? 'justify-center' : 'px-3'} py-2 text-sm text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-md transition`}
+            title={sidebarCollapsed ? 'Expand sidebar (B)' : 'Collapse sidebar (B)'}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <><PanelLeftClose className="h-5 w-5 mr-3" /><span>Collapse</span></>}
+          </button>
           <button
             onClick={handleLogout}
-            className="flex items-center w-full px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 rounded-md transition"
+            className={`flex items-center w-full ${sidebarCollapsed ? 'justify-center' : 'px-3'} py-2 text-sm text-slate-300 hover:bg-slate-800 rounded-md transition`}
+            title={sidebarCollapsed ? 'Logout' : undefined}
           >
-            <LogOut className="h-5 w-5 mr-3 text-slate-400" />
-            Logout
+            <LogOut className={`h-5 w-5 ${sidebarCollapsed ? '' : 'mr-3'} text-slate-400`} />
+            {!sidebarCollapsed && 'Logout'}
           </button>
         </div>
       </aside>
@@ -536,7 +905,7 @@ export default function DashboardLayout({
         
         return (
           <div
-            className="fixed w-64 max-h-[calc(100vh-16px)] rounded-lg border border-gray-200 bg-white shadow-xl z-[100] animate-in fade-in slide-in-from-left-2 duration-150 overflow-hidden flex flex-col"
+            className="fixed w-64 max-h-[calc(100vh-16px)] rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-xl z-[100] animate-in fade-in slide-in-from-left-2 duration-150 overflow-hidden flex flex-col"
             style={{ 
               top: `${flyoutPosition.top}px`, 
               left: `${flyoutPosition.left}px` 
@@ -544,7 +913,7 @@ export default function DashboardLayout({
             onMouseEnter={handleFlyoutMouseEnter}
             onMouseLeave={handleFlyoutMouseLeave}
           >
-            <div className="px-2 py-2 text-xs font-semibold text-gray-500 border-b border-gray-100 flex-shrink-0">{item.name}</div>
+            <div className="px-2 py-2 text-xs font-semibold text-gray-500 dark:text-slate-400 border-b border-gray-100 dark:border-slate-700 flex-shrink-0">{item.name}</div>
             <div className="overflow-y-auto p-2">
               {item.children.map((child) => (
                 <Link
@@ -552,8 +921,8 @@ export default function DashboardLayout({
                   href={child.href}
                   className={`block px-3 py-2 text-sm rounded-md transition ${
                     pathname === child.href
-                      ? 'bg-blue-50 text-blue-600 font-medium'
-                      : 'text-gray-700 hover:bg-gray-50'
+                      ? 'bg-blue-50 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400 font-medium'
+                      : 'text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700'
                   }`}
                 >
                   {child.name}
@@ -565,9 +934,9 @@ export default function DashboardLayout({
       })()}
 
       {/* Main Content */}
-      <div className="transition-all duration-200 bg-gray-50 min-h-screen lg:pl-56">
+      <div className={`transition-all duration-200 bg-gray-50 dark:bg-slate-900 min-h-screen ${sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-56'}`}>
         {/* Header */}
-        <header className="h-16 bg-slate-900 border-b border-slate-700 flex items-center justify-between px-6 shadow-sm relative">
+        <header className="h-16 bg-slate-900 dark:bg-slate-800 border-b border-slate-700 flex items-center justify-between px-6 shadow-sm relative">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="text-slate-300 hover:text-white lg:hidden"
@@ -588,8 +957,8 @@ export default function DashboardLayout({
                 </button>
                 
                 {createMenuOpen && (
-                  <div className="absolute left-0 mt-2 w-[680px] bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden">
-                    <div className="grid grid-cols-4 divide-x divide-gray-200">
+                  <div className="absolute left-0 mt-2 w-[680px] bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-gray-200 dark:border-slate-600 z-50 overflow-hidden">
+                    <div className="grid grid-cols-4 divide-x divide-gray-200 dark:divide-slate-700">
                       {/* Customers Column */}
                       <div className="p-4">
                         <h3 className="font-semibold text-gray-900 text-sm mb-3">Customers</h3>
@@ -668,20 +1037,11 @@ export default function DashboardLayout({
                   className="w-64 px-4 py-2 bg-slate-800 text-white rounded-lg border border-slate-700 focus:outline-none focus:border-blue-500"
                 />
                 {searchOpen && search && (
-                  <div className="absolute top-full mt-2 w-full bg-white border rounded-lg shadow-lg p-2 z-50">
-                    <div className="text-sm text-gray-600">Search results for "{search}"</div>
+                  <div className="absolute top-full mt-2 w-full bg-white dark:bg-slate-800 border dark:border-slate-600 rounded-lg shadow-lg p-2 z-50">
+                    <div className="text-sm text-gray-600 dark:text-slate-300">Search results for "{search}"</div>
                   </div>
                 )}
               </div>
-
-              {/* Theme Switcher */}
-              <button
-                onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-                className="text-slate-300 hover:text-white"
-                aria-label="Toggle theme"
-              >
-                {theme === 'light' ? '🌙' : '☀️'}
-              </button>
 
               {/* Notifications */}
               <button
@@ -705,18 +1065,44 @@ export default function DashboardLayout({
                 </button>
                 
                 {profileOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white border rounded-lg shadow-lg py-2 z-50">
-                    <div className="px-4 py-2 border-b">
-                      <div className="font-semibold text-gray-900">{user?.firstName} {user?.lastName}</div>
-                      <div className="text-sm text-gray-600">{user?.email}</div>
+                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-800 border dark:border-slate-600 rounded-lg shadow-lg py-2 z-50">
+                    <div className="px-4 py-2 border-b dark:border-slate-700">
+                      <div className="font-semibold text-gray-900 dark:text-slate-100">{user?.firstName} {user?.lastName}</div>
+                      <div className="text-sm text-gray-600 dark:text-slate-400">{user?.email}</div>
                     </div>
                     <button
-                      onClick={handleLogout}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                      onClick={() => { setPreferencesOpen(true); setProfileOpen(false); }}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 flex items-center gap-2"
                     >
-                      <LogOut className="w-4 h-4" />
-                      Logout
+                      <Settings className="w-4 h-4" />
+                      Preferences
                     </button>
+                    <button
+                      onClick={() => { setShortcutsOpen(true); setProfileOpen(false); }}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                    >
+                      <Keyboard className="w-4 h-4" />
+                      Keyboard Shortcuts
+                    </button>
+                    {user?.isSystemAdmin && (
+                      <Link
+                        href="/system-admin"
+                        className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
+                        onClick={() => setProfileOpen(false)}
+                      >
+                        <Shield className="w-4 h-4" />
+                        System Admin Panel
+                      </Link>
+                    )}
+                    <div className="border-t dark:border-slate-700 mt-1 pt-1">
+                      <button
+                        onClick={handleLogout}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        Logout
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -725,7 +1111,17 @@ export default function DashboardLayout({
         </header>
 
         {/* Main Content */}
-        <main className="min-h-[calc(100vh-4rem)] p-6 max-w-[1600px] mx-auto">
+        <main className="min-h-[calc(100vh-4rem)] p-6 max-w-[1600px] mx-auto dark:text-slate-200">
+          {/* Trial countdown banner */}
+          {subStatus === 'TRIAL' && trialEnd && (() => {
+            const daysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - Date.now()) / 86400000));
+            return daysLeft <= 7 ? (
+              <div className={`mb-4 px-4 py-3 rounded-xl text-sm font-medium flex items-center justify-between ${daysLeft <= 2 ? 'bg-red-50 text-red-800 border border-red-200' : 'bg-amber-50 text-amber-800 border border-amber-200'}`}>
+                <span>⏳ Your free trial ends in <strong>{daysLeft} day{daysLeft !== 1 ? 's' : ''}</strong>. Subscribe to keep full access.</span>
+                <a href="mailto:support@yourbooks.app?subject=Subscribe" className={`px-3 py-1 rounded-lg text-xs font-bold ${daysLeft <= 2 ? 'bg-red-600 text-white' : 'bg-amber-600 text-white'}`}>Subscribe Now</a>
+              </div>
+            ) : null;
+          })()}
           {children}
         </main>
 

@@ -28,6 +28,20 @@
 			"command": "cd client && npx prisma generate",
 			"isBackground": false,
 			"group": "build"
+		},
+		{
+			"label": "prisma-migrate-and-generate",
+			"type": "shell",
+			"command": "cd d:\\YourBookSuit\\client && npx prisma migrate dev --name add-system-admin-and-subscriptions && npx prisma generate",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "prisma-migrate-dev",
+			"type": "shell",
+			"command": "cd client && npx prisma migrate dev --name add_system_admin_and_subscriptions",
+			"isBackground": false,
+			"group": "build"
 		}
 	]
 }

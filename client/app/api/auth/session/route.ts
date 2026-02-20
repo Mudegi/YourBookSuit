@@ -61,6 +61,7 @@ export async function GET(request: NextRequest) {
           firstName: true,
           lastName: true,
           avatar: true,
+          isSystemAdmin: true,
         },
       });
       console.log('👤 User found:', !!user, user ? user.email : 'null');
@@ -91,6 +92,8 @@ export async function GET(request: NextRequest) {
           legalName: true,
           homeCountry: true,
           businessModel: true,
+          subscriptionStatus: true,
+          trialEndDate: true,
         },
       });
     }
