@@ -280,13 +280,33 @@ export interface EfrisCommodityCategoryResponse {
 export interface EfrisConfig {
   apiBaseUrl: string;
   apiKey: string;
-  enabled: boolean;  testMode?: boolean;}
+  enabled: boolean;
+  testMode?: boolean;
+  /** Request timeout in milliseconds (default: 30000 = 30s) */
+  timeoutMs?: number;
+}
 
 export class EfrisApiService {
   private config: EfrisConfig;
+  private defaultTimeout: number;
 
   constructor(config: EfrisConfig) {
     this.config = config;
+    this.defaultTimeout = config.timeoutMs || 30000; // 30 seconds default
+  }
+
+  /**
+   * Create a fetch request with timeout via AbortController
+   */
+  private fetchWithTimeout(url: string, options: RequestInit, timeoutMs?: number): Promise<Response> {
+    const timeout = timeoutMs || this.defaultTimeout;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+
+    return fetch(url, {
+      ...options,
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timer));
   }
 
   /**
@@ -301,7 +321,7 @@ export class EfrisApiService {
       console.log('[EFRIS Service] Submitting invoice to:', `${this.config.apiBaseUrl}/submit-invoice`);
       console.log('[EFRIS Service] Request payload:', JSON.stringify(invoiceData, null, 2));
       
-      const response = await fetch(`${this.config.apiBaseUrl}/submit-invoice`, {
+      const response = await this.fetchWithTimeout(`${this.config.apiBaseUrl}/submit-invoice`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -359,7 +379,7 @@ export class EfrisApiService {
     try {
       console.log('[EFRIS Service] Sending product data to backend API:', JSON.stringify(productData, null, 2));
       
-      const response = await fetch(`${this.config.apiBaseUrl}/register-product`, {
+      const response = await this.fetchWithTimeout(`${this.config.apiBaseUrl}/register-product`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -397,7 +417,7 @@ export class EfrisApiService {
     }
 
     try {
-      const response = await fetch(`${this.config.apiBaseUrl}/submit-purchase-order`, {
+      const response = await this.fetchWithTimeout(`${this.config.apiBaseUrl}/submit-purchase-order`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -451,7 +471,7 @@ export class EfrisApiService {
       
       console.log('[EFRIS Service] Sending stock increase data:', JSON.stringify(efrisPayload, null, 2));
       
-      const response = await fetch(`${this.config.apiBaseUrl}/stock-increase`, {
+      const response = await this.fetchWithTimeout(`${this.config.apiBaseUrl}/stock-increase`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -488,7 +508,7 @@ export class EfrisApiService {
     }
 
     try {
-      const response = await fetch(`${this.config.apiBaseUrl}/submit-credit-note`, {
+      const response = await this.fetchWithTimeout(`${this.config.apiBaseUrl}/submit-credit-note`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -519,7 +539,7 @@ export class EfrisApiService {
     }
 
     try {
-      const response = await fetch(`${this.config.apiBaseUrl}/submit-debit-note`, {
+      const response = await this.fetchWithTimeout(`${this.config.apiBaseUrl}/submit-debit-note`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -550,7 +570,7 @@ export class EfrisApiService {
     }
 
     try {
-      const response = await fetch(`${this.config.apiBaseUrl}/invoice/${invoiceNumber}`, {
+      const response = await this.fetchWithTimeout(`${this.config.apiBaseUrl}/invoice/${invoiceNumber}`, {
         method: 'GET',
         headers: {
           'X-API-Key': this.config.apiKey,
@@ -585,7 +605,7 @@ export class EfrisApiService {
 
       const url = `${this.config.apiBaseUrl}/invoices?${queryParams.toString()}`;
       
-      const response = await fetch(url, {
+      const response = await this.fetchWithTimeout(url, {
         method: 'GET',
         headers: {
           'X-API-Key': this.config.apiKey,
@@ -630,7 +650,7 @@ export class EfrisApiService {
     }
 
     try {
-      const response = await fetch(`${this.config.apiBaseUrl}/stock-decrease`, {
+      const response = await this.fetchWithTimeout(`${this.config.apiBaseUrl}/stock-decrease`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -673,7 +693,7 @@ export class EfrisApiService {
       console.log('[EFRIS] Making request to:', url);
       console.log('[EFRIS] Query params:', { excise_code: params?.excise_code, excise_name: params?.excise_name });
       
-      const response = await fetch(url, {
+      const response = await this.fetchWithTimeout(url, {
         method: 'GET',
         headers: {
           'X-API-Key': this.config.apiKey,
@@ -727,7 +747,7 @@ export class EfrisApiService {
       console.log('[EFRIS] Making request to:', url);
       console.log('[EFRIS] Query params:', { pageNo: params?.pageNo, pageSize: params?.pageSize });
       
-      const response = await fetch(url, {
+      const response = await this.fetchWithTimeout(url, {
         method: 'GET',
         headers: {
           'X-API-Key': this.config.apiKey,

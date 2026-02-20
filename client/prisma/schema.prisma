@@ -72,6 +72,7 @@ model Organization {
   documents               Document[]
   documentSequences       DocumentSequence[]
   efrisExcisableList      EFRISExcisableList[]
+  efrisCommodityCategories EFRISCommodityCategory[]
   eInvoiceConfig          EInvoiceConfig?
   employees               Employee[]
   eventLogs               EventLog[]
@@ -4947,12 +4948,16 @@ model ManufacturingOverhead {
 model EFRISExcisableList {
   id             String       @id @default(cuid())
   organizationId String
-  categoryCode   String
-  categoryName   String
+  categoryCode   String       // EFRIS excise duty code (e.g., "LED110000")
+  categoryName   String       // Description (e.g., "Beer, Stout, Porter & other fermented beverages")
   description    String?
-  exciseRate     Decimal      @db.Decimal(5, 2)
+  exciseRate     Decimal      @db.Decimal(21, 8) // Rate value (e.g., 0.60 for 60%, or 1500 for UGX1500)
+  exciseUnit     String?      // EFRIS unit code: 101=%, 102=per Litre, 103=per Kg, etc.
+  exciseRule     String?      // 1=by rate/percentage, 2=by quantity/fixed amount
+  currency       String?      // Currency for fixed rates (e.g. "UGX")
+  rateText       String?      // Human-readable rate text (e.g. "60%" or "UGX1500 per Litre")
   lastSyncedAt   DateTime?
-  effectiveFrom  DateTime
+  effectiveFrom  DateTime     @default(now())
   effectiveTo    DateTime?
   isActive       Boolean      @default(true)
   createdAt      DateTime     @default(now())
@@ -4961,6 +4966,31 @@ model EFRISExcisableList {
 
   @@unique([organizationId, categoryCode])
   @@index([organizationId, isActive])
+}
+
+// Cache for EFRIS commodity categories (T124 VAT categories)
+model EFRISCommodityCategory {
+  id                     String       @id @default(cuid())
+  organizationId         String
+  commodityCategoryCode  String       // e.g. "27112008"
+  commodityCategoryName  String       // e.g. "Garden Tool"
+  parentCode             String?
+  commodityCategoryLevel String?
+  rate                   String?      // VAT rate
+  isLeafNode             String?      // "101"=Yes, "102"=No
+  serviceMark            String?      // "101"=Service, "102"=Goods
+  isZeroRate             String?      // "101"=Yes, "102"=No
+  isExempt               String?      // "101"=Yes, "102"=No
+  excisable              String?      // "101"=Yes, "102"=No
+  lastSyncedAt           DateTime?
+  isActive               Boolean      @default(true)
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, commodityCategoryCode])
+  @@index([organizationId, isActive])
+  @@index([organizationId, isLeafNode])
 }
 
 enum BranchType {

@@ -1,0 +1,33 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Prisma Generate",
+			"type": "shell",
+			"command": "cd client && npx prisma generate",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "prisma-generate",
+			"type": "shell",
+			"command": "cd client && npx prisma generate",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "prisma-generate",
+			"type": "shell",
+			"command": "cd d:\\YourBookSuit\\client && npx prisma generate",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "prisma-generate",
+			"type": "shell",
+			"command": "cd client && npx prisma generate",
+			"isBackground": false,
+			"group": "build"
+		}
+	]
+}

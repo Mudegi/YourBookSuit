@@ -16,10 +16,32 @@ export async function POST(
     // Check authentication
     const { organizationId } = await requireAuth(params.orgSlug);
 
-    // Get EFRIS configuration
-    const efrisConfig = await prisma.eInvoiceConfig.findUnique({
-      where: { organizationId },
-    });
+    // Fetch EFRIS config and invoice in PARALLEL (independent queries)
+    const [efrisConfig, invoice] = await Promise.all([
+      prisma.eInvoiceConfig.findUnique({
+        where: { organizationId },
+      }),
+      prisma.invoice.findUnique({
+        where: {
+          id: params.id,
+          organizationId,
+        },
+        include: {
+          customer: true,
+          items: {
+            include: {
+              product: {
+                include: {
+                  unitOfMeasure: true,
+                },
+              },
+              service: true,
+              taxRateConfig: true, // Include tax rate configuration
+            },
+          },
+        },
+      }),
+    ]);
 
     if (!efrisConfig || !efrisConfig.isActive) {
       return NextResponse.json(
@@ -44,28 +66,6 @@ export async function POST(
         { status: 400 }
       );
     }
-
-    // Get the invoice with all related data including tax rates
-    const invoice = await prisma.invoice.findUnique({
-      where: {
-        id: params.id,
-        organizationId,
-      },
-      include: {
-        customer: true,
-        items: {
-          include: {
-            product: {
-              include: {
-                unitOfMeasure: true,
-              },
-            },
-            service: true,
-            taxRateConfig: true, // Include tax rate configuration
-          },
-        },
-      },
-    });
 
     if (!invoice) {
       return NextResponse.json(

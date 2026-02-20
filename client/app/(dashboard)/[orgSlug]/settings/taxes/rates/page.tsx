@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Edit, Trash2, Percent, DollarSign, Tag, Wine, Search, RefreshCw } from 'lucide-react';
+import { Plus, Edit, Trash2, Percent, DollarSign, Tag, Wine, Search, RefreshCw, Database } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface TaxAgency {
   id: string;
@@ -60,8 +61,10 @@ export default function TaxRatesPage() {
   // Excise duty states
   const [exciseCodes, setExciseCodes] = useState<ExciseDutyCode[]>([]);
   const [exciseLoading, setExciseLoading] = useState(false);
+  const [exciseSyncing, setExciseSyncing] = useState(false);
   const [exciseError, setExciseError] = useState('');
   const [exciseSearch, setExciseSearch] = useState('');
+  const [exciseSource, setExciseSource] = useState<string>('');
 
   useEffect(() => {
     if (activeTab === 'rates') {
@@ -102,11 +105,33 @@ export default function TaxRatesPage() {
       
       const data = await res.json();
       setExciseCodes(data.data || []);
+      setExciseSource(data.source || 'cache');
       setExciseError('');
     } catch (err: any) {
       setExciseError(err.message);
     } finally {
       setExciseLoading(false);
+    }
+  };
+
+  const syncFromEfris = async () => {
+    try {
+      setExciseSyncing(true);
+      const toastId = toast.loading('Syncing excise duty codes from EFRIS...');
+      const res = await fetch(`/api/orgs/${orgSlug}/efris/excise-codes?refresh=true`);
+      
+      if (!res.ok) throw new Error('Failed to sync from EFRIS');
+      
+      const data = await res.json();
+      setExciseCodes(data.data || []);
+      setExciseSource('efris_refreshed');
+      setExciseError('');
+      toast.success(`Synced ${data.total || 0} excise duty codes from EFRIS`, { id: toastId });
+    } catch (err: any) {
+      setExciseError(err.message);
+      toast.error(`Sync failed: ${err.message}`);
+    } finally {
+      setExciseSyncing(false);
     }
   };
 
@@ -160,14 +185,22 @@ export default function TaxRatesPage() {
             </Link>
           )}
           {activeTab === 'excise' && (
-            <button
-              onClick={fetchExciseCodes}
-              disabled={exciseLoading}
-              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50"
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${exciseLoading ? 'animate-spin' : ''}`} />
-              Refresh from EFRIS
-            </button>
+            <div className="flex items-center gap-2">
+              {exciseSource && (
+                <span className="text-xs text-gray-500 flex items-center gap-1">
+                  <Database className="h-3 w-3" />
+                  {exciseSource === 'cache' ? 'From cache' : exciseSource === 'efris_refreshed' ? 'Just synced' : 'Initial sync'}
+                </span>
+              )}
+              <button
+                onClick={syncFromEfris}
+                disabled={exciseSyncing}
+                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:opacity-50"
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${exciseSyncing ? 'animate-spin' : ''}`} />
+                {exciseSyncing ? 'Syncing...' : 'Sync from EFRIS'}
+              </button>
+            </div>
           )}
         </div>
 
@@ -253,7 +286,7 @@ export default function TaxRatesPage() {
               />
             </div>
             <p className="mt-2 text-sm text-gray-500">
-              Excise duty codes are fetched in real-time from EFRIS API. Browse and select codes when creating products.
+              Excise duty codes are cached locally for fast loading. Click &quot;Sync from EFRIS&quot; to refresh from the EFRIS API.
             </p>
           </div>
         )}
@@ -409,7 +442,7 @@ export default function TaxRatesPage() {
             {exciseLoading ? (
               <div className="text-center py-12">
                 <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-green-600 border-r-transparent"></div>
-                <p className="mt-2 text-sm text-gray-500">Loading excise codes from EFRIS...</p>
+                <p className="mt-2 text-sm text-gray-500">Loading excise codes...</p>
               </div>
             ) : exciseCodes.length === 0 ? (
               <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
@@ -418,7 +451,7 @@ export default function TaxRatesPage() {
                 <p className="mt-1 text-sm text-gray-500">
                   {exciseSearch 
                     ? 'Try a different search term or clear the search to see all codes.'
-                    : 'Click "Refresh from EFRIS" to load excise duty codes.'}
+                    : 'Click "Sync from EFRIS" to load excise duty codes into the local cache.'}
                 </p>
                 {exciseSearch && (
                   <button

@@ -8,6 +8,7 @@ import CommodityCategorySelector from '@/components/efris/CommodityCategorySelec
 import SearchableUnitSelect from '@/components/SearchableUnitSelect';
 import Link from 'next/link';
 import { ExternalLink } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface UnitOfMeasure {
   id: string;
@@ -216,6 +217,7 @@ export default function NewProductPage() {
 
       // Register to EFRIS if requested
       if (shouldRegisterToEfris) {
+        const efrisToastId = toast.loading('Registering product with EFRIS...');
         try {
           const efrisRes = await fetch(`/api/orgs/${orgSlug}/products/${product.data?.id || product.id}/efris`, {
             method: 'POST',
@@ -224,13 +226,13 @@ export default function NewProductPage() {
 
           if (!efrisRes.ok) {
             const efrisError = await efrisRes.json();
-            setError(`Product created but EFRIS registration failed: ${efrisError.error}`);
-            // Still navigate to products list
+            toast.error(`Product created but EFRIS registration failed: ${efrisError.error}`, { id: efrisToastId, duration: 10000 });
             setTimeout(() => router.replace(`/${orgSlug}/inventory/products`), 2000);
             return;
           }
-        } catch (efrisErr) {
-          setError('Product created but EFRIS registration failed');
+          toast.success('Product registered with EFRIS!', { id: efrisToastId });
+        } catch (efrisErr: any) {
+          toast.error(efrisErr?.name === 'AbortError' ? 'EFRIS request timed out' : 'Product created but EFRIS registration failed', { id: efrisToastId });
           setTimeout(() => router.replace(`/${orgSlug}/inventory/products`), 2000);
           return;
         }

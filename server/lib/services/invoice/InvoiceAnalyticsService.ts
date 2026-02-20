@@ -260,8 +260,7 @@ export class InvoiceAnalyticsService {
           },
         },
         orderBy: [
-          { status: 'asc' }, // Overdue first
-          { dueDate: 'asc' }, // Oldest due date first
+          { invoiceDate: 'desc' }, // Most recent first
         ],
         skip: (page - 1) * limit,
         take: limit,

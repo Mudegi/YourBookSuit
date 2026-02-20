@@ -15,16 +15,21 @@ export async function POST(
     const { organizationId } = await requireAuth(params.orgSlug);
     const productId = params.id;
 
-    // Fetch the product
-    const product = await prisma.product.findFirst({
-      where: {
-        id: productId,
-        organizationId,
-      },
-      include: {
-        unitOfMeasure: true,
-      },
-    });
+    // Fetch product and EFRIS config in PARALLEL (independent queries)
+    const [product, efrisConfig] = await Promise.all([
+      prisma.product.findFirst({
+        where: {
+          id: productId,
+          organizationId,
+        },
+        include: {
+          unitOfMeasure: true,
+        },
+      }),
+      prisma.eInvoiceConfig.findUnique({
+        where: { organizationId },
+      }),
+    ]);
 
     if (!product) {
       return NextResponse.json(
@@ -43,11 +48,6 @@ export async function POST(
         { status: 400 }
       );
     }
-
-    // Get EFRIS configuration
-    const efrisConfig = await prisma.eInvoiceConfig.findUnique({
-      where: { organizationId },
-    });
 
     if (!efrisConfig || !efrisConfig.isActive) {
       return NextResponse.json(
@@ -308,67 +308,64 @@ export async function POST(
     }
 
     // Update product with EFRIS product code and item code
-    const updatedProduct = await prisma.product.update({
-      where: { id: product.id },
-      data: {
-        efrisProductCode: result.product_code,
-        efrisItemCode: itemCode,  // Store the item code used for registration
-        goodsCategoryId: efrisProductData.commodity_code, // Store the commodity code (SKU) used during registration
-        efrisRegisteredAt: new Date(), // Current timestamp since API doesn't return registration_date
-      },
-    });
-
-    // If stock_quantity was sent to EFRIS and product tracks inventory, update local inventory
+    // Run DB writes in parallel where possible for speed
     const stockQty = efrisProductData.stock_quantity ? parseFloat(efrisProductData.stock_quantity) : 0;
-    if (product.trackInventory && stockQty > 0) {
-      // Find or create inventory item
-      let inventoryItem = await prisma.inventoryItem.findFirst({
-        where: { productId: product.id },
-      });
+    const now = new Date();
 
-      if (inventoryItem) {
-        // Update existing inventory item
-        await prisma.inventoryItem.update({
-          where: { id: inventoryItem.id },
-          data: {
-            quantityOnHand: stockQty,
-            quantityAvailable: stockQty,
-            averageCost: product.purchasePrice || 0,
-            totalValue: stockQty * Number(product.purchasePrice || 0),
-          },
-        });
-      } else {
-        // Create inventory item if it doesn't exist
-        await prisma.inventoryItem.create({
-          data: {
-            productId: product.id,
-            warehouseLocation: 'Main',
-            quantityOnHand: stockQty,
-            quantityReserved: 0,
-            quantityAvailable: stockQty,
-            averageCost: product.purchasePrice || 0,
-            totalValue: stockQty * Number(product.purchasePrice || 0),
-          },
-        });
-      }
-
-      // Create stock movement record to document the initial stock from EFRIS registration
-      await prisma.stockMovement.create({
+    const dbWrites: Promise<any>[] = [
+      // Always: update product with EFRIS codes
+      prisma.product.update({
+        where: { id: product.id },
         data: {
-          productId: product.id,
-          movementType: 'ADJUSTMENT',
-          quantity: stockQty,
-          unitCost: product.purchasePrice || 0,
-          totalCost: stockQty * Number(product.purchasePrice || 0),
-          referenceType: 'EFRIS_REGISTRATION',
-          referenceId: result.product_code,
-          notes: `Initial stock quantity registered with EFRIS (Product Code: ${result.product_code})`,
-          movementDate: new Date(),
+          efrisProductCode: result.product_code,
+          efrisItemCode: itemCode,
+          goodsCategoryId: efrisProductData.commodity_code,
+          efrisRegisteredAt: now,
         },
-      });
+      }),
+    ];
 
-      console.log('[EFRIS] Inventory updated with stock quantity:', stockQty);
+    // Conditionally: update inventory + create stock movement
+    if (product.trackInventory && stockQty > 0) {
+      dbWrites.push(
+        (async () => {
+          const inventoryItem = await prisma.inventoryItem.findFirst({
+            where: { productId: product.id },
+          });
+
+          const inventoryData = {
+            quantityOnHand: stockQty,
+            quantityAvailable: stockQty,
+            averageCost: product.purchasePrice || 0,
+            totalValue: stockQty * Number(product.purchasePrice || 0),
+          };
+
+          const inventoryPromise = inventoryItem
+            ? prisma.inventoryItem.update({ where: { id: inventoryItem.id }, data: inventoryData })
+            : prisma.inventoryItem.create({
+                data: { productId: product.id, warehouseLocation: 'Main', quantityReserved: 0, ...inventoryData },
+              });
+
+          const movementPromise = prisma.stockMovement.create({
+            data: {
+              productId: product.id,
+              movementType: 'ADJUSTMENT',
+              quantity: stockQty,
+              unitCost: product.purchasePrice || 0,
+              totalCost: stockQty * Number(product.purchasePrice || 0),
+              referenceType: 'EFRIS_REGISTRATION',
+              referenceId: result.product_code,
+              notes: `Initial stock registered with EFRIS (Product Code: ${result.product_code})`,
+              movementDate: now,
+            },
+          });
+
+          return Promise.all([inventoryPromise, movementPromise]);
+        })()
+      );
     }
+
+    const [updatedProduct] = await Promise.all(dbWrites);
 
     console.log('[EFRIS] Product registered successfully:', {
       productId: product.id,

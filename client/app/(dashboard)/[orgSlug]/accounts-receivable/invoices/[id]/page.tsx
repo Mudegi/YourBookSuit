@@ -18,6 +18,7 @@ import {
 import { useOrganization } from '@/hooks/useOrganization';
 import { formatCurrency } from '@/lib/utils';
 import { EfrisStatusBadge, EfrisStatusDetails } from '@/components/efris/EfrisStatus';
+import { toast } from 'sonner';
 
 interface PaymentAllocation {
   id: string;
@@ -164,6 +165,7 @@ export default function InvoiceDetailsPage() {
     }
 
     setSubmittingToEfris(true);
+    const toastId = toast.loading('Submitting invoice to EFRIS...');
     try {
       const response = await fetch(`/api/orgs/${orgSlug}/invoices/${invoiceId}/efris`, {
         method: 'POST',
@@ -173,14 +175,14 @@ export default function InvoiceDetailsPage() {
       const data = await response.json();
 
       if (data.success) {
-        alert(`✅ Invoice fiscalized successfully!\n\nFDN: ${data.fdn}\nVerification Code: ${data.verificationCode}`);
+        toast.success(`Invoice fiscalized! FDN: ${data.fdn}`, { id: toastId, duration: 8000 });
         fetchInvoice();
       } else {
-        alert(`❌ EFRIS Submission Failed\n\n${data.error || 'Unknown error'}\n${data.details || ''}`);
+        toast.error(`EFRIS submission failed: ${data.error || 'Unknown error'}`, { id: toastId, duration: 10000 });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error submitting to EFRIS:', error);
-      alert('Failed to submit to EFRIS');
+      toast.error(error.name === 'AbortError' ? 'EFRIS request timed out — please try again' : 'Failed to submit to EFRIS', { id: toastId });
     } finally {
       setSubmittingToEfris(false);
     }

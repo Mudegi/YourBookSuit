@@ -9,6 +9,7 @@ import {
 import { useOrganization } from '@/hooks/useOrganization';
 import { formatCurrency } from '@/lib/utils';
 import EfrisInvoiceDisplay from '@/components/efris/EfrisInvoiceDisplay';
+import { toast } from 'sonner';
 
 interface Customer {
   id: string;
@@ -1006,6 +1007,7 @@ export default function IntelligentInvoicePage() {
 
         // Fiscalize with EFRIS if requested
         if (shouldFiscalizeWithEfris) {
+          const efrisToastId = toast.loading('Submitting invoice to EFRIS...');
           try {
             const efrisRes = await fetch(`/api/orgs/${orgSlug}/invoices/${invoiceId}/efris`, {
               method: 'POST',
@@ -1014,7 +1016,7 @@ export default function IntelligentInvoicePage() {
 
             if (!efrisRes.ok) {
               const efrisError = await efrisRes.json();
-              alert(`Invoice created but EFRIS fiscalization failed: ${efrisError.error}`);
+              toast.error(`Invoice created but EFRIS fiscalization failed: ${efrisError.error}`, { id: efrisToastId, duration: 10000 });
               // Still navigate to invoice detail
               router.push(`/${orgSlug}/accounts-receivable/invoices/${invoiceId}`);
               return;
@@ -1023,6 +1025,7 @@ export default function IntelligentInvoicePage() {
             // Get the fiscal invoice data from response
             const efrisData = await efrisRes.json();
             console.log('[Invoice Creation] EFRIS fiscal data received:', efrisData);
+            toast.success('Invoice fiscalized successfully!', { id: efrisToastId });
             
             // Show the EFRIS fiscal invoice immediately using the full response data
             setEfrisFiscalData(efrisData.fullEfrisResponse || efrisData);
@@ -1030,8 +1033,8 @@ export default function IntelligentInvoicePage() {
             setShowEfrisFiscalInvoice(true);
             setLoading(false);
             return; // Don't navigate yet, show the fiscal receipt first
-          } catch (efrisErr) {
-            alert('Invoice created but EFRIS fiscalization failed');
+          } catch (efrisErr: any) {
+            toast.error(efrisErr?.name === 'AbortError' ? 'EFRIS request timed out' : 'Invoice created but EFRIS fiscalization failed', { id: efrisToastId });
             router.push(`/${orgSlug}/accounts-receivable/invoices/${invoiceId}`);
             return;
           }
