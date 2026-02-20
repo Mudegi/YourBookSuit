@@ -173,6 +173,9 @@ export default function DashboardLayout({
     router.push('/login');
   };
 
+  // Full-screen pages that should bypass the dashboard sidebar/header
+  const isFullScreenPage = pathname.includes('/invoices/new-intelligent');
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -182,6 +185,11 @@ export default function DashboardLayout({
         </div>
       </div>
     );
+  }
+
+  // Render full-screen pages without sidebar/header
+  if (isFullScreenPage) {
+    return <>{children}</>;
   }
 
   // Filter Settings children based on country - EFRIS only for Uganda

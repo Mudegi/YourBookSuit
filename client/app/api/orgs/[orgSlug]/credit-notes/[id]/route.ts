@@ -21,7 +21,10 @@ export async function GET(req: NextRequest, { params }: { params: { orgSlug: str
         customer: { select: { id: true, customerNumber: true, companyName: true, firstName: true, lastName: true } },
         invoice: { select: { id: true, invoiceNumber: true } },
         branch: { select: { id: true, name: true } },
-        lineItems: { orderBy: { lineNumber: 'asc' } },
+        lineItems: {
+          include: { product: { select: { id: true, name: true, sku: true } } },
+          orderBy: { createdAt: 'asc' }
+        },
         applications: {
           include: {
             invoice: { select: { id: true, invoiceNumber: true } }
@@ -96,21 +99,28 @@ export async function PUT(req: NextRequest, { params }: { params: { orgSlug: str
           description,
           internalNotes,
           subtotal,
-          totalTax,
+          taxAmount: totalTax,
           totalAmount: total,
           remainingAmount: total,
           lineItems: {
-            create: lineItems.map((item: any, index: number) => ({
-              lineNumber: index + 1,
-              description: item.description,
-              quantity: parseFloat(item.quantity),
-              unitPrice: parseFloat(item.unitPrice),
-              taxRate: parseFloat(item.taxRate),
-              taxAmount: parseFloat(item.quantity) * parseFloat(item.unitPrice) * (parseFloat(item.taxRate) / 100),
-              lineTotal: parseFloat(item.quantity) * parseFloat(item.unitPrice) * (1 + parseFloat(item.taxRate) / 100),
-              productId: item.productId || null,
-              accountId: item.accountId || null,
-            }))
+            create: lineItems.map((item: any) => {
+              const qty = parseFloat(item.quantity);
+              const price = parseFloat(item.unitPrice);
+              const rate = parseFloat(item.taxRate || 0);
+              const itemSubtotal = qty * price;
+              const itemTax = itemSubtotal * (rate / 100);
+              return {
+                description: item.description,
+                quantity: qty,
+                unitPrice: price,
+                taxRate: rate,
+                taxAmount: itemTax,
+                subtotal: itemSubtotal,
+                totalAmount: itemSubtotal + itemTax,
+                productId: item.productId || null,
+                accountId: item.accountId || null,
+              };
+            })
           }
         },
         include: {

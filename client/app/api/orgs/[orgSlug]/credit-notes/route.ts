@@ -54,7 +54,10 @@ export async function POST(req: NextRequest, { params }: { params: { orgSlug: st
     if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
-    const { customerId, invoiceId, branchId, creditDate, reason, description, internalNotes, lineItems } = body;
+    const {
+      customerId, invoiceId, branchId, creditDate, reason, description,
+      internalNotes, lineItems, restockInventory
+    } = body;
 
     const org = await prisma.organization.findUnique({
       where: { slug: params.orgSlug },
@@ -63,71 +66,177 @@ export async function POST(req: NextRequest, { params }: { params: { orgSlug: st
 
     if (!org) return NextResponse.json({ success: false, error: 'Organization not found' }, { status: 404 });
 
-    // Calculate total
-    const subtotal = lineItems.reduce((sum: number, item: any) => {
-      const itemSubtotal = parseFloat(item.quantity) * parseFloat(item.unitPrice);
-      return sum + itemSubtotal;
-    }, 0);
+    // Determine tax calculation method from linked invoice (if any)
+    let taxInclusive = false;
+    if (invoiceId) {
+      const inv = await prisma.invoice.findUnique({
+        where: { id: invoiceId },
+        select: { taxCalculationMethod: true },
+      });
+      taxInclusive = inv?.taxCalculationMethod === 'INCLUSIVE';
+    }
 
-    const totalTax = lineItems.reduce((sum: number, item: any) => {
-      const itemSubtotal = parseFloat(item.quantity) * parseFloat(item.unitPrice);
-      const itemTax = itemSubtotal * (parseFloat(item.taxRate) / 100);
-      return sum + itemTax;
-    }, 0);
+    // Helper: calculate line amounts respecting inclusive/exclusive pricing
+    const calcLine = (qty: number, unitPrice: number, taxRate: number) => {
+      if (taxInclusive && taxRate > 0) {
+        const gross = qty * unitPrice;
+        const taxAmt = gross * taxRate / (100 + taxRate);
+        const sub = gross - taxAmt;
+        return {
+          subtotal: Math.round(sub * 100) / 100,
+          taxAmount: Math.round(taxAmt * 100) / 100,
+          totalAmount: Math.round(gross * 100) / 100,
+        };
+      }
+      const sub = qty * unitPrice;
+      const taxAmt = sub * taxRate / 100;
+      return {
+        subtotal: Math.round(sub * 100) / 100,
+        taxAmount: Math.round(taxAmt * 100) / 100,
+        totalAmount: Math.round((sub + taxAmt) * 100) / 100,
+      };
+    };
 
-    const total = subtotal + totalTax;
+    // Calculate totals
+    let subtotal = 0;
+    let taxAmount = 0;
+    let totalAmount = 0;
+    const computedItems = lineItems.map((item: any) => {
+      const qty = parseFloat(item.quantity);
+      const price = parseFloat(item.unitPrice);
+      const rate = parseFloat(item.taxRate || 0);
+      const line = calcLine(qty, price, rate);
+      subtotal += line.subtotal;
+      taxAmount += line.taxAmount;
+      totalAmount += line.totalAmount;
+      return { ...item, qty, price, rate, ...line };
+    });
 
-    // Get next credit note number
+    // Generate credit note number: CN-YYYY-XXXX
+    const year = new Date(creditDate).getFullYear();
+    const prefix = `CN-${year}-`;
     const lastCreditNote = await prisma.creditNote.findFirst({
-      where: { organizationId: org.id },
+      where: {
+        organizationId: org.id,
+        creditNoteNumber: { startsWith: prefix },
+      },
       orderBy: { creditNoteNumber: 'desc' },
       select: { creditNoteNumber: true }
     });
 
-    let creditNoteNumber = 'CN-0001';
-    if (lastCreditNote && lastCreditNote.creditNoteNumber) {
-      const lastNum = parseInt(lastCreditNote.creditNoteNumber.split('-')[1] || '0');
-      creditNoteNumber = `CN-${String(lastNum + 1).padStart(4, '0')}`;
+    let seq = 1;
+    if (lastCreditNote?.creditNoteNumber) {
+      const parts = lastCreditNote.creditNoteNumber.split('-');
+      const lastSeq = parseInt(parts[parts.length - 1] || '0', 10);
+      if (!isNaN(lastSeq)) seq = lastSeq + 1;
     }
+    const creditNoteNumber = `${prefix}${String(seq).padStart(4, '0')}`;
 
-    // Create credit note
-    const creditNote = await prisma.creditNote.create({
-      data: {
-        organizationId: org.id,
-        customerId,
-        invoiceId: invoiceId || null,
-        branchId: branchId || null,
-        creditNoteNumber,
-        creditDate: new Date(creditDate),
-        reason,
-        description,
-        internalNotes,
-        subtotal,
-        totalTax,
-        totalAmount: total,
-        appliedAmount: 0,
-        remainingAmount: total,
-        status: 'DRAFT',
-        createdById: user.id,
-        lineItems: {
-          create: lineItems.map((item: any, index: number) => ({
-            lineNumber: index + 1,
-            description: item.description,
-            quantity: parseFloat(item.quantity),
-            unitPrice: parseFloat(item.unitPrice),
-            taxRate: parseFloat(item.taxRate),
-            taxAmount: parseFloat(item.quantity) * parseFloat(item.unitPrice) * (parseFloat(item.taxRate) / 100),
-            lineTotal: parseFloat(item.quantity) * parseFloat(item.unitPrice) * (1 + parseFloat(item.taxRate) / 100),
-            productId: item.productId || null,
-            accountId: item.accountId || null,
-          }))
+    // Use a transaction for atomicity
+    const creditNote = await prisma.$transaction(async (tx) => {
+      // Create credit note with line items
+      const cn = await tx.creditNote.create({
+        data: {
+          organizationId: org.id,
+          customerId,
+          invoiceId: invoiceId || null,
+          branchId: branchId || null,
+          creditNoteNumber,
+          creditDate: new Date(creditDate),
+          reason,
+          description,
+          internalNotes: internalNotes || null,
+          subtotal,
+          taxAmount,
+          totalAmount,
+          appliedAmount: 0,
+          remainingAmount: totalAmount,
+          status: 'DRAFT',
+          createdBy: user.id,
+          lineItems: {
+            create: computedItems.map((item: any) => {
+              return {
+                description: item.description,
+                quantity: item.qty,
+                unitPrice: item.price,
+                taxRate: item.rate,
+                taxRateId: item.taxRateId || null,
+                taxAmount: item.taxAmount,
+                subtotal: item.subtotal,
+                totalAmount: item.totalAmount,
+                productId: item.productId || null,
+                accountId: item.accountId || null,
+              };
+            })
+          }
+        },
+        include: {
+          customer: true,
+          invoice: true,
+          lineItems: true,
         }
-      },
-      include: {
-        customer: true,
-        invoice: true,
-        lineItems: true
+      });
+
+      // Restock inventory if requested
+      if (restockInventory) {
+        const restockItems = lineItems.filter((item: any) => item.restock && item.productId);
+        for (const item of restockItems) {
+          const qty = parseFloat(item.quantity);
+          if (qty <= 0) continue;
+
+          // Resolve warehouse location name
+          let warehouseLocation = 'Main';
+          if (item.warehouseId) {
+            const wh = await tx.inventoryWarehouse.findUnique({
+              where: { id: item.warehouseId },
+              select: { name: true },
+            });
+            if (wh) warehouseLocation = wh.name;
+          }
+
+          // Update or create inventory item balance
+          const existingItem = await tx.inventoryItem.findFirst({
+            where: {
+              productId: item.productId,
+              warehouseLocation,
+            }
+          });
+
+          if (existingItem) {
+            await tx.inventoryItem.update({
+              where: { id: existingItem.id },
+              data: {
+                quantityOnHand: { increment: qty },
+                quantityAvailable: { increment: qty },
+              }
+            });
+          } else {
+            await tx.inventoryItem.create({
+              data: {
+                productId: item.productId,
+                warehouseLocation,
+                quantityOnHand: qty,
+                quantityAvailable: qty,
+              }
+            });
+          }
+
+          // Create stock movement for audit trail
+          await tx.stockMovement.create({
+            data: {
+              productId: item.productId,
+              movementType: 'RETURN',
+              quantity: qty,
+              warehouseLocation,
+              referenceType: 'CreditNote',
+              referenceId: cn.id,
+              notes: `Credit note return: ${description}`,
+            }
+          });
+        }
       }
+
+      return cn;
     });
 
     return NextResponse.json({ success: true, data: creditNote }, { status: 201 });

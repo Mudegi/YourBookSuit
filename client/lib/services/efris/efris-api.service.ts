@@ -168,6 +168,41 @@ export interface EfrisCreditNoteResponse {
   fiscalized_at?: string;
   error_code?: string;
   message?: string;
+  fiscal_data?: {
+    fdn?: string;
+    verification_code?: string;
+    qr_code?: string;
+  };
+  referenceNo?: string;
+}
+
+/**
+ * T110 Credit Note Application Request — SIMPLE FORMAT
+ *
+ * Per ERP Integration Guide: "Send only business data. The API builds the full EFRIS payload."
+ *   - Send POSITIVE quantities (API negates them)
+ *   - unit_price is tax-inclusive
+ *   - tax_rate: 18 = Standard, 0 = Zero-rated, -1 = Exempt
+ *   - reason text is auto-mapped to reasonCode by the API
+ *   - T110 returns referenceNo, NOT FDN (URA approval pending)
+ */
+export interface EfrisCreditNoteApplicationRequest {
+  credit_note_number: string;
+  credit_note_date: string;          // YYYY-MM-DD
+  original_invoice_number: string;
+  original_fdn: string;              // FDN of the original invoice
+  customer_name: string;
+  customer_tin?: string;
+  reason: string;                    // e.g. "GOODS_RETURNED", "CANCELLATION", etc.
+  currency: string;
+  items: Array<{
+    item_name: string;
+    item_code: string;               // EFRIS-registered item code
+    quantity: number;                 // POSITIVE — API makes it negative
+    unit_price: number;              // Tax-inclusive price
+    tax_rate: number;                // 18, 0, or -1
+    commodity_code?: string;         // EFRIS commodity/goods category
+  }>;
 }
 
 export interface EfrisDebitNoteRequest {
@@ -526,6 +561,50 @@ export class EfrisApiService {
       return result;
     } catch (error) {
       console.error('EFRIS credit note submission error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Submit a Credit Note Application to EFRIS (T110) via the middleware.
+   * Sends simple business data — the middleware builds the full EFRIS payload.
+   */
+  async submitCreditNoteApplication(data: EfrisCreditNoteApplicationRequest): Promise<EfrisCreditNoteResponse> {
+    if (!this.config.enabled) {
+      throw new Error('EFRIS integration is not enabled');
+    }
+
+    try {
+      console.log('[EFRIS Service] Submitting T110 credit note application to:', `${this.config.apiBaseUrl}/submit-credit-note`);
+      console.log('[EFRIS Service] T110 Request payload:', JSON.stringify(data, null, 2));
+
+      const response = await this.fetchWithTimeout(`${this.config.apiBaseUrl}/submit-credit-note`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': this.config.apiKey,
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorData: any = {};
+        try { errorData = JSON.parse(errorText); } catch { errorData = { message: errorText }; }
+        console.error('[EFRIS Service] T110 Error response:', errorData);
+        // detail may be a nested object like { success, error_code, message }
+        const detail = errorData.detail;
+        const errMsg = (typeof detail === 'object' && detail !== null)
+          ? (detail.message || detail.error || JSON.stringify(detail))
+          : (detail || errorData.message || errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+        throw new Error(errMsg);
+      }
+
+      const result: EfrisCreditNoteResponse = await response.json();
+      console.log('[EFRIS Service] T110 Response:', JSON.stringify(result, null, 2));
+      return result;
+    } catch (error) {
+      console.error('EFRIS T110 credit note application error:', error);
       throw error;
     }
   }

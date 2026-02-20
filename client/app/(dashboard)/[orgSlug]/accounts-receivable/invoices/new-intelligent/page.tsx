@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -1095,30 +1095,75 @@ export default function IntelligentInvoicePage() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto p-6">
-        
-        {/* Header */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => router.push(`/${orgSlug}/accounts-receivable/invoices`)}
-              className="p-2 hover:bg-gray-100 rounded"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <h1 className="text-2xl font-bold">Create Invoice</h1>
+    <div className="min-h-screen bg-gray-50/80">
+      {/* ── Sticky Top Navigation ── */}
+      <div className="sticky top-0 z-30 bg-white border-b border-gray-200 shadow-sm">
+        <div className="max-w-[1800px] mx-auto px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => router.push(`/${orgSlug}/accounts-receivable/invoices`)}
+                className="p-2 -ml-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div>
+                <h1 className="text-lg font-bold text-gray-900 leading-tight">New Invoice</h1>
+                <p className="text-xs text-gray-500">{organization?.name}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={validateInvoice}
+                disabled={validating || !selectedCustomer || items.length === 0}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {validating ? 'Validating...' : 'Validate'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSubmit(false)}
+                disabled={loading || !selectedCustomer || items.length === 0}
+                className="px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <Save className="w-4 h-4 inline mr-1.5 -mt-0.5" />
+                {loading ? 'Saving...' : 'Save'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSubmit(false, true)}
+                disabled={loading || !selectedCustomer || items.length === 0}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {loading ? 'Saving...' : 'Save & Send'}
+              </button>
+              {efrisEnabled && (
+                <button
+                  type="button"
+                  onClick={() => handleSubmit(true)}
+                  disabled={loading || !selectedCustomer || items.length === 0}
+                  className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {loading ? 'Saving...' : 'Fiscalize'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
+      </div>
+
+      {/* ── Main Content ── */}
+      <div className="max-w-[1800px] mx-auto px-8 py-6">
 
         {/* Validation Messages */}
         {validation && validation.errors.length > 0 && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-            <div className="flex gap-2">
-              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-5">
+            <div className="flex gap-2.5">
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
               <div>
-                <h3 className="font-semibold text-red-900 mb-1">Validation Errors</h3>
-                <ul className="list-disc list-inside text-sm text-red-800">
+                <p className="font-semibold text-red-900 text-sm">Please fix the following errors</p>
+                <ul className="mt-1 list-disc list-inside text-sm text-red-700 space-y-0.5">
                   {validation.errors.map((error, i) => (
                     <li key={i}>{error}</li>
                   ))}
@@ -1129,12 +1174,12 @@ export default function IntelligentInvoicePage() {
         )}
 
         {validation && validation.warnings && validation.warnings.length > 0 && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-            <div className="flex gap-2">
-              <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5">
+            <div className="flex gap-2.5">
+              <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
               <div>
-                <h3 className="font-semibold text-yellow-900 mb-1">Warnings</h3>
-                <ul className="list-disc list-inside text-sm text-yellow-800">
+                <p className="font-semibold text-amber-900 text-sm">Warnings</p>
+                <ul className="mt-1 list-disc list-inside text-sm text-amber-700 space-y-0.5">
                   {validation.warnings.map((warning, i) => (
                     <li key={i}>{warning}</li>
                   ))}
@@ -1144,696 +1189,656 @@ export default function IntelligentInvoicePage() {
           </div>
         )}
 
-        {/* Main Form */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          
-          {/* Customer Selection */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Customer <span className="text-red-500">*</span>
-            </label>
-            
-            {selectedCustomer ? (
-              <div className="flex items-center justify-between p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <div>
-                  <div className="font-medium text-gray-900">
-                    {selectedCustomer.companyName || `${selectedCustomer.firstName} ${selectedCustomer.lastName}`}
+        {/* ── Full-Width Form ── */}
+        <div className="space-y-5">
+
+            {/* Card: Customer & Invoice Details */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              {/* Customer Section */}
+              <div className="p-5 border-b border-gray-100">
+                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2.5">
+                  Bill To <span className="text-red-400">*</span>
+                </label>
+                
+                {selectedCustomer ? (
+                  <div className="flex items-start justify-between p-3.5 bg-gray-50 border border-gray-200 rounded-lg">
+                    <div>
+                      <p className="font-semibold text-gray-900">
+                        {selectedCustomer.companyName || `${selectedCustomer.firstName} ${selectedCustomer.lastName}`}
+                      </p>
+                      {selectedCustomer.email && (
+                        <p className="text-sm text-gray-500 mt-0.5">{selectedCustomer.email}</p>
+                      )}
+                      {selectedCustomer.creditLimit && (
+                        <p className="text-xs text-gray-400 mt-1">
+                          Credit Limit: {formatCurrency(selectedCustomer.creditLimit, currency)}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setSelectedCustomer(null)}
+                      className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-md transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
-                  <div className="text-sm text-gray-600">{selectedCustomer.email}</div>
-                  {selectedCustomer.creditLimit && (
-                    <div className="text-xs text-gray-500 mt-1">
-                      Credit Limit: {formatCurrency(selectedCustomer.creditLimit, currency)}
+                ) : (
+                  <div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={customerSearch}
+                        onChange={(e) => {
+                          setCustomerSearch(e.target.value);
+                          setShowCustomerSearch(true);
+                        }}
+                        onFocus={() => setShowCustomerSearch(true)}
+                        placeholder="Search customers by name or email..."
+                        className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow"
+                      />
+                      
+                      {showCustomerSearch && filteredCustomers.length > 0 && (
+                        <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                          {filteredCustomers.map((customer) => (
+                            <button
+                              key={customer.id}
+                              onClick={() => handleCustomerSelect(customer)}
+                              className="w-full text-left px-4 py-2.5 hover:bg-blue-50 border-b border-gray-50 last:border-0 transition-colors"
+                            >
+                              <p className="font-medium text-sm text-gray-900">
+                                {customer.companyName || `${customer.firstName} ${customer.lastName}`}
+                              </p>
+                              <p className="text-xs text-gray-500">{customer.email}</p>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-                <button
-                  onClick={() => setSelectedCustomer(null)}
-                  className="p-2 hover:bg-blue-100 rounded"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickAddCustomer(true)}
+                      className="mt-2 text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                    >
+                      + New customer
+                    </button>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={customerSearch}
-                    onChange={(e) => {
-                      setCustomerSearch(e.target.value);
-                      setShowCustomerSearch(true);
-                    }}
-                    onFocus={() => setShowCustomerSearch(true)}
-                    placeholder="Search customers by name or email..."
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  />
-                  
-                  {showCustomerSearch && filteredCustomers.length > 0 && (
-                    <div className="absolute z-10 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                      {filteredCustomers.map((customer) => (
-                        <button
-                          key={customer.id}
-                          onClick={() => handleCustomerSelect(customer)}
-                          className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b last:border-0"
-                        >
-                          <div className="font-medium">
-                            {customer.companyName || `${customer.firstName} ${customer.lastName}`}
-                          </div>
-                          <div className="text-sm text-gray-600">{customer.email}</div>
-                        </button>
-                      ))}
+
+              {/* Invoice Details Grid */}
+              <div className="p-5">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                      Invoice Date <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={invoiceDate}
+                      onChange={(e) => setInvoiceDate(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                      Due Date <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={dueDate}
+                      onChange={(e) => setDueDate(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                      Reference
+                    </label>
+                    <input
+                      type="text"
+                      value={reference}
+                      onChange={(e) => setReference(e.target.value)}
+                      placeholder="PO number"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                      Tax Method
+                    </label>
+                    <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => { if (taxCalculationMethod !== 'EXCLUSIVE') handleTaxMethodToggle(); }}
+                        className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+                          taxCalculationMethod === 'EXCLUSIVE'
+                            ? 'bg-gray-900 text-white'
+                            : 'bg-white text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        Exclusive
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { if (taxCalculationMethod !== 'INCLUSIVE') handleTaxMethodToggle(); }}
+                        className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+                          taxCalculationMethod === 'INCLUSIVE'
+                            ? 'bg-gray-900 text-white'
+                            : 'bg-white text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        Inclusive
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Card: EFRIS Tax Compliance */}
+            {efrisEnabled && selectedCustomer && (
+              <div className="bg-white rounded-xl border border-blue-200 shadow-sm overflow-hidden">
+                <div className="px-5 py-3 bg-blue-50/80 border-b border-blue-100">
+                  <h3 className="text-[11px] font-bold text-blue-700 uppercase tracking-wider">EFRIS Tax Compliance</h3>
+                </div>
+                <div className="p-5">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                        Buyer Type <span className="text-red-400">*</span>
+                      </label>
+                      <select
+                        value={buyerType}
+                        onChange={(e) => {
+                          setBuyerType(e.target.value);
+                          if (e.target.value === '1') setCustomerTin('');
+                        }}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="1">B2C (Business to Consumer)</option>
+                        <option value="0">B2B (Business to Business)</option>
+                        <option value="3">B2G (Business to Government)</option>
+                        <option value="2">Foreigner (Non-resident)</option>
+                      </select>
+                      <p className="mt-1 text-[10px] text-gray-500">
+                        {buyerType === '0' && 'TIN is mandatory for business customers'}
+                        {buyerType === '1' && 'Retail/walk-in customer'}
+                        {buyerType === '2' && 'Non-resident customer'}
+                        {buyerType === '3' && 'TIN is mandatory for government entities'}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                        Payment Method <span className="text-red-400">*</span>
+                      </label>
+                      <select
+                        value={paymentMethod}
+                        onChange={(e) => setPaymentMethod(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="102">Cash</option>
+                        <option value="101">Credit (Invoice)</option>
+                        <option value="105">Mobile Money</option>
+                        <option value="106">Visa/Master Card</option>
+                        <option value="108">POS</option>
+                        <option value="107">EFT (Bank Transfer)</option>
+                        <option value="103">Cheque</option>
+                        <option value="104">Demand Draft</option>
+                        <option value="109">RTGS</option>
+                        <option value="110">Swift Transfer</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* TIN field - required for B2B and B2G */}
+                  {(buyerType === '0' || buyerType === '3') && (
+                    <div className="mt-4">
+                      <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                        Customer TIN <span className="text-red-400">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={customerTin || (selectedCustomer as any)?.taxIdNumber || ''}
+                        onChange={(e) => setCustomerTin(e.target.value)}
+                        placeholder="Enter customer TIN number"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        required
+                      />
+                      <p className="mt-1 text-[10px] text-red-500">
+                        Required for {buyerType === '0' ? 'business' : 'government'} customers per EFRIS regulations
+                      </p>
                     </div>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setShowQuickAddCustomer(true)}
-                  className="mt-2 text-sm text-blue-600 hover:text-blue-700"
-                >
-                  New customer
-                </button>
               </div>
             )}
-          </div>
 
-          {/* EFRIS Buyer Classification & Payment Method */}
-          {efrisEnabled && selectedCustomer && (
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <h3 className="text-sm font-semibold text-gray-900 mb-3">EFRIS Tax Compliance</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Buyer Type <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={buyerType}
-                    onChange={(e) => {
-                      setBuyerType(e.target.value);
-                      // Clear TIN if switching to B2C
-                      if (e.target.value === '1') {
-                        setCustomerTin('');
-                      }
-                    }}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            {/* Card: Line Items */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm" style={{ overflow: 'visible' }}>
+              <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+                <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Line Items</h3>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => addLineItem('product')}
+                    className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-1.5"
                   >
-                    <option value="1">B2C (Business to Consumer)</option>
-                    <option value="0">B2B (Business to Business - TIN required)</option>
-                    <option value="3">B2G (Business to Government - TIN required)</option>
-                    <option value="2">Foreigner (Non-resident)</option>
-                  </select>
-                  <p className="mt-1 text-xs text-gray-600">
-                    {buyerType === '0' && 'Business customer - TIN is mandatory'}
-                    {buyerType === '1' && 'Retail/walk-in customer - TIN optional'}
-                    {buyerType === '2' && 'Non-resident customer'}
-                    {buyerType === '3' && 'Government entity - TIN is mandatory'}
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Payment Method <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    <Plus className="w-3.5 h-3.5" />
+                    Product
+                  </button>
+                  <button
+                    onClick={() => addLineItem('service')}
+                    className="px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors flex items-center gap-1.5"
                   >
-                    <option value="102">Cash</option>
-                    <option value="101">Credit (Invoice)</option>
-                    <option value="105">Mobile Money</option>
-                    <option value="106">Visa/Master Card</option>
-                    <option value="108">POS</option>
-                    <option value="107">EFT (Bank Transfer)</option>
-                    <option value="103">Cheque</option>
-                    <option value="104">Demand Draft</option>
-                    <option value="109">RTGS</option>
-                    <option value="110">Swift Transfer</option>
-                  </select>
+                    <Plus className="w-3.5 h-3.5" />
+                    Service
+                  </button>
                 </div>
               </div>
 
-              {/* TIN field - required for B2B and B2G */}
-              {(buyerType === '0' || buyerType === '3') && (
-                <div className="mt-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Customer TIN <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={customerTin || selectedCustomer?.taxIdNumber || ''}
-                    onChange={(e) => setCustomerTin(e.target.value)}
-                    placeholder="Enter customer TIN number"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                  <p className="mt-1 text-xs text-red-600">
-                    TIN is required for {buyerType === '0' ? 'business' : 'government'} customers per EFRIS regulations
-                  </p>
+              {items.length === 0 ? (
+                <div className="text-center py-16 px-6">
+                  <Package className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                  <p className="text-sm text-gray-400 font-medium">No items added yet</p>
+                  <p className="text-xs text-gray-400 mt-1">Click &quot;Product&quot; or &quot;Service&quot; above to add line items</p>
+                </div>
+              ) : (
+                <div style={{ overflow: 'visible' }}>
+                  <div className="overflow-x-auto" style={{ overflow: 'visible' }}>
+                    <table className="w-full text-sm" style={{ overflow: 'visible' }}>
+                      <thead>
+                        <tr className="bg-gray-50/80 border-b border-gray-200">
+                          <th className="pl-5 pr-2 py-2.5 text-center text-[10px] font-bold text-gray-400 uppercase tracking-wider" style={{ width: '40px' }}>#</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider" style={{ minWidth: '250px' }}>Item</th>
+                          <th className="px-3 py-2.5 text-center text-[10px] font-bold text-gray-400 uppercase tracking-wider" style={{ width: '100px' }}>Qty</th>
+                          <th className="px-3 py-2.5 text-right text-[10px] font-bold text-gray-400 uppercase tracking-wider" style={{ width: '160px' }}>
+                            Rate
+                            {taxCalculationMethod === 'INCLUSIVE' && (
+                              <span className="ml-1 text-[9px] font-normal text-blue-500">(incl.)</span>
+                            )}
+                          </th>
+                          <th className="px-3 py-2.5 text-center text-[10px] font-bold text-gray-400 uppercase tracking-wider" style={{ width: '140px' }}>Disc</th>
+                          <th className="px-3 py-2.5 text-right text-[10px] font-bold text-gray-400 uppercase tracking-wider" style={{ width: '170px' }}>Amount</th>
+                          <th className="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider" style={{ width: '220px' }}>Tax</th>
+                          <th className="px-2 py-2.5" style={{ width: '40px' }}></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {items.map((item, index) => (
+                          <tr key={item.id} className="group hover:bg-blue-50/30 transition-colors">
+                            <td className="pl-5 pr-2 py-3 text-center text-xs text-gray-400 font-medium">{index + 1}</td>
+                            <td className="px-3 py-3">
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  value={item.description}
+                                  onChange={(e) => {
+                                    updateLineItem(item.id, { description: e.target.value });
+                                    setProductSearch(e.target.value);
+                                    setShowProductSearch(item.id);
+                                  }}
+                                  onFocus={(e) => {
+                                    setProductSearch('');
+                                    setShowProductSearch(item.id);
+                                  }}
+                                  onBlur={() => setTimeout(() => setShowProductSearch(null), 200)}
+                                  placeholder={`Search ${item.type}...`}
+                                  className={`w-full px-3 py-1.5 text-sm border rounded-md focus:ring-2 focus:ring-blue-500 transition-shadow ${!item.description || item.description.trim() === '' ? 'border-amber-300 bg-amber-50/50' : 'border-gray-200'}`}
+                                />
+                                
+                                {showProductSearch === item.id && (
+                                  <div 
+                                    className="absolute z-[9999] w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-2xl max-h-64 overflow-y-auto left-0 top-full" 
+                                    style={{ minWidth: '300px' }}
+                                    onMouseDown={(e) => e.preventDefault()}
+                                  >
+                                    {item.type === 'product' ? (
+                                      filteredProducts.length > 0 ? (
+                                        filteredProducts.map((product) => (
+                                          <button
+                                            key={product.id}
+                                            onClick={() => selectProduct(item.id, product.id)}
+                                            className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b border-gray-50 last:border-0 transition-colors"
+                                          >
+                                            <div className="flex justify-between">
+                                              <span className="font-medium text-sm text-gray-900">{product.name}</span>
+                                              <span className="text-sm text-gray-500 tabular-nums">{formatCurrency(product.unitPrice, currency)}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5">
+                                              <span>SKU: {product.sku}</span>
+                                              {product.exciseDutyCode && (
+                                                <span className="px-1 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-semibold">
+                                                  EXCISE {product.exciseDutyCode}
+                                                </span>
+                                              )}
+                                            </div>
+                                          </button>
+                                        ))
+                                      ) : (
+                                        <div className="px-3 py-3 text-sm text-gray-400 text-center">
+                                          No products found
+                                        </div>
+                                      )
+                                    ) : (
+                                      filteredServices.length > 0 ? (
+                                        filteredServices.map((service) => (
+                                          <button
+                                            key={service.id}
+                                            onClick={() => selectService(item.id, service.id)}
+                                            className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b border-gray-50 last:border-0 transition-colors"
+                                          >
+                                            <div className="flex justify-between">
+                                              <span className="font-medium text-sm text-gray-900">{service.name}</span>
+                                              <span className="text-sm text-gray-500 tabular-nums">{formatCurrency(service.rate, currency)}</span>
+                                            </div>
+                                          </button>
+                                        ))
+                                      ) : (
+                                        <div className="px-3 py-3 text-sm text-gray-400 text-center">
+                                          No services found
+                                        </div>
+                                      )
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                                
+                              {item.availableStock !== undefined && (
+                                <div className={`text-[10px] mt-1 font-medium ${item.availableStock < item.quantity ? 'text-red-500' : 'text-emerald-600'}`}>
+                                  Stock: {item.availableStock} available
+                                </div>
+                              )}
+                              {/* Excise Duty Badge & Breakdown */}
+                              {(() => {
+                                const eb = efrisBreakdown.find(b => b.itemId === item.id);
+                                if (!eb?.hasExcise) return null;
+                                return (
+                                  <div className="mt-1.5 p-1.5 bg-amber-50 border border-amber-200 rounded text-xs">
+                                    <div className="flex items-center gap-1 mb-1">
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300">
+                                        EXCISE {eb.exciseDutyCode}
+                                      </span>
+                                      <span className="text-amber-700 font-medium">
+                                        {formatCurrency(eb.excisePerUnit, currency)}/{eb.exciseUnit || 'unit'}
+                                      </span>
+                                    </div>
+                                    <div className="text-[10px] text-amber-700 space-y-0.5">
+                                      <div>Net: {formatCurrency(eb.netPerUnit, currency)} &times; {item.quantity} = {formatCurrency(eb.netTotal || 0, currency)}</div>
+                                      <div>Excise: {formatCurrency(eb.excisePerUnit, currency)} &times; {item.quantity} = {formatCurrency(eb.exciseTotal, currency)}</div>
+                                      <div>VAT: {formatCurrency(eb.vatPerUnit, currency)} &times; {item.quantity} = {formatCurrency(eb.vatTotal || 0, currency)}</div>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+                            </td>
+                            <td className="px-3 py-3" style={{ width: '100px' }}>
+                              <input
+                                type="number"
+                                value={item.quantity}
+                                onChange={(e) => {
+                                  const qty = parseFloat(e.target.value) || 0;
+                                  if (qty < 0) {
+                                    alert('Quantity cannot be negative');
+                                    return;
+                                  }
+                                  updateLineItem(item.id, { quantity: qty });
+                                }}
+                                min="0"
+                                step="0.01"
+                                className={`w-full px-3 py-1.5 text-sm text-center border rounded-md focus:ring-2 focus:ring-blue-500 transition-shadow ${
+                                  item.availableStock !== undefined && item.quantity > item.availableStock
+                                    ? 'border-red-400 bg-red-50'
+                                    : 'border-gray-200'
+                                }`}
+                              />
+                            </td>
+                            <td className="px-3 py-3" style={{ width: '160px' }}>
+                              <input
+                                type="number"
+                                value={item.displayRate || 0}
+                                onChange={(e) => {
+                                  const newDisplayRate = parseFloat(e.target.value) || 0;
+                                  if (newDisplayRate < 0) {
+                                    alert('Price cannot be negative');
+                                    return;
+                                  }
+                                  updateLineItem(item.id, { displayRate: newDisplayRate });
+                                }}
+                                min="0"
+                                step="0.01"
+                                className={`w-full px-2 py-1.5 text-sm text-right border rounded-md focus:ring-2 focus:ring-blue-500 transition-shadow ${
+                                    (item.displayRate || 0) === 0 && item.description
+                                      ? 'border-amber-400 bg-amber-50'
+                                      : 'border-gray-200'
+                                  }`}
+                              />
+                            </td>
+                            <td className="px-3 py-3" style={{ width: '140px' }}>
+                              <div className="flex gap-1">
+                                <input
+                                  type="number"
+                                  value={item.discount}
+                                  onChange={(e) => {
+                                    const discount = parseFloat(e.target.value) || 0;
+                                    if (discount < 0) {
+                                      alert('Discount cannot be negative');
+                                      return;
+                                    }
+                                    
+                                    // Validate based on discount type
+                                    if (item.discountType === 'PERCENTAGE') {
+                                      if (discount > 100) {
+                                        alert('Percentage discount cannot exceed 100%');
+                                        return;
+                                      }
+                                    } else {
+                                      // Amount discount
+                                      const lineSubtotal = (item.displayRate || 0) * item.quantity;
+                                      if (discount > lineSubtotal) {
+                                        alert(`Discount cannot exceed line amount (${formatCurrency(lineSubtotal, currency)})`);
+                                        return;
+                                      }
+                                    }
+                                    
+                                    updateLineItem(item.id, { discount });
+                                  }}
+                                  min="0"
+                                  step="0.01"
+                                  max={item.discountType === 'PERCENTAGE' ? "100" : undefined}
+                                  className="flex-1 min-w-0 px-2 py-1.5 text-xs text-right border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500"
+                                />
+                                <select
+                                  value={item.discountType}
+                                  onChange={(e) => {
+                                    const newType = e.target.value as 'AMOUNT' | 'PERCENTAGE';
+                                    updateLineItem(item.id, { discountType: newType, discount: 0 });
+                                  }}
+                                  className="w-14 px-1 py-1.5 text-xs border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500"
+                                >
+                                  <option value="AMOUNT">{currency}</option>
+                                  <option value="PERCENTAGE">%</option>
+                                </select>
+                              </div>
+                            </td>
+                            <td className="px-3 py-3 text-right tabular-nums" style={{ width: '170px' }}>
+                              <span className="text-sm font-semibold text-gray-900">{formatCurrency(item.quantity * (item.displayRate || 0), currency)}</span>
+                            </td>
+                            <td className="px-3 py-3" style={{ width: '220px' }}>
+                              <select
+                                value={item.taxRateId || ''}
+                                onChange={(e) => updateLineItem(item.id, { taxRateId: e.target.value || undefined })}
+                                className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:ring-2 focus:ring-blue-500"
+                              >
+                                <option value="">No Tax</option>
+                                {taxRates.map(rate => (
+                                  <option key={rate.id} value={rate.id}>
+                                    {rate.displayName || rate.name} ({rate.rate}%)
+                                  </option>
+                                ))}
+                              </select>
+                              {item.taxAmount > 0 && (
+                                <div className="text-[10px] text-gray-400 mt-0.5 tabular-nums font-medium">
+                                  Tax: {formatCurrency(item.taxAmount, currency)}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-2 py-3 text-center" style={{ width: '40px' }}>
+                              <button
+                                type="button"
+                                onClick={() => removeLineItem(item.id)}
+                                className="p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all rounded"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </div>
-          )}
 
-          {/* Invoice Details */}
-          <div className="grid grid-cols-3 gap-4 mb-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Invoice Date <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="date"
-                value={invoiceDate}
-                onChange={(e) => setInvoiceDate(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Due Date <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+            {/* Summary — right-aligned totals */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="p-5">
+                <div className="flex justify-end">
+                  <div className="w-full max-w-sm space-y-2.5">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Subtotal</span>
+                      <span className="font-medium text-gray-700 tabular-nums">{formatCurrency(subtotal, currency)}</span>
+                    </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Reference
-              </label>
-              <input
-                type="text"
-                value={reference}
-                onChange={(e) => setReference(e.target.value)}
-                placeholder="PO number or reference"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
+                    {totalDiscount > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Discount</span>
+                        <span className="font-medium text-red-600 tabular-nums">-{formatCurrency(totalDiscount, currency)}</span>
+                      </div>
+                    )}
 
-          {/* Tax Method */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Tax Calculation
-            </label>
-            <div className="flex gap-4">
-              <button
-                type="button"
-                onClick={() => handleTaxMethodToggle()}
-                className={`px-4 py-2 rounded-lg ${
-                  taxCalculationMethod === 'EXCLUSIVE'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Tax Exclusive
-              </button>
-              <button
-                type="button"
-                onClick={() => handleTaxMethodToggle()}
-                className={`px-4 py-2 rounded-lg ${
-                  taxCalculationMethod === 'INCLUSIVE'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Tax Inclusive
-              </button>
-            </div>
-            <p className="mt-2 text-sm text-gray-500">
-              {taxCalculationMethod === 'EXCLUSIVE' 
-                ? 'Amount represents Net. Tax is calculated on top.'
-                : 'Amount includes Tax. Net is calculated by extracting tax.'}
-            </p>
-          </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Tax (VAT)</span>
+                      <span className="font-medium text-gray-700 tabular-nums">{formatCurrency(totalTax, currency)}</span>
+                    </div>
 
-          {/* Line Items */}
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Line Items</h3>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => addLineItem('product')}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Product
-                </button>
-                <button
-                  onClick={() => addLineItem('service')}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Service
-                </button>
+                    <div className="pt-3 mt-1 border-t-2 border-gray-900">
+                      <div className="flex justify-between items-baseline">
+                        <span className="text-sm font-bold text-gray-900 uppercase tracking-wide">Total</span>
+                        <span className="text-2xl font-bold text-gray-900 tabular-nums">{formatCurrency(total, currency)}</span>
+                      </div>
+                      <p className="text-[10px] text-gray-400 text-right mt-0.5 uppercase">{currency}</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {items.length === 0 ? (
-              <div className="text-center py-12 text-gray-500 border border-gray-200 rounded-lg">
-                <Package className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>No line items yet. Click "Add Product" or "Add Service" above.</p>
-              </div>
-            ) : (
-              <div className="border border-gray-300 rounded-lg" style={{ overflow: 'visible' }}>
-                <div className="overflow-x-auto" style={{ overflow: 'visible' }}>
-                  <table className="w-full" style={{ overflow: 'visible' }}>
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-300">
-                      <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700 uppercase" style={{ width: '40px' }}>#</th>
-                      <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Product/Service</th>
-                      <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700 uppercase" style={{ width: '70px' }}>Qty</th>
-                      <th className="px-2 py-3 text-right text-xs font-semibold text-gray-700 uppercase" style={{ width: '140px' }}>
-                        Rate
-                        {taxCalculationMethod === 'INCLUSIVE' && (
-                          <span className="ml-1 text-[10px] font-normal text-blue-600">(incl. tax)</span>
-                        )}
-                      </th>
-                      <th className="px-2 py-3 text-center text-xs font-semibold text-gray-700 uppercase" style={{ width: '95px' }}>Disc</th>
-                      <th className="px-2 py-3 text-right text-xs font-semibold text-gray-700 uppercase" style={{ width: '140px' }}>Amount</th>
-                      <th className="px-2 py-3 text-left text-xs font-semibold text-gray-700 uppercase" style={{ width: '160px' }}>Tax</th>
-                      <th className="px-1 py-3" style={{ width: '40px' }}></th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {items.map((item, index) => (
-                      <tr key={item.id} className="hover:bg-blue-50/50 transition-colors">
-                        <td className="px-2 py-3 text-center text-sm text-gray-600" style={{ width: '40px' }}>{index + 1}</td>
-                        <td className="px-3 py-3">
-                          <div className="relative">
-                            <input
-                              type="text"
-                              value={item.description}
-                              onChange={(e) => {
-                                updateLineItem(item.id, { description: e.target.value });
-                                setProductSearch(e.target.value);
-                                setShowProductSearch(item.id);
-                              }}
-                              onFocus={(e) => {
-                                setProductSearch('');
-                                setShowProductSearch(item.id);
-                              }}
-                              onBlur={() => setTimeout(() => setShowProductSearch(null), 200)}
-                              placeholder={`Search ${item.type}...`}
-                              className={`w-full px-3 py-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 ${!item.description || item.description.trim() === '' ? 'border-yellow-300 bg-yellow-50' : 'border-gray-300'}`}
-                            />
-                            
-                            {showProductSearch === item.id && (
-                              <div 
-                                className="absolute z-[9999] w-full mt-1 bg-white border-2 border-gray-300 rounded-lg shadow-2xl max-h-64 overflow-y-auto left-0 top-full" 
-                                style={{ minWidth: '300px' }}
-                                onMouseDown={(e) => e.preventDefault()}
-                              >
-                                {item.type === 'product' ? (
-                                  filteredProducts.length > 0 ? (
-                                    filteredProducts.map((product) => (
-                                      <button
-                                        key={product.id}
-                                        onClick={() => selectProduct(item.id, product.id)}
-                                        className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b last:border-0"
-                                      >
-                                        <div className="flex justify-between">
-                                          <span className="font-medium text-sm">{product.name}</span>
-                                          <span className="text-sm text-gray-600">{formatCurrency(product.unitPrice, currency)}</span>
-                                        </div>
-                                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                                          <span>SKU: {product.sku}</span>
-                                          {product.exciseDutyCode && (
-                                            <span className="px-1 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-semibold">
-                                              EXCISE {product.exciseDutyCode}
-                                            </span>
-                                          )}
-                                        </div>
-                                      </button>
-                                    ))
-                                  ) : (
-                                    <div className="px-3 py-2 text-sm text-gray-500">
-                                      No products found (Total: {products.length}, Search: "{productSearch}")
-                                    </div>
-                                  )
-                                ) : (
-                                  filteredServices.length > 0 ? (
-                                    filteredServices.map((service) => (
-                                      <button
-                                        key={service.id}
-                                        onClick={() => selectService(item.id, service.id)}
-                                        className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b last:border-0"
-                                      >
-                                        <div className="flex justify-between">
-                                          <span className="font-medium text-sm">{service.name}</span>
-                                          <span className="text-sm text-gray-600">{formatCurrency(service.rate, currency)}</span>
-                                        </div>
-                                      </button>
-                                    ))
-                                  ) : (
-                                    <div className="px-3 py-2 text-sm text-gray-500">
-                                      No services found (Total: {services.length})
-                                    </div>
-                                  )
-                                )}
-                              </div>
-                            )}
-                          </div>
-                            
-                            {item.availableStock !== undefined && (
-                              <div className={`text-xs mt-1 ${item.availableStock < item.quantity ? 'text-red-600' : 'text-green-600'}`}>
-                                Stock: {item.availableStock} available
-                              </div>
-                            )}
-                            {/* Excise Duty Badge & Breakdown */}
-                            {(() => {
-                              const eb = efrisBreakdown.find(b => b.itemId === item.id);
-                              if (!eb?.hasExcise) return null;
-                              return (
-                                <div className="mt-1.5 p-1.5 bg-amber-50 border border-amber-200 rounded text-xs">
-                                  <div className="flex items-center gap-1 mb-1">
-                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300">
-                                      EXCISE {eb.exciseDutyCode}
-                                    </span>
-                                    <span className="text-amber-700 font-medium">
-                                      {formatCurrency(eb.excisePerUnit, currency)}/{eb.exciseUnit || 'unit'}
-                                    </span>
-                                  </div>
-                                  <div className="text-[10px] text-amber-700 space-y-0.5">
-                                    <div>Net: {formatCurrency(eb.netPerUnit, currency)} × {item.quantity} = {formatCurrency(eb.netTotal || 0, currency)}</div>
-                                    <div>Excise: {formatCurrency(eb.excisePerUnit, currency)} × {item.quantity} = {formatCurrency(eb.exciseTotal, currency)}</div>
-                                    <div>VAT: {formatCurrency(eb.vatPerUnit, currency)} × {item.quantity} = {formatCurrency(eb.vatTotal || 0, currency)}</div>
-                                  </div>
-                                </div>
-                              );
-                            })()}
-                        </td>
-                        <td className="px-2 py-3" style={{ width: '70px' }}>
-                          <input
-                            type="number"
-                            value={item.quantity}
-                            onChange={(e) => {
-                              const qty = parseFloat(e.target.value) || 0;
-                              if (qty < 0) {
-                                alert('Quantity cannot be negative');
-                                return;
-                              }
-                              updateLineItem(item.id, { quantity: qty });
-                            }}
-                            min="0"
-                            step="0.01"
-                            className={`w-full px-2 py-2 text-sm text-center border rounded focus:ring-2 focus:ring-blue-500 ${
-                              item.availableStock !== undefined && item.quantity > item.availableStock
-                                ? 'border-red-500 bg-red-50'
-                                : 'border-gray-300'
-                            }`}
-                          />
-                        </td>
-                        <td className="px-2 py-3" style={{ width: '140px' }}>
-                          <input
-                            type="number"
-                            value={item.displayRate || 0}
-                            onChange={(e) => {
-                              const newDisplayRate = parseFloat(e.target.value) || 0;
-                              if (newDisplayRate < 0) {
-                                alert('Price cannot be negative');
-                                return;
-                              }
-                              updateLineItem(item.id, { displayRate: newDisplayRate });
-                            }}
-                            min="0"
-                            step="0.01"
-                            className={`w-full px-2 py-2 text-sm text-right border rounded focus:ring-2 focus:ring-blue-500 ${
-                                (item.displayRate || 0) === 0 && item.description
-                                  ? 'border-yellow-500 bg-yellow-50'
-                                  : 'border-gray-300'
-                              }`}
-                          />
-                        </td>
-                        <td className="px-2 py-3" style={{ width: '95px' }}>
-                          <div className="flex gap-0.5">
-                            <input
-                              type="number"
-                              value={item.discount}
-                              onChange={(e) => {
-                                const discount = parseFloat(e.target.value) || 0;
-                                if (discount < 0) {
-                                  alert('Discount cannot be negative');
-                                  return;
-                                }
-                                
-                                // Validate based on discount type
-                                if (item.discountType === 'PERCENTAGE') {
-                                  if (discount > 100) {
-                                    alert('Percentage discount cannot exceed 100%');
-                                    return;
-                                  }
-                                } else {
-                                  // Amount discount
-                                  const lineSubtotal = (item.displayRate || 0) * item.quantity;
-                                  if (discount > lineSubtotal) {
-                                    alert(`Discount cannot exceed line amount (${formatCurrency(lineSubtotal, currency)})`);
-                                    return;
-                                  }
-                                }
-                                
-                                updateLineItem(item.id, { discount });
-                              }}
-                              min="0"
-                              step="0.01"
-                              max={item.discountType === 'PERCENTAGE' ? "100" : undefined}
-                              className="w-12 px-1 py-1.5 text-xs text-right border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
-                            />
-                            <select
-                              value={item.discountType}
-                              onChange={(e) => {
-                                const newType = e.target.value as 'AMOUNT' | 'PERCENTAGE';
-                                updateLineItem(item.id, { discountType: newType, discount: 0 });
-                              }}
-                              className="w-9 px-0 py-1.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500"
-                            >
-                              <option value="AMOUNT">{currency}</option>
-                              <option value="PERCENTAGE">%</option>
-                            </select>
-                          </div>
-                        </td>
-                        <td className="px-2 py-3 text-right" style={{ width: '140px' }}>
-                          <span className="text-sm font-medium">{formatCurrency(item.quantity * (item.displayRate || 0), currency)}</span>
-                        </td>
-                        <td className="px-2 py-3" style={{ width: '160px' }}>
-                          <select
-                            value={item.taxRateId || ''}
-                            onChange={(e) => updateLineItem(item.id, { taxRateId: e.target.value || undefined })}
-                            className="w-full px-2 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value="">No Tax</option>
-                            {taxRates.map(rate => (
-                              <option key={rate.id} value={rate.id}>
-                                {rate.displayName || rate.name} ({rate.rate}%)
-                              </option>
-                            ))}
-                          </select>
-                          {item.taxAmount > 0 && (
-                            <div className="text-xs text-gray-500 mt-1">
-                              Tax: {formatCurrency(item.taxAmount, currency)}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-1 py-3 text-center" style={{ width: '40px' }}>
-                          <button
-                            type="button"
-                            onClick={() => removeLineItem(item.id)}
-                            className="text-red-600 hover:text-red-800"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {/* EFRIS Tax Breakdown */}
+            {hasAnyExcise && (
+              <div className="bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden">
+                <div className="px-5 py-3 bg-amber-50 border-b border-amber-100">
+                  <h3 className="text-[11px] font-bold text-amber-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>
+                    EFRIS Tax Breakdown
+                  </h3>
+                </div>
+                <div className="p-5">
+                  <div className="overflow-x-auto mb-4">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-amber-200 text-amber-600">
+                          <th className="text-left py-1.5 pr-2">Item</th>
+                          <th className="text-right py-1.5 px-2">Price/Unit</th>
+                          <th className="text-center py-1.5 px-2">Qty</th>
+                          <th className="text-right py-1.5 px-2">Net Amount</th>
+                          <th className="text-right py-1.5 px-2">Excise</th>
+                          <th className="text-right py-1.5 px-2">VAT (18%)</th>
+                          <th className="text-right py-1.5 pl-2">Line Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-amber-900">
+                        {efrisBreakdown.map((b, idx) => (
+                          <tr key={idx} className="border-b border-amber-100">
+                            <td className="py-1.5 pr-2">
+                              <span>{b.description || 'Item'}</span>
+                              {b.hasExcise && (
+                                <span className="ml-1 px-1 py-0.5 rounded bg-amber-200 text-amber-800 text-[9px] font-bold">
+                                  {b.exciseDutyCode}
+                                </span>
+                              )}
+                            </td>
+                            <td className="text-right py-1.5 px-2 tabular-nums">{formatCurrency(b.grossPerUnit, currency)}</td>
+                            <td className="text-center py-1.5 px-2">{b.qty}</td>
+                            <td className="text-right py-1.5 px-2 tabular-nums">{formatCurrency(b.netTotal, currency)}</td>
+                            <td className="text-right py-1.5 px-2 tabular-nums">
+                              {b.hasExcise ? (
+                                <span className="text-amber-700 font-medium">{formatCurrency(b.exciseTotal, currency)}</span>
+                              ) : (
+                                <span className="text-gray-400">&mdash;</span>
+                              )}
+                            </td>
+                            <td className="text-right py-1.5 px-2 tabular-nums">{formatCurrency(b.vatTotal, currency)}</td>
+                            <td className="text-right py-1.5 pl-2 font-medium tabular-nums">{formatCurrency(b.lineTotal, currency)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t-2 border-amber-300 font-semibold text-amber-900">
+                          <td className="py-2 pr-2" colSpan={3}>Totals</td>
+                          <td className="text-right py-2 px-2 tabular-nums">{formatCurrency(grandNet, currency)}</td>
+                          <td className="text-right py-2 px-2 tabular-nums text-amber-700">{formatCurrency(grandExcise, currency)}</td>
+                          <td className="text-right py-2 px-2 tabular-nums">{formatCurrency(grandVAT, currency)}</td>
+                          <td className="text-right py-2 pl-2 tabular-nums">{formatCurrency(grandTotal, currency)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+
+                  {/* Formula row */}
+                  <div className="bg-amber-50 rounded-lg p-3 border border-amber-100">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                      <div className="flex flex-col items-center">
+                        <span className="text-[10px] text-amber-600">Net Amount</span>
+                        <span className="font-semibold text-amber-900 tabular-nums">{formatCurrency(grandNet, currency)}</span>
+                      </div>
+                      <span className="text-amber-400 font-bold text-lg">+</span>
+                      <div className="flex flex-col items-center">
+                        <span className="text-[10px] text-amber-600">Excise Duty</span>
+                        <span className="font-semibold text-amber-700 tabular-nums">{formatCurrency(grandExcise, currency)}</span>
+                      </div>
+                      <span className="text-amber-400 font-bold text-lg">+</span>
+                      <div className="flex flex-col items-center">
+                        <span className="text-[10px] text-amber-600">VAT (18%)</span>
+                        <span className="font-semibold text-amber-900 tabular-nums">{formatCurrency(grandVAT, currency)}</span>
+                      </div>
+                      <span className="text-amber-400 font-bold text-lg">=</span>
+                      <div className="flex flex-col items-center">
+                        <span className="text-[10px] text-blue-600 font-bold">INVOICE TOTAL</span>
+                        <span className="font-bold text-gray-900 text-base tabular-nums">{formatCurrency(grandTotal, currency)}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
-          </div>
 
-          {/* Notes */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={3}
-              placeholder="Internal notes or terms..."
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
-
-        {/* Summary */}
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h3 className="text-lg font-semibold mb-4">Summary</h3>
-          
-          <div className="space-y-3">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Subtotal</span>
-              <span className="font-medium">{formatCurrency(subtotal, currency)}</span>
-            </div>
-
-            {totalDiscount > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Discount</span>
-                <span className="font-medium text-red-600">-{formatCurrency(totalDiscount, currency)}</span>
+            {/* Card: Notes / Terms */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-100">
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Notes / Terms</label>
               </div>
-            )}
-
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Tax (VAT)</span>
-              <span className="font-medium">{formatCurrency(totalTax, currency)}</span>
-            </div>
-
-            <div className="pt-3 border-t border-gray-200">
-              <div className="flex justify-between">
-                <span className="text-lg font-semibold">Total</span>
-                <span className="text-xl font-bold text-blue-600">{formatCurrency(total, currency)}</span>
+              <div className="p-5">
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={3}
+                  placeholder="Payment terms, delivery notes, or internal comments..."
+                  className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none placeholder:text-gray-300"
+                />
               </div>
             </div>
-          </div>
+
         </div>
-
-        {/* EFRIS Tax Breakdown — shows how the invoice total is composed */}
-        {hasAnyExcise && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-6">
-            <h3 className="text-sm font-semibold text-amber-800 mb-3 flex items-center gap-2">
-              <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-400"></span>
-              EFRIS Tax Breakdown — How this invoice total is arrived at
-            </h3>
-
-            {/* Per-item breakdown table */}
-            <div className="overflow-x-auto mb-4">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-amber-300 text-amber-700">
-                    <th className="text-left py-1.5 pr-2">Item</th>
-                    <th className="text-right py-1.5 px-2">Price/Unit</th>
-                    <th className="text-center py-1.5 px-2">Qty</th>
-                    <th className="text-right py-1.5 px-2">Net Amount</th>
-                    <th className="text-right py-1.5 px-2">Excise</th>
-                    <th className="text-right py-1.5 px-2">VAT (18%)</th>
-                    <th className="text-right py-1.5 pl-2">Line Total</th>
-                  </tr>
-                </thead>
-                <tbody className="text-amber-900">
-                  {efrisBreakdown.map((b, idx) => (
-                    <tr key={idx} className="border-b border-amber-100">
-                      <td className="py-1.5 pr-2">
-                        <span>{b.description || 'Item'}</span>
-                        {b.hasExcise && (
-                          <span className="ml-1 px-1 py-0.5 rounded bg-amber-200 text-amber-800 text-[9px] font-bold">
-                            {b.exciseDutyCode}
-                          </span>
-                        )}
-                      </td>
-                      <td className="text-right py-1.5 px-2">{formatCurrency(b.grossPerUnit, currency)}</td>
-                      <td className="text-center py-1.5 px-2">{b.qty}</td>
-                      <td className="text-right py-1.5 px-2">{formatCurrency(b.netTotal, currency)}</td>
-                      <td className="text-right py-1.5 px-2">
-                        {b.hasExcise ? (
-                          <span className="text-amber-700 font-medium">{formatCurrency(b.exciseTotal, currency)}</span>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="text-right py-1.5 px-2">{formatCurrency(b.vatTotal, currency)}</td>
-                      <td className="text-right py-1.5 pl-2 font-medium">{formatCurrency(b.lineTotal, currency)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t-2 border-amber-300 font-semibold text-amber-900">
-                    <td className="py-2 pr-2" colSpan={3}>Totals</td>
-                    <td className="text-right py-2 px-2">{formatCurrency(grandNet, currency)}</td>
-                    <td className="text-right py-2 px-2 text-amber-700">{formatCurrency(grandExcise, currency)}</td>
-                    <td className="text-right py-2 px-2">{formatCurrency(grandVAT, currency)}</td>
-                    <td className="text-right py-2 pl-2">{formatCurrency(grandTotal, currency)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-
-            {/* Final formula */}
-            <div className="bg-white/60 rounded-md p-3 border border-amber-200">
-              <div className="text-xs text-amber-800 font-medium mb-2">How the total is calculated:</div>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                <div className="flex flex-col items-center">
-                  <span className="text-[10px] text-amber-600">Net Amount</span>
-                  <span className="font-semibold text-amber-900">{formatCurrency(grandNet, currency)}</span>
-                </div>
-                <span className="text-amber-400 font-bold text-lg">+</span>
-                <div className="flex flex-col items-center">
-                  <span className="text-[10px] text-amber-600">Excise Duty</span>
-                  <span className="font-semibold text-amber-700">{formatCurrency(grandExcise, currency)}</span>
-                </div>
-                <span className="text-amber-400 font-bold text-lg">+</span>
-                <div className="flex flex-col items-center">
-                  <span className="text-[10px] text-amber-600">VAT (18%)</span>
-                  <span className="font-semibold text-amber-900">{formatCurrency(grandVAT, currency)}</span>
-                </div>
-                <span className="text-amber-400 font-bold text-lg">=</span>
-                <div className="flex flex-col items-center">
-                  <span className="text-[10px] text-blue-600 font-bold">INVOICE TOTAL</span>
-                  <span className="font-bold text-blue-700 text-base">{formatCurrency(grandTotal, currency)}</span>
-                </div>
-              </div>
-              {efrisBreakdown.filter(b => b.hasExcise).map((b, idx) => (
-                <div key={idx} className="text-[10px] text-amber-600 mt-2">
-                  <span className="font-medium">{b.description}:</span> {formatCurrency(b.grossPerUnit, currency)}/unit = 
-                  {formatCurrency(b.netPerUnit, currency)} net + {formatCurrency(b.excisePerUnit, currency)} excise + {formatCurrency(b.vatPerUnit, currency)} VAT
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Action Buttons */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mt-6">
-          <div className="flex flex-wrap items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={validateInvoice}
-              disabled={validating || !selectedCustomer || items.length === 0}
-              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors font-medium"
-            >
-              {validating ? 'Validating...' : 'Validate'}
-            </button>
-            
-            <button
-              type="button"
-              onClick={() => handleSubmit(false)}
-              disabled={loading || !selectedCustomer || items.length === 0}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium"
-            >
-              {loading ? 'Saving...' : 'Save'}
-            </button>
-            
-            <button
-              type="button"
-              onClick={() => handleSubmit(false, true)}
-              disabled={loading || !selectedCustomer || items.length === 0}
-              className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium"
-            >
-              {loading ? 'Saving...' : 'Save and send'}
-            </button>
-            
-            <button
-              type="button"
-              onClick={() => handleSubmit(true)}
-              disabled={loading || !selectedCustomer || items.length === 0}
-              className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium"
-            >
-              {loading ? 'Saving...' : 'Save and Fiscalize with EFRIS'}
-            </button>
-          </div>
-        </div>
-
       </div>
 
       {/* Print Preview Modal */}

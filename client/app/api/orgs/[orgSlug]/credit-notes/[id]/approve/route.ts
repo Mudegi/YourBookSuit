@@ -37,7 +37,7 @@ export async function POST(req: NextRequest, { params }: { params: { orgSlug: st
       where: { id: params.id },
       data: {
         status: 'APPROVED',
-        approvedById: user.id,
+        approvedBy: user.id,
         approvedAt: new Date(),
         approvalNotes: approvalNotes || null
       },
