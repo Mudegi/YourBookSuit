@@ -144,6 +144,9 @@ export async function buildProduct(
       throw new Error('Finished product does not belong to this organization');
     }
 
+    // Get base currency from organization
+    const baseCurrency = bom.organization.baseCurrency;
+
     // ========================================================================
     // STEP 2: GET GL ACCOUNTS FOR MANUFACTURING
     // ========================================================================
@@ -398,7 +401,7 @@ export async function buildProduct(
       accountId: finishedGoodsAccount.id,
       entryType: 'DEBIT' as const,
       amount: totalManufacturingCost,
-      currency: 'USD',
+      currency: baseCurrency,
       exchangeRate: new Decimal(1),
       amountInBase: totalManufacturingCost,
       description: `Manufacturing of ${finishedProduct.name}`,
@@ -410,7 +413,7 @@ export async function buildProduct(
       accountId: rawMaterialAccount.id,
       entryType: 'CREDIT' as const,
       amount: totalMaterialCost,
-      currency: 'USD',
+      currency: baseCurrency,
       exchangeRate: new Decimal(1),
       amountInBase: totalMaterialCost,
       description: 'Raw materials consumed',
@@ -423,7 +426,7 @@ export async function buildProduct(
         accountId: laborAppliedAccount.id,
         entryType: 'CREDIT' as const,
         amount: laborCostDec,
-        currency: 'USD',
+        currency: baseCurrency,
         exchangeRate: new Decimal(1),
         amountInBase: laborCostDec,
         description: 'Direct labor applied',
@@ -437,7 +440,7 @@ export async function buildProduct(
         accountId: overheadAppliedAccount.id,
         entryType: 'CREDIT' as const,
         amount: overheadCostDec,
-        currency: 'USD',
+        currency: baseCurrency,
         exchangeRate: new Decimal(1),
         amountInBase: overheadCostDec,
         description: 'Overhead applied',
@@ -462,7 +465,7 @@ export async function buildProduct(
           accountId: exciseAccount.id,
           entryType: 'DEBIT' as const,
           amount: exciseDutyAmount,
-          currency: 'USD',
+          currency: baseCurrency,
           exchangeRate: new Decimal(1),
           amountInBase: exciseDutyAmount,
           description: `Excise duty on ${finishedProduct.name}`,

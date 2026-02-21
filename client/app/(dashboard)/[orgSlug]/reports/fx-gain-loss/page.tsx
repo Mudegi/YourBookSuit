@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
+import { useOrganization } from '@/hooks/useOrganization';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -60,6 +61,7 @@ interface FXReport {
 export default function FXGainLossReportPage() {
   const params = useParams();
   const orgSlug = params.orgSlug as string;
+  const { currency: orgCurrency } = useOrganization();
   
   const [startDate, setStartDate] = useState(
     format(new Date(new Date().getFullYear(), 0, 1), 'yyyy-MM-dd')
@@ -95,7 +97,7 @@ export default function FXGainLossReportPage() {
     fetchReport();
   }, []);
 
-  const formatCurrency = (amount: number, currency: string = 'USD') => {
+  const formatCurrency = (amount: number, currency: string = orgCurrency || 'USD') => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency,

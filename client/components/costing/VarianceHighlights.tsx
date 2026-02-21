@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { TrendingUp, TrendingDown, AlertTriangle, Eye } from 'lucide-react';
+import { useOrganization } from '@/hooks/useOrganization';
 
 interface VarianceHighlight {
   productId: string;
@@ -32,6 +33,7 @@ export default function VarianceHighlights({
   threshold = 10,
   onVarianceClick 
 }: VarianceHighlightsProps) {
+  const { currency: orgCurrency } = useOrganization();
   
   const [variances, setVariances] = useState<{
     critical: VarianceHighlight[];
@@ -89,7 +91,7 @@ export default function VarianceHighlights({
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD', // TODO: Get from org settings
+      currency: orgCurrency || 'USD',
     }).format(amount);
   };
 

@@ -14,6 +14,7 @@ export interface RegisterData {
   password: string;
   firstName: string;
   lastName: string;
+  phone?: string;
 }
 
 export interface AuthResponse {
@@ -42,23 +43,11 @@ export interface User {
  * Login user
  */
 export async function login(credentials: LoginCredentials): Promise<AuthResponse> {
-  console.log('📡 Calling backend login API...');
   const response = await apiClient.post<AuthResponse>('/auth/login', credentials);
-  console.log('📡 Backend response:', response);
-  console.log('📡 Response structure:', {
-    success: response.success,
-    hasData: !!response.data,
-    hasToken: !!response.data?.token,
-    hasUser: !!response.data?.user
-  });
   
   if (response.success && response.data.token) {
-    console.log('✅ Storing token:', response.data.token.substring(0, 20) + '...');
     setAuthToken(response.data.token);
     setStoredUser(response.data.user);
-    console.log('✅ Token stored in localStorage');
-  } else {
-    console.error('❌ Token not found in response');
   }
   
   return response;

@@ -106,17 +106,38 @@ export async function POST(request: NextRequest, { params }: { params: { orgSlug
 
     // Initialize inventory record when tracking inventory
     if (input.trackInventory) {
+      const initialQty = input.initialQuantity ?? 0;
+      const unitCost = input.purchasePrice ?? 0;
+      const totalValue = initialQty * unitCost;
+
       await prisma.inventoryItem.create({
         data: {
           productId: product.id,
           warehouseLocation: 'Main',
-          quantityOnHand: 0,
+          quantityOnHand: initialQty,
           quantityReserved: 0,
-          quantityAvailable: 0,
-          averageCost: input.purchasePrice ?? 0,
-          totalValue: 0,
+          quantityAvailable: initialQty,
+          averageCost: unitCost,
+          totalValue: totalValue,
         },
       });
+
+      // Record opening stock movement if initial quantity > 0
+      if (initialQty > 0) {
+        await prisma.stockMovement.create({
+          data: {
+            productId: product.id,
+            movementType: 'ADJUSTMENT',
+            quantity: initialQty,
+            unitCost: unitCost,
+            totalCost: totalValue,
+            warehouseLocation: 'Main',
+            referenceType: 'OPENING_BALANCE',
+            notes: `Initial quantity on hand: ${initialQty}`,
+            movementDate: new Date(),
+          },
+        });
+      }
     }
 
     return NextResponse.json({ success: true, data: { id: product.id } }, { status: 201 });

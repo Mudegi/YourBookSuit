@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useOrganization } from '@/hooks/useOrganization';
 import {
   TrendingUp,
   TrendingDown,
@@ -64,6 +65,7 @@ export default function FinancialDashboardPage() {
   const params = useParams();
   const router = useRouter();
   const orgSlug = params.orgSlug as string;
+  const { currency: orgCurrency } = useOrganization();
 
   const [data, setData] = useState<FinancialData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -109,7 +111,7 @@ export default function FinancialDashboardPage() {
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD',
+      currency: orgCurrency || 'USD',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(value);

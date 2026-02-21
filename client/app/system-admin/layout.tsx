@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { fetchWithAuth } from '@/lib/fetch-client';
+import { clearAuthToken } from '@/lib/api-client';
 
 interface AdminUser {
   id: string;
@@ -50,9 +51,12 @@ export default function SystemAdminLayout({ children }: { children: React.ReactN
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
+    clearAuthToken();
+    try { sessionStorage.setItem('just_logged_out', '1'); } catch {}
     document.documentElement.classList.remove('dark');
     document.documentElement.style.removeProperty('--app-font');
     document.documentElement.removeAttribute('data-density');
+    document.documentElement.style.backgroundColor = '#020617';
     router.push('/login');
   };
 

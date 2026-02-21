@@ -65,6 +65,13 @@ export async function executeTemplate(opts: {
   if (!template) throw new Error('Template not found');
   if (template.organizationId !== orgId) throw new Error('Template not in organization');
 
+  // Fetch organization base currency
+  const org = await prisma.organization.findUnique({
+    where: { id: orgId },
+    select: { baseCurrency: true },
+  });
+  const baseCurrency = org?.baseCurrency || 'USD';
+
   const runAt = new Date();
   const payload = template.payload as any;
 
@@ -107,7 +114,7 @@ export async function executeTemplate(opts: {
                 accountId: e.accountId,
                 entryType: e.entryType,
                 amount: e.amount,
-                currency: e.currency ?? 'USD',
+                currency: e.currency ?? baseCurrency,
                 exchangeRate: e.exchangeRate ?? 1,
                 amountInBase: e.amountInBase ?? e.amount,
                 description: e.description ?? null,
@@ -134,7 +141,7 @@ export async function executeTemplate(opts: {
             invoiceNumber: inv.invoiceNumber ?? `INV-${new Date().getFullYear()}-${Date.now()}`,
             invoiceDate: inv.invoiceDate ? new Date(inv.invoiceDate) : runAt,
             dueDate: inv.dueDate ? new Date(inv.dueDate) : addDays(runAt, 30),
-            currency: inv.currency ?? 'USD',
+            currency: inv.currency ?? baseCurrency,
             exchangeRate: inv.exchangeRate ?? 1,
             subtotal,
             taxAmount,
@@ -180,7 +187,7 @@ export async function executeTemplate(opts: {
             billNumber: bill.billNumber ?? `BILL-${new Date().getFullYear()}-${Date.now()}`,
             billDate: bill.billDate ? new Date(bill.billDate) : runAt,
             dueDate: bill.dueDate ? new Date(bill.dueDate) : addDays(runAt, 30),
-            currency: bill.currency ?? 'USD',
+            currency: bill.currency ?? baseCurrency,
             exchangeRate: bill.exchangeRate ?? 1,
             subtotal,
             taxAmount,
@@ -221,7 +228,7 @@ export async function executeTemplate(opts: {
             paymentDate: pay.paymentDate ? new Date(pay.paymentDate) : runAt,
             paymentType: pay.paymentType,
             amount: Number(pay.amount),
-            currency: pay.currency ?? 'USD',
+            currency: pay.currency ?? baseCurrency,
             exchangeRate: Number(pay.exchangeRate ?? 1),
             paymentMethod: pay.paymentMethod ?? 'OTHER',
             referenceNumber: pay.referenceNumber ?? null,
@@ -317,6 +324,14 @@ export async function executePendingExecution(opts: {
   if (!template) throw new Error('Template not found');
 
   const orgId = template.organizationId;
+
+  // Fetch organization base currency
+  const org = await prisma.organization.findUnique({
+    where: { id: orgId },
+    select: { baseCurrency: true },
+  });
+  const baseCurrency = org?.baseCurrency || 'USD';
+
   const runAt = new Date();
   const payload = (execution.payloadSnapshot as any) ?? (template.payload as any);
 
@@ -345,7 +360,7 @@ export async function executePendingExecution(opts: {
                 accountId: e.accountId,
                 entryType: e.entryType,
                 amount: e.amount,
-                currency: e.currency ?? 'USD',
+                currency: e.currency ?? baseCurrency,
                 exchangeRate: e.exchangeRate ?? 1,
                 amountInBase: e.amountInBase ?? e.amount,
                 description: e.description ?? null,
@@ -372,7 +387,7 @@ export async function executePendingExecution(opts: {
             invoiceNumber: inv.invoiceNumber ?? `INV-${new Date().getFullYear()}-${Date.now()}`,
             invoiceDate: inv.invoiceDate ? new Date(inv.invoiceDate) : runAt,
             dueDate: inv.dueDate ? new Date(inv.dueDate) : addDays(runAt, 30),
-            currency: inv.currency ?? 'USD',
+            currency: inv.currency ?? baseCurrency,
             exchangeRate: inv.exchangeRate ?? 1,
             subtotal,
             taxAmount,
@@ -418,7 +433,7 @@ export async function executePendingExecution(opts: {
             billNumber: bill.billNumber ?? `BILL-${new Date().getFullYear()}-${Date.now()}`,
             billDate: bill.billDate ? new Date(bill.billDate) : runAt,
             dueDate: bill.dueDate ? new Date(bill.dueDate) : addDays(runAt, 30),
-            currency: bill.currency ?? 'USD',
+            currency: bill.currency ?? baseCurrency,
             exchangeRate: bill.exchangeRate ?? 1,
             subtotal,
             taxAmount,
@@ -459,7 +474,7 @@ export async function executePendingExecution(opts: {
             paymentDate: pay.paymentDate ? new Date(pay.paymentDate) : runAt,
             paymentType: pay.paymentType,
             amount: Number(pay.amount),
-            currency: pay.currency ?? 'USD',
+            currency: pay.currency ?? baseCurrency,
             exchangeRate: Number(pay.exchangeRate ?? 1),
             paymentMethod: pay.paymentMethod ?? 'OTHER',
             referenceNumber: pay.referenceNumber ?? null,

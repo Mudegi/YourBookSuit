@@ -104,7 +104,7 @@ export async function POST(
       name,
       companyId,
       value,
-      currency = 'USD',
+      currency = org.baseCurrency || 'USD',
       stage = 'PROSPECT',
       probability = 50,
     } = body;

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
+import { useOrganization } from '@/hooks/useOrganization';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -93,6 +94,7 @@ interface SafetyStockCalculationResult {
 const SafetyStockPage = () => {
   const params = useParams();
   const orgSlug = params.orgSlug as string;
+  const { currency: orgCurrency } = useOrganization();
 
   // State management
   const [activeTab, setActiveTab] = useState(0);
@@ -220,7 +222,7 @@ const SafetyStockPage = () => {
     // this is a fallback for legacy data
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD',
+      currency: orgCurrency || 'USD',
     }).format(amount);
   };
 

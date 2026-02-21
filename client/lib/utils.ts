@@ -21,7 +21,7 @@ export function formatCurrency(
   locale: string = 'en-US'
 ): string {
   const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
-  const code = currency || (typeof window !== 'undefined' ? (localStorage.getItem('orgCurrency') || 'USD') : 'USD');
+  const code = currency || (typeof window !== 'undefined' ? localStorage.getItem('orgCurrency') : null) || 'USD';
 
   return new Intl.NumberFormat(locale, {
     style: 'currency',

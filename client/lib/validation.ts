@@ -214,6 +214,7 @@ export const productSchema = z.object({
   pack: z.number().min(0).optional(), // Package value for excise calculation
   stick: z.number().min(0).optional(), // Piece value for excise calculation
   goodsCategoryId: z.string().optional(), // EFRIS VAT commodity category code
+  initialQuantity: z.number().min(0).default(0), // Opening stock quantity
 });
 
 // ============================================================================

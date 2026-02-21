@@ -1,11 +1,13 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
+import { useOrganization } from '@/hooks/useOrganization';
 
 export default function NewProjectPage({ params }: { params: { orgSlug: string } }) {
   const router = useRouter();
+  const { currency: orgCurrency } = useOrganization();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
@@ -15,8 +17,14 @@ export default function NewProjectPage({ params }: { params: { orgSlug: string }
     startDate: '',
     endDate: '',
     budget: '',
-    currency: 'USD',
+    currency: '',
   });
+
+  useEffect(() => {
+    if (orgCurrency) {
+      setFormData(prev => ({ ...prev, currency: prev.currency || orgCurrency }));
+    }
+  }, [orgCurrency]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

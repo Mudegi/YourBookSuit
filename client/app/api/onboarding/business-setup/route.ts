@@ -41,10 +41,6 @@ export async function POST(request: NextRequest) {
       },
       data: {
         businessModel,
-        // For demo/testing purposes, if it's FULL_FEATURED, enable all features
-        ...(businessModel === 'FULL_FEATURED' && {
-          package: 'ENTERPRISE'
-        })
       },
     });
 

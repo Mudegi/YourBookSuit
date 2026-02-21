@@ -201,7 +201,8 @@ export class VarianceAnalysisEngine {
         varianceInBaseCurrency,
         input.productId,
         costVariance.id,
-        input.reasonCode
+        input.reasonCode,
+        organization.baseCurrency
       );
     }
 
@@ -410,7 +411,8 @@ export class VarianceAnalysisEngine {
     varianceAmount: number,
     productId: string,
     costVarianceId: string,
-    reasonCode?: string
+    reasonCode?: string,
+    baseCurrency?: string
   ): Promise<string> {
     // Get variance GL accounts from organization setup
     const varianceAccount = await this.getVarianceGLAccount(organizationId, reasonCode);
@@ -429,14 +431,14 @@ export class VarianceAnalysisEngine {
         entryType: 'DEBIT' as const,
         amount: Math.abs(varianceAmount),
         description: `Unfavorable variance - ${reasonCode || 'Cost variance'}`,
-        currency: 'USD', // Use base currency
+        currency: baseCurrency || 'USD',
       },
       {
         accountId: inventoryAccount.id,
         entryType: 'CREDIT' as const,
         amount: Math.abs(varianceAmount),
         description: `Inventory adjustment for variance`,
-        currency: 'USD',
+        currency: baseCurrency || 'USD',
       },
     ] : [
       {
@@ -444,14 +446,14 @@ export class VarianceAnalysisEngine {
         entryType: 'DEBIT' as const,
         amount: Math.abs(varianceAmount),
         description: `Inventory adjustment for variance`,
-        currency: 'USD',
+        currency: baseCurrency || 'USD',
       },
       {
         accountId: varianceAccount.id,
         entryType: 'CREDIT' as const,
         amount: Math.abs(varianceAmount),
         description: `Favorable variance - ${reasonCode || 'Cost variance'}`,
-        currency: 'USD',
+        currency: baseCurrency || 'USD',
       },
     ];
 

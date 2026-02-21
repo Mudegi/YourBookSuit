@@ -281,7 +281,8 @@ export class LandedCostService {
         result.landedCost.id,
         totalLandedCost,
         allocations,
-        revaluationRequired
+        revaluationRequired,
+        organization.baseCurrency
       );
     }
 
@@ -445,7 +446,8 @@ export class LandedCostService {
     landedCostId: string,
     totalLandedCost: number,
     allocations: any[],
-    revaluationRequired: boolean
+    revaluationRequired: boolean,
+    baseCurrency: string
   ): Promise<string> {
     // Get appropriate GL accounts
     const inventoryAccount = await this.getInventoryGLAccount(organizationId);
@@ -465,14 +467,14 @@ export class LandedCostService {
         entryType: 'DEBIT' as const,
         amount: totalLandedCost,
         description: `Landed cost adjustment - COGS`,
-        currency: 'USD', // Use base currency
+        currency: baseCurrency,
       },
       {
         accountId: landedCostClearingAccount.id,
         entryType: 'CREDIT' as const,
         amount: totalLandedCost,
         description: `Landed cost clearing`,
-        currency: 'USD',
+        currency: baseCurrency,
       },
     ] : [
       // Normal case: post to inventory
@@ -481,14 +483,14 @@ export class LandedCostService {
         entryType: 'DEBIT' as const,
         amount: totalLandedCost,
         description: `Landed cost allocation - Inventory`,
-        currency: 'USD',
+        currency: baseCurrency,
       },
       {
         accountId: landedCostClearingAccount.id,
         entryType: 'CREDIT' as const,
         amount: totalLandedCost,
         description: `Landed cost clearing`,
-        currency: 'USD',
+        currency: baseCurrency,
       },
     ];
 

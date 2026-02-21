@@ -82,6 +82,12 @@ export class BankAccountService {
       throw new Error('A bank account with this account number already exists at this bank');
     }
 
+    // Fetch organization for base currency
+    const organization = await prisma.organization.findUnique({
+      where: { id: input.organizationId },
+      select: { baseCurrency: true },
+    });
+
     // Create bank account
     const bankAccount = await prisma.bankAccount.create({
       data: {
@@ -92,7 +98,7 @@ export class BankAccountService {
         accountNumber: input.accountNumber,
         accountType: input.accountType,
         routingNumber: input.routingNumber || null,
-        currency: input.currency || 'USD',
+        currency: input.currency || organization?.baseCurrency || 'USD',
         currentBalance: 0, // Will be calculated from ledger entries
         openingBalance: 0,
         isActive: input.isActive !== undefined ? input.isActive : true,

@@ -92,10 +92,11 @@ export async function POST(request: NextRequest) {
       role: defaultOrg.role,
     });
 
-    // Set cookie
+    // Return token in response so the client can store it in localStorage
     const response = NextResponse.json({
       success: true,
       data: {
+        token,
         user: {
           id: user.id,
           email: user.email,
@@ -110,6 +111,7 @@ export async function POST(request: NextRequest) {
           slug: defaultOrg.organization.slug,
           subscriptionStatus: defaultOrg.organization.subscriptionStatus,
           trialEndDate: defaultOrg.organization.trialEndDate,
+          onboardingCompleted: defaultOrg.organization.onboardingCompleted,
         },
         role: defaultOrg.role,
       },

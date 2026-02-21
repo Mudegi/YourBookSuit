@@ -14,28 +14,15 @@ export async function fetchWithAuth(
   url: string,
   options: FetchOptions = {}
 ): Promise<Response> {
-  // Check if we're in a browser environment
   const isBrowser = typeof window !== 'undefined';
   const token = isBrowser ? localStorage.getItem('yourbooks_token') : null;
   
-  console.log('🔧 fetchWithAuth called:', { 
-    url, 
-    isBrowser,
-    hasToken: !!token,
-    tokenPreview: token ? `${token.substring(0, 20)}...` : 'none'
-  });
-  
   const headers = new Headers(options.headers);
   
-  // Add Authorization header if token exists
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
-    console.log('🔧 Added Authorization header');
-  } else {
-    console.log('⚠️ No token found!', isBrowser ? 'Browser but no token in localStorage' : 'Server-side render');
   }
   
-  // Merge headers back into options
   const fetchOptions: RequestInit = {
     ...options,
     headers,

@@ -90,6 +90,12 @@ export async function POST(
       );
     }
 
+    // Fetch org to get baseCurrency for default
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { baseCurrency: true },
+    });
+
     const body = await request.json();
 
     // Validate input
@@ -130,7 +136,7 @@ export async function POST(
         description: data.description,
         isActive: data.isActive ?? true,
         balance: 0,
-        currency: data.currency || 'USD',
+        currency: data.currency || org?.baseCurrency || 'USD',
         createdById: userId,
       },
     });

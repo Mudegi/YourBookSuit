@@ -159,7 +159,7 @@ export default function PricingPage() {
               </div>
               <div>
                 <h3 className="font-bold text-lg text-gray-900 mb-2">Is there a free trial?</h3>
-                <p className="text-gray-600">We offer a 14-day free trial on all plans. No credit card required.</p>
+                <p className="text-gray-600">We offer a 7-day free trial on all plans. No credit card required.</p>
               </div>
               <div>
                 <h3 className="font-bold text-lg text-gray-900 mb-2">What payment methods do you accept?</h3>

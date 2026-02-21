@@ -82,7 +82,7 @@ export async function POST(
       startDate,
       endDate,
       budget,
-      currency = 'USD',
+      currency = org.baseCurrency || 'USD',
       managerId,
       customerId,
     } = body;

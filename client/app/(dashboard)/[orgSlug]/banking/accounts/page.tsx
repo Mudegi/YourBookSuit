@@ -61,7 +61,7 @@ export default function BankAccountsPage() {
     accountNumber: '',
     accountType: 'CHECKING',
     routingNumber: '',
-    currency: 'USD',
+    currency: '',
     isActive: true,
   });
 
@@ -116,7 +116,7 @@ export default function BankAccountsPage() {
       accountNumber: '',
       accountType: 'CHECKING',
       routingNumber: '',
-      currency: currency || 'USD',
+      currency: currency || '',
       isActive: true,
     });
     setShowModal(true);
@@ -481,7 +481,7 @@ export default function BankAccountsPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="currency">Currency (Org default: {currency || 'USD'})</Label>
+              <Label htmlFor="currency">Currency (Org default: {currency || ''})</Label>
               <select
                 id="currency"
                 value={formData.currency}

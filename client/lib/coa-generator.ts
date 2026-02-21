@@ -303,7 +303,7 @@ export async function generateChartOfAccounts(
   const {
     organizationId,
     industryType,
-    baseCurrency = 'USD',
+    baseCurrency: inputCurrency,
     includeOptionalAccounts = true,
   } = options;
 
@@ -311,7 +311,7 @@ export async function generateChartOfAccounts(
     // Validate organization exists
     const organization = await prisma.organization.findUnique({
       where: { id: organizationId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, baseCurrency: true },
     });
 
     if (!organization) {
@@ -321,6 +321,8 @@ export async function generateChartOfAccounts(
         error: 'Organization not found',
       };
     }
+
+    const baseCurrency = inputCurrency || organization.baseCurrency || 'USD';
 
     // Check if COA already exists for this organization
     const existingAccounts = await prisma.chartOfAccount.count({

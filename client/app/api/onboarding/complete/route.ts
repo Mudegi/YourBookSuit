@@ -130,19 +130,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Mark onboarding as complete
-    const updatedOrg = await prisma.organization.update({
-      where: { id: organizationId },
-      data: {
-        onboardingCompleted: true,
-      },
-    });
+    // Note: onboarding is NOT marked complete here.
+    // It will be marked complete after the payment step (step 6).
 
     return NextResponse.json({
       success: true,
-      message: 'Onboarding completed successfully',
+      message: 'Bank account set up successfully',
       data: {
-        organization: updatedOrg,
+        organizationId,
         bankAccount,
       },
     });

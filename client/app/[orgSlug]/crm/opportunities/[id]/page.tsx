@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Save } from 'lucide-react';
+import { useOrganization } from '@/hooks/useOrganization';
 
 type Stage = 'PROSPECT' | 'QUALIFIED' | 'PROPOSAL' | 'NEGOTIATION' | 'WON' | 'LOST';
 
@@ -34,6 +35,7 @@ export default function OpportunityDetailPage() {
   const router = useRouter();
   const orgSlug = params?.orgSlug as string;
   const id = params?.id as string;
+  const { currency: orgCurrency } = useOrganization();
 
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,7 +44,7 @@ export default function OpportunityDetailPage() {
   const [form, setForm] = useState({
     name: '',
     value: '',
-    currency: 'USD',
+    currency: '',
     stage: 'PROSPECT' as Stage,
     probability: 50,
     closedDate: '',
@@ -67,7 +69,7 @@ export default function OpportunityDetailPage() {
       setForm({
         name: data.name || '',
         value: data.value !== null && data.value !== undefined ? String(data.value) : '',
-        currency: data.currency || 'USD',
+        currency: data.currency || orgCurrency,
         stage: data.stage,
         probability: data.probability ?? 50,
         closedDate: data.closedDate ? new Date(data.closedDate).toISOString().slice(0, 10) : '',

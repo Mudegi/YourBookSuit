@@ -31,7 +31,7 @@ export default function VersionControl({
   versions, 
   currentVersion, 
   onVersionSelect,
-  currency = 'USD' 
+  currency = '' 
 }: VersionControlProps) {
   
   const [selectedVersion, setSelectedVersion] = useState(currentVersion.id);

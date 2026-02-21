@@ -18,6 +18,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { useOrganization } from '@/hooks/useOrganization';
 import { 
   Plus, AlertTriangle, TrendingDown, TrendingUp, Filter, 
   DollarSign, Globe, MapPin, Calendar, FileText, Eye,
@@ -78,6 +79,7 @@ interface FilterState {
 export default function CostVariancesPage() {
   const params = useParams();
   const orgSlug = params.orgSlug as string;
+  const { organization } = useOrganization();
   
   const [variances, setVariances] = useState<CostVariance[]>([]);
   const [summary, setSummary] = useState<VarianceSummary | null>(null);
@@ -172,7 +174,7 @@ export default function CostVariancesPage() {
   const formatCurrency = (amount: number, showSign: boolean = true) => {
     const formattedAmount = new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: filters.currency === 'BASE' ? 'USD' : 'UGX', // Dynamic based on org
+      currency: organization?.baseCurrency || 'USD',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(Math.abs(amount));

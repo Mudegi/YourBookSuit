@@ -27,7 +27,7 @@ export async function POST(
 
     const organization = await prisma.organization.findUnique({
       where: { slug: params.orgSlug },
-      select: { id: true },
+      select: { id: true, baseCurrency: true },
     });
 
     if (!organization) {
@@ -74,7 +74,7 @@ export async function POST(
       referenceId,
       costTypeId,
       vendorId,
-      currency: currency || 'USD',
+      currency: currency || organization.baseCurrency || 'USD',
       exchangeRate,
       costComponents: {
         freightCost: costComponents.freightCost || 0,

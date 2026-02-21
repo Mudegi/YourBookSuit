@@ -67,6 +67,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     await authApi.logout();
     setUser(null);
+    // Signal AuthRedirect to not bounce back to dashboard
+    try { sessionStorage.setItem('just_logged_out', '1'); } catch {}
     router.push('/login');
   };
 

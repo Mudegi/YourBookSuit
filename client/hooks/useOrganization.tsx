@@ -60,7 +60,7 @@ export function useOrganization() {
 
   return {
     organization,
-    currency: organization?.baseCurrency || 'USD',
+    currency: organization?.baseCurrency || (typeof window !== 'undefined' ? localStorage.getItem('orgCurrency') : null) || '',
     loading,
     error,
   };

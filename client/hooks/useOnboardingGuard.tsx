@@ -93,8 +93,6 @@ export function useOnboardingGuard(options?: {
 
           // Redirect if onboarding not completed and redirect is enabled
           if (redirect && (!completed || !hasChartOfAccounts || !hasCompanyProfile)) {
-            console.log('🔄 Onboarding incomplete, redirecting to:', redirectUrl);
-            console.log('📊 Status:', { completed, hasChartOfAccounts, hasCompanyProfile });
             setIsRedirecting(true);
             
             // Small delay to prevent immediate re-execution
@@ -102,7 +100,7 @@ export function useOnboardingGuard(options?: {
               router.push(redirectUrl);
             }, 100);
           } else {
-            console.log('✅ Onboarding complete, staying on page');
+            // Onboarding complete
           }
         }
       } catch (error) {
@@ -153,10 +151,7 @@ export function withOnboardingGuard<P extends object>(
     if (loading) {
       return (
         <div className="flex items-center justify-center min-h-screen">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Checking organization setup...</p>
-          </div>
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
         </div>
       );
     }
@@ -169,10 +164,7 @@ export function withOnboardingGuard<P extends object>(
     // Show message while redirecting
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Redirecting to onboarding...</p>
-        </div>
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
       </div>
     );
   };

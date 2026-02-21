@@ -195,7 +195,7 @@ export default function PricingComparisonPage() {
                 Is there a free trial?
               </summary>
               <p className="mt-2 text-gray-600">
-                Yes! All plans come with a 14-day free trial. No credit card required.
+                Yes! All plans come with a 7-day free trial. No credit card required.
               </p>
             </details>
           </div>

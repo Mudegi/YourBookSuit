@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
+import { clearAuthToken } from '@/lib/api-client';
 import {
   LayoutDashboard,
   BookOpen,
@@ -211,6 +212,7 @@ export default function DashboardLayout({
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
+    document.documentElement.style.backgroundColor = theme === 'dark' ? '#0f172a' : '#ffffff';
     localStorage.setItem('theme', theme);
   }, [theme]);
 
@@ -258,10 +260,14 @@ export default function DashboardLayout({
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
+    clearAuthToken();
+    try { sessionStorage.setItem('just_logged_out', '1'); } catch {}
     // Strip user preferences from DOM so they don't affect unauthenticated pages
     document.documentElement.classList.remove('dark');
     document.documentElement.style.removeProperty('--app-font');
     document.documentElement.removeAttribute('data-density');
+    // Reset to dark background for public pages (landing/login/register)
+    document.documentElement.style.backgroundColor = '#020617';
     router.push('/login');
   };
 
@@ -287,33 +293,37 @@ export default function DashboardLayout({
   // Trial / subscription enforcement
   const subStatus = organization?.subscriptionStatus;
   const trialEnd = organization?.trialEndDate ? new Date(organization.trialEndDate) : null;
+  const subscriptionEnd = organization?.subscriptionEndDate ? new Date(organization.subscriptionEndDate) : null;
   const isTrialExpired = subStatus === 'TRIAL' && trialEnd && trialEnd < new Date();
-  const isBlocked = subStatus === 'TRIAL_EXPIRED' || subStatus === 'SUSPENDED' || subStatus === 'CANCELLED' || isTrialExpired;
+  const isSubscriptionExpired = subStatus === 'ACTIVE' && subscriptionEnd && subscriptionEnd < new Date();
+  const isBlocked = subStatus === 'TRIAL_EXPIRED' || subStatus === 'SUSPENDED' || subStatus === 'CANCELLED' || isTrialExpired || isSubscriptionExpired;
   const isPendingApproval = subStatus === 'PENDING_APPROVAL';
 
   if (isBlocked) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-lg border border-gray-200 p-8 text-center">
-          <div className="text-5xl mb-4">{subStatus === 'SUSPENDED' ? '🚫' : '⏰'}</div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            {subStatus === 'SUSPENDED' ? 'Account Suspended' : 'Trial Expired'}
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 p-6">
+        <div className="max-w-md w-full bg-slate-800/50 rounded-2xl shadow-lg border border-slate-700/50 p-8 text-center">
+          <div className="text-5xl mb-4">{subStatus === 'SUSPENDED' ? '🚫' : isSubscriptionExpired ? '📅' : '⏰'}</div>
+          <h2 className="text-2xl font-bold text-white mb-2">
+            {subStatus === 'SUSPENDED' ? 'Account Suspended' : isSubscriptionExpired ? 'Subscription Expired' : 'Trial Expired'}
           </h2>
-          <p className="text-gray-500 mb-6">
+          <p className="text-slate-400 mb-6">
             {subStatus === 'SUSPENDED'
               ? 'Your organization has been suspended. Please contact support for assistance.'
-              : 'Your 7-day free trial has ended. To continue using YourBooks, please subscribe to our Enterprise plan.'}
+              : isSubscriptionExpired
+              ? 'Your subscription has ended. Please renew to continue using YourBooks.'
+              : 'Your 7-day free trial has ended. Subscribe to continue using YourBooks.'}
           </p>
           <div className="space-y-3">
             <a
               href="mailto:support@yourbooks.app?subject=Subscription%20Payment"
-              className="block w-full py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition"
+              className="block w-full py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-500 transition"
             >
               Contact Us to Subscribe
             </a>
             <button
               onClick={handleLogout}
-              className="block w-full py-3 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition"
+              className="block w-full py-3 bg-slate-700 text-slate-300 font-semibold rounded-xl hover:bg-slate-600 transition"
             >
               Sign Out
             </button>
@@ -325,17 +335,17 @@ export default function DashboardLayout({
 
   if (isPendingApproval) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-lg border border-gray-200 p-8 text-center">
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 p-6">
+        <div className="max-w-md w-full bg-slate-800/50 rounded-2xl shadow-lg border border-slate-700/50 p-8 text-center">
           <div className="text-5xl mb-4">⏳</div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Pending Approval</h2>
-          <p className="text-gray-500 mb-6">
+          <h2 className="text-2xl font-bold text-white mb-2">Pending Approval</h2>
+          <p className="text-slate-400 mb-6">
             Your payment has been received! We&apos;re reviewing your account and will activate it shortly.
             You&apos;ll be able to access your dashboard once approved.
           </p>
           <button
             onClick={handleLogout}
-            className="block w-full py-3 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition"
+            className="block w-full py-3 bg-slate-700 text-slate-300 font-semibold rounded-xl hover:bg-slate-600 transition"
           >
             Sign Out
           </button>
@@ -515,7 +525,7 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
       {/* Keyboard Shortcuts Modal */}
       {shortcutsOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center">

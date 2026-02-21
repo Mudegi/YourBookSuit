@@ -46,6 +46,7 @@ export default function NewProductPage() {
     stick: '',
     goodsCategoryId: '',
     goodsCategoryLabel: '',
+    initialQuantity: '',
   });
 
   const [submitting, setSubmitting] = useState(false);
@@ -195,6 +196,7 @@ export default function NewProductPage() {
           sellingPrice: Number(form.sellingPrice || 0),
           reorderLevel: form.reorderLevel ? Number(form.reorderLevel) : undefined,
           reorderQuantity: form.reorderQuantity ? Number(form.reorderQuantity) : undefined,
+          initialQuantity: form.initialQuantity ? Number(form.initialQuantity) : 0,
           defaultTaxRate: Number(form.defaultTaxRate || 0),
           exciseDutyCode: form.exciseDutyCode || undefined,
           exciseRate: form.exciseRate ? Number(form.exciseRate) : undefined,
@@ -265,14 +267,16 @@ export default function NewProductPage() {
             </button>
             <button
               type="submit"
+              form="new-product-form"
               disabled={submitting}
-              className="px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+              className="px-4 py-2 rounded-md bg-blue-600 text-white shadow hover:bg-blue-700 disabled:opacity-60"
             >
               {submitting ? 'Saving…' : 'Save Product'}
             </button>
             {isUganda && efrisEnabled && (
               <button
                 type="button"
+                form="new-product-form"
                 onClick={(e) => handleSubmit(e, true)}
                 disabled={submitting}
                 className="px-4 py-2 rounded-md bg-green-600 text-white shadow hover:bg-green-700 disabled:opacity-60"
@@ -644,6 +648,20 @@ export default function NewProductPage() {
 
               {form.trackInventory && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700">Initial Quantity on Hand <span className="text-red-500">*</span></label>
+                    <input
+                      name="initialQuantity"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={form.initialQuantity}
+                      onChange={onChange}
+                      placeholder="e.g., 100"
+                      className="mt-1 w-full md:w-1/2 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">Opening stock quantity for this product. An initial stock movement will be recorded.</p>
+                  </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Reorder Level</label>
                     <input

@@ -16,6 +16,25 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Prevent white flash: immediately set background based on route + theme */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){
+              var p = window.location.pathname;
+              var isDash = p.match(/^\/[^\/]+\//) && !p.startsWith('/login') && !p.startsWith('/register') && !p.startsWith('/onboarding') && p !== '/';
+              var isAdmin = p.startsWith('/system-admin');
+              if (isDash || isAdmin) {
+                var t = ''; try { t = localStorage.getItem('theme') || ''; } catch(e) {}
+                if (t === 'dark') {
+                  document.documentElement.classList.add('dark');
+                  document.documentElement.style.backgroundColor = '#0f172a';
+                } else {
+                  document.documentElement.style.backgroundColor = '#ffffff';
+                }
+              }
+            })();`,
+          }}
+        />
         {/* Load Google Fonts */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />

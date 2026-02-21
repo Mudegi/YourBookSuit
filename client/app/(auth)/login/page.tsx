@@ -4,7 +4,6 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import { getOrganizations } from '@/lib/api/organizations';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -25,38 +24,30 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      console.log('🔐 Attempting login with:', formData.email);
-      
       // Login using the API client
-      await login(formData.email, formData.password);
-      
-      console.log('✅ Login successful');
+      const response = await login(formData.email, formData.password);
 
-      // Get user's organizations
-      console.log('📊 Fetching organizations...');
-      const organizations = await getOrganizations();
-      console.log('📊 Organizations:', organizations);
-      
       // Check if user is a system admin — redirect to admin panel
       const sessionRes = await fetch('/api/auth/session');
       const sessionData = await sessionRes.json();
       if (sessionData?.data?.user?.isSystemAdmin) {
-        console.log('🔄 System admin detected, redirecting to admin panel');
         router.push('/system-admin');
         return;
       }
 
-      if (organizations.length > 0) {
-        // Redirect to first organization's dashboard
-        console.log('🔄 Redirecting to:', `/${organizations[0].slug}/dashboard`);
-        router.push(`/${organizations[0].slug}/dashboard`);
+      // Check if onboarding is completed — go directly to onboarding if not
+      const org = sessionData?.data?.organization;
+      if (org?.slug && !org.onboardingCompleted) {
+        router.push('/onboarding');
+        return;
+      }
+
+      if (org?.slug) {
+        router.push(`/${org.slug}/dashboard`);
       } else {
-        // No organization, redirect to onboarding
-        console.log('🔄 No organization, redirecting to onboarding');
         router.push('/onboarding');
       }
     } catch (err: any) {
-      console.error('❌ Login error:', err);
       setError(err.message || 'Login failed');
     } finally {
       setLoading(false);
@@ -64,34 +55,34 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
       <div className="max-w-md w-full">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">YourBooks</h1>
-          <p className="text-gray-600">Sign in to your account</p>
+          <h1 className="text-4xl font-bold text-white mb-2">YourBooks</h1>
+          <p className="text-slate-400">Sign in to your account</p>
         </div>
 
         {/* Login Form */}
-        <div className="bg-white rounded-lg shadow-xl p-8">
+        <div className="bg-slate-800/50 rounded-lg shadow-xl border border-slate-700/50 p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Error Message */}
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+              <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded">
                 {error}
               </div>
             )}
 
             {/* Email */}
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-2">
                 Email Address
               </label>
               <input
                 id="email"
                 type="email"
                 required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 bg-slate-900 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-slate-500"
                 placeholder="you@example.com"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -100,14 +91,14 @@ export default function LoginPage() {
 
             {/* Password */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-2">
                 Password
               </label>
               <input
                 id="password"
                 type="password"
                 required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 bg-slate-900 border border-slate-600 text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-slate-500"
                 placeholder="••••••••"
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
@@ -118,23 +109,16 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Signing in...' : 'Sign In'}
             </button>
           </form>
 
-          {/* Demo Credentials */}
-          <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <p className="text-sm font-semibold text-yellow-800 mb-2">Demo Credentials:</p>
-            <p className="text-sm text-yellow-700">Email: admin@example.com</p>
-            <p className="text-sm text-yellow-700">Password: password123</p>
-          </div>
-
           {/* Register Link */}
           <div className="mt-6 text-center text-sm">
-            <span className="text-gray-600">Don't have an account? </span>
-            <Link href="/register" className="text-blue-600 hover:text-blue-700 font-semibold">
+            <span className="text-slate-400">Don&apos;t have an account? </span>
+            <Link href="/register" className="text-blue-400 hover:text-blue-300 font-semibold">
               Create one now
             </Link>
           </div>
@@ -142,7 +126,7 @@ export default function LoginPage() {
 
         {/* Back to Home */}
         <div className="text-center mt-6">
-          <Link href="/" className="text-gray-600 hover:text-gray-900 text-sm">
+          <Link href="/" className="text-slate-500 hover:text-white text-sm">
             ← Back to Home
           </Link>
         </div>

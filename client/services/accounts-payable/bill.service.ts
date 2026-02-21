@@ -72,6 +72,15 @@ export class BillService {
       throw new Error('Vendor not found');
     }
 
+    // Fetch organization for base currency
+    const organization = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { baseCurrency: true },
+    });
+    if (!organization) {
+      throw new Error('Organization not found');
+    }
+
     // Find Accounts Payable account (LIABILITY type)
     const apAccount = await prisma.chartOfAccount.findFirst({
       where: {
@@ -194,7 +203,7 @@ export class BillService {
         entryType: EntryType.DEBIT,
         amount: lineNetAmount,
         description: item.description,
-        currency: 'USD',
+        currency: organization.baseCurrency,
       });
     }
 
@@ -212,7 +221,7 @@ export class BillService {
           entryType: EntryType.DEBIT,
           amount: claimableVat,
           description: `Input VAT - ${billNumber}`,
-          currency: 'USD',
+          currency: organization.baseCurrency,
         });
       }
     }
@@ -225,7 +234,7 @@ export class BillService {
         entryType: EntryType.CREDIT,
         amount: totalGross,
         description: `Opening Stock - Bill ${billNumber}`,
-        currency: 'USD',
+        currency: organization.baseCurrency,
       });
     } else {
       // Regular purchase: CR Accounts Payable (creates liability)
@@ -234,7 +243,7 @@ export class BillService {
         entryType: EntryType.CREDIT,
         amount: totalGross,
         description: `Bill ${billNumber} - ${vendor.companyName}`,
-        currency: 'USD',
+        currency: organization.baseCurrency,
       });
     }
 
@@ -245,7 +254,7 @@ export class BillService {
         entryType: EntryType.CREDIT,
         amount: whtAmount,
         description: `WHT Payable - Bill ${billNumber}`,
-        currency: 'USD',
+        currency: organization.baseCurrency,
       });
 
       // DR: AP to reduce for withheld portion
@@ -254,7 +263,7 @@ export class BillService {
         entryType: EntryType.DEBIT,
         amount: whtAmount,
         description: `WHT reduction on Bill ${billNumber}`,
-        currency: 'USD',
+        currency: organization.baseCurrency,
       });
     }
 

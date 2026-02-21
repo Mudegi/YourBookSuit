@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { Calculator, Layers, AlertTriangle, CheckCircle, Download, RefreshCw } from 'lucide-react';
+import { useOrganization } from '@/hooks/useOrganization';
 
 interface BomRollupWorkbenchProps {
   productId: string;
@@ -53,6 +54,7 @@ export default function BomRollupWorkbench({
   orgSlug, 
   onRollupComplete 
 }: BomRollupWorkbenchProps) {
+  const { currency: orgCurrency } = useOrganization();
   
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<RollupResult | null>(null);
@@ -111,7 +113,7 @@ export default function BomRollupWorkbench({
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD', // TODO: Get from org settings
+      currency: orgCurrency || 'USD',
     }).format(amount);
   };
 

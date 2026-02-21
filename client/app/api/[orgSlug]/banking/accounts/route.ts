@@ -8,7 +8,7 @@ const accountSchema = z.object({
   accountName: z.string().min(1, 'Account name is required'),
   accountNumber: z.string().min(1, 'Account number is required'),
   bankName: z.string().min(1, 'Bank name is required'),
-  currency: z.string().length(3).default('USD'),
+  currency: z.string().length(3).optional(),
   accountType: z.enum(['CHECKING', 'SAVINGS', 'CREDIT_CARD', 'LINE_OF_CREDIT', 'MONEY_MARKET']).default('CHECKING'),
   openingBalance: z.number().default(0),
 });
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest, { params }: { params: { orgSlug: st
         accountName: input.accountName,
         accountNumber: input.accountNumber,
         bankName: input.bankName,
-        currency: input.currency,
+        currency: input.currency || org.baseCurrency || 'USD',
         accountType: input.accountType,
         openingBalance: input.openingBalance,
         currentBalance: input.openingBalance,

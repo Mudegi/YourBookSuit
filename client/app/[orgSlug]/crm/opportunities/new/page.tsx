@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Plus } from 'lucide-react';
+import { useOrganization } from '@/hooks/useOrganization';
 
 type Stage = 'PROSPECT' | 'QUALIFIED' | 'PROPOSAL' | 'NEGOTIATION' | 'WON' | 'LOST';
 
@@ -24,6 +25,7 @@ export default function NewOpportunityPage() {
   const params = useParams();
   const router = useRouter();
   const orgSlug = params?.orgSlug as string;
+  const { currency: orgCurrency } = useOrganization();
 
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
   const [loadingCompanies, setLoadingCompanies] = useState(true);
@@ -33,10 +35,16 @@ export default function NewOpportunityPage() {
     name: '',
     companyId: '',
     value: '',
-    currency: 'USD',
+    currency: '',
     stage: 'PROSPECT' as Stage,
     probability: 50,
   });
+
+  useEffect(() => {
+    if (orgCurrency) {
+      setForm(prev => ({ ...prev, currency: prev.currency || orgCurrency }));
+    }
+  }, [orgCurrency]);
 
   useEffect(() => {
     loadCompanies();

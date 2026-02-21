@@ -17,7 +17,7 @@ export default function CostBreakdownChart({
   materialCost, 
   laborCost, 
   overheadCost,
-  currency = 'USD' 
+  currency = '' 
 }: CostBreakdownProps) {
   
   const totalCost = materialCost + laborCost + overheadCost;
