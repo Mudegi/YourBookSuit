@@ -142,6 +142,7 @@ export async function POST(
         taxIdNumber: body.taxIdNumber || null,
         currency: body.currency || organization.baseCurrency, // Inherit from org
         timezone: body.timezone || 'UTC',
+        prefix: body.prefix || '',
         metadata: body.metadata || null,
       },
     });

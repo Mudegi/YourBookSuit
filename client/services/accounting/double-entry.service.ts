@@ -28,6 +28,7 @@ export interface TransactionInput {
   referenceId?: string;
   createdById: string;
   entries: LedgerEntryInput[];
+  metadata?: Record<string, any>;
 }
 
 type PrismaTransaction = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
@@ -152,6 +153,7 @@ export class DoubleEntryService {
         referenceId: input.referenceId,
         status: TransactionStatus.POSTED,
         createdById: input.createdById,
+        ...(input.metadata ? { metadata: input.metadata } : {}),
         ledgerEntries: {
           create: input.entries.map(entry => {
             const amount = new Decimal(entry.amount);

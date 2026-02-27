@@ -10,6 +10,7 @@ interface BranchPayload {
   code: string;
   name: string;
   type: string;
+  prefix: string;
   city: string;
   country: string;
   isHeadquarters: boolean;
@@ -23,6 +24,7 @@ export default function NewBranchPage() {
     code: "",
     name: "",
     type: "OFFICE",
+    prefix: "",
     city: "",
     country: "",
     isHeadquarters: false,
@@ -86,12 +88,27 @@ export default function NewBranchPage() {
               <input className="w-full border rounded px-3 py-2" value={form.name} onChange={(e)=>setForm(f=>({...f, name: e.target.value}))} required />
             </div>
             <div className="space-y-1">
+              <label className="text-sm font-medium text-gray-700">Document Prefix</label>
+              <input
+                className="w-full border rounded px-3 py-2 uppercase"
+                value={form.prefix}
+                onChange={(e) => setForm(f => ({ ...f, prefix: e.target.value.toUpperCase() }))}
+                placeholder="e.g. KLA"
+                maxLength={6}
+              />
+              <p className="text-xs text-gray-400">Used in document numbers, e.g. KLA-INV-0001</p>
+            </div>
+            <div className="space-y-1">
               <label className="text-sm font-medium text-gray-700">Type</label>
               <select className="w-full border rounded px-3 py-2" value={form.type} onChange={(e)=>setForm(f=>({...f, type: e.target.value}))}>
                 <option value="OFFICE">Office</option>
+                <option value="HEADQUARTERS">Headquarters</option>
                 <option value="WAREHOUSE">Warehouse</option>
-                <option value="RETAIL">Retail</option>
-                <option value="PLANT">Plant</option>
+                <option value="RETAIL_STORE">Retail Store</option>
+                <option value="MANUFACTURING">Manufacturing</option>
+                <option value="DISTRIBUTION_CENTER">Distribution Center</option>
+                <option value="SERVICE_CENTER">Service Center</option>
+                <option value="REMOTE">Remote</option>
               </select>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

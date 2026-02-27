@@ -8,16 +8,7 @@ export async function GET(
   { params }: { params: { orgSlug: string } }
 ) {
   try {
-    // Permission: VIEW General Ledger
-    const res = await requirePermission(
-      request, 
-      { orgSlug: params.orgSlug }, 
-      PermissionSections.GENERAL_LEDGER, 
-      PermissionActions.VIEW
-    );
-    if (!res.ok) return res.response;
-    
-    const organizationId = res.organizationId;
+    const { organizationId } = await requireAuth(params.orgSlug);
 
     // Parse query parameters (same as the main list endpoint)
     const { searchParams } = new URL(request.url);

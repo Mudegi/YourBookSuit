@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { PaymentService } from '@/services/payments/payment.service';
 
 /**
  * GET /api/orgs/[orgSlug]/payments/[id]
@@ -29,15 +30,20 @@ export async function GET(
         organizationId,
       },
       include: {
-        customer: true,
-        vendor: true,
+        customer: { select: { id: true, firstName: true, lastName: true, companyName: true } },
+        vendor: { select: { id: true, companyName: true, contactName: true } },
         bankAccount: {
           select: {
             id: true,
-            code: true,
-            name: true,
+            accountName: true,
+            accountNumber: true,
+            bankName: true,
             accountType: true,
+            glAccountId: true,
           },
+        },
+        createdBy: {
+          select: { id: true, firstName: true, lastName: true, email: true },
         },
         transaction: {
           include: {
@@ -63,7 +69,9 @@ export async function GET(
                 customer: {
                   select: {
                     id: true,
-                    name: true,
+                    firstName: true,
+                    lastName: true,
+                    companyName: true,
                   },
                 },
               },
@@ -73,7 +81,8 @@ export async function GET(
                 vendor: {
                   select: {
                     id: true,
-                    name: true,
+                    companyName: true,
+                    contactName: true,
                   },
                 },
               },
@@ -90,7 +99,53 @@ export async function GET(
       );
     }
 
-    return NextResponse.json(payment);
+    // Enrich with computed allocation status and display names
+    const customerName = payment.customer
+      ? (payment.customer.companyName || [payment.customer.firstName, payment.customer.lastName].filter(Boolean).join(' ') || 'Customer')
+      : null;
+    const vendorName = payment.vendor
+      ? (payment.vendor.companyName || payment.vendor.contactName || 'Vendor')
+      : null;
+
+    const enriched = {
+      ...payment,
+      customer: payment.customer ? { id: payment.customer.id, name: customerName } : null,
+      vendor: payment.vendor ? { id: payment.vendor.id, name: vendorName } : null,
+      bankAccount: payment.bankAccount ? {
+        id: payment.bankAccount.id,
+        code: payment.bankAccount.accountNumber,
+        name: payment.bankAccount.accountName,
+        bankName: payment.bankAccount.bankName,
+        accountType: payment.bankAccount.accountType,
+      } : null,
+      createdBy: payment.createdBy ? {
+        id: payment.createdBy.id,
+        name: [payment.createdBy.firstName, payment.createdBy.lastName].filter(Boolean).join(' '),
+        email: payment.createdBy.email,
+      } : null,
+      allocations: payment.allocations.map((a: any) => ({
+        ...a,
+        invoice: a.invoice ? {
+          ...a.invoice,
+          totalAmount: a.invoice.total,
+          customer: a.invoice.customer ? {
+            id: a.invoice.customer.id,
+            name: a.invoice.customer.companyName || [a.invoice.customer.firstName, a.invoice.customer.lastName].filter(Boolean).join(' ') || 'Customer',
+          } : null,
+        } : null,
+        bill: a.bill ? {
+          ...a.bill,
+          totalAmount: a.bill.total,
+          vendor: a.bill.vendor ? {
+            id: a.bill.vendor.id,
+            name: a.bill.vendor.companyName || a.bill.vendor.contactName || 'Vendor',
+          } : null,
+        } : null,
+      })),
+      allocationStatus: PaymentService.getAllocationStatus(payment.amount, payment.allocatedAmount),
+    };
+
+    return NextResponse.json(enriched);
   } catch (error) {
     console.error('Error fetching payment:', error);
     return NextResponse.json(
@@ -98,4 +153,5 @@ export async function GET(
       { status: 500 }
     );
   }
+}
 }

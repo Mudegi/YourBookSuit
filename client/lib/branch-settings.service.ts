@@ -21,6 +21,7 @@ export interface BranchSettings {
   branchAddress?: string;
   branchPhone?: string;
   branchEmail?: string;
+  branchPrefix: string;
 
   // Computed effective values
   effectiveCurrency: string;
@@ -63,6 +64,7 @@ export class BranchSettingsService {
       branchAddress: branch.address,
       branchPhone: branch.phone,
       branchEmail: branch.email,
+      branchPrefix: (branch as any).prefix ?? '',
 
       // Effective values (branch overrides or org defaults)
       effectiveCurrency: branch.currency,
@@ -81,7 +83,18 @@ export class BranchSettingsService {
   static async getBranchesWithSettings(organizationId: string): Promise<any[]> {
     const branches = await prisma.branch.findMany({
       where: { organizationId },
-      include: { organization: true },
+      include: {
+        organization: true,
+        _count: {
+          select: {
+            transactions: true,
+            invoices: true,
+            bills: true,
+            customers: true,
+            vendors: true,
+          },
+        },
+      },
     });
 
     return branches.map(branch => {

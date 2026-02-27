@@ -136,6 +136,7 @@ export async function PATCH(
     if (body.taxIdNumber !== undefined) updateData.taxIdNumber = body.taxIdNumber;
     if (body.currency !== undefined) updateData.currency = body.currency;
     if (body.timezone !== undefined) updateData.timezone = body.timezone;
+    if (body.prefix !== undefined) updateData.prefix = body.prefix;
     if (body.metadata !== undefined) updateData.metadata = body.metadata;
 
     const branch = await prisma.branch.update({

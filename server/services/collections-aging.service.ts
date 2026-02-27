@@ -163,7 +163,7 @@ export class CollectionsAgingService {
         organizationId,
         customerId,
         status: {
-          in: ['SENT', 'OVERDUE', 'PARTIAL'],
+          in: ['SENT', 'OVERDUE', 'PARTIALLY_PAID'],
         },
         invoiceDate: {
           lte: asOfDate,
@@ -252,7 +252,7 @@ export class CollectionsAgingService {
       where: {
         organizationId,
         status: {
-          in: ['SENT', 'OVERDUE', 'PARTIAL'],
+          in: ['SENT', 'OVERDUE', 'PARTIALLY_PAID'],
         },
         invoiceDate: {
           lte: asOfDate,

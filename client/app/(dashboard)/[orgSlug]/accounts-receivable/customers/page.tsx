@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Plus, Search, Pencil, Trash2, Mail, Phone, Building2 } from 'lucide-react';
 import { useOrganization } from '@/hooks/useOrganization';
+import { useBranch } from '@/hooks/useBranch';
 import { formatCurrency } from '@/lib/utils';
 
 interface Customer {
@@ -28,6 +29,7 @@ export default function CustomersPage() {
   const params = useParams();
   const orgSlug = params.orgSlug as string;
   const { currency } = useOrganization();
+  const { branchId } = useBranch();
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,13 +40,14 @@ export default function CustomersPage() {
 
   useEffect(() => {
     fetchCustomers();
-  }, [orgSlug, filterActive]);
+  }, [orgSlug, filterActive, branchId]);
 
   const fetchCustomers = async () => {
     try {
       const queryParams = new URLSearchParams();
       if (filterActive !== 'ALL') queryParams.append('isActive', filterActive);
       if (searchTerm) queryParams.append('search', searchTerm);
+      if (branchId) queryParams.append('branchId', branchId);
 
       const response = await fetch(`/api/orgs/${orgSlug}/customers?${queryParams}`);
       const data = await response.json();
@@ -520,7 +523,7 @@ function CustomerFormModal({
               <input
                 type="text"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Uganda, Kenya, etc."
+                placeholder="Country name"
                 value={formData.region}
                 onChange={(e) => setFormData({ ...formData, region: e.target.value })}
               />

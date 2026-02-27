@@ -114,6 +114,11 @@ export async function POST(
     const statementBalance = parseFloat(body.statementBalance);
     const difference = bookBalance - statementBalance;
 
+    // Determine opening balance: use lastReconciledBalance if available, else opening balance
+    const openingBalance = bankAccount.lastReconciledBalance
+      ? parseFloat(bankAccount.lastReconciledBalance.toString())
+      : parseFloat(bankAccount.openingBalance.toString());
+
     // Create reconciliation
     const reconciliation = await prisma.bankReconciliation.create({
       data: {
@@ -122,6 +127,7 @@ export async function POST(
         statementBalance,
         bookBalance,
         difference,
+        openingBalance,
         status: 'IN_PROGRESS',
         notes: body.notes,
       },

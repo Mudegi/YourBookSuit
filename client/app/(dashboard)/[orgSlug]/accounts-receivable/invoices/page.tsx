@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Plus, Search, Eye, Trash2, Mail, DollarSign, Calendar } from 'lucide-react';
 import { useOrganization } from '@/hooks/useOrganization';
+import { useBranch } from '@/hooks/useBranch';
 import { formatCurrency } from '@/lib/utils';
 
 interface Invoice {
@@ -31,6 +32,7 @@ export default function InvoicesPage() {
   const params = useParams();
   const orgSlug = params.orgSlug as string;
   const { currency } = useOrganization();
+  const { branchId, appendBranchParam } = useBranch();
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,12 +41,13 @@ export default function InvoicesPage() {
 
   useEffect(() => {
     fetchInvoices();
-  }, [orgSlug, statusFilter]);
+  }, [orgSlug, statusFilter, branchId]);
 
   const fetchInvoices = async () => {
     try {
       const queryParams = new URLSearchParams();
       if (statusFilter !== 'ALL') queryParams.append('status', statusFilter);
+      if (branchId) queryParams.append('branchId', branchId);
 
       const response = await fetch(`/api/orgs/${orgSlug}/invoices?${queryParams}`);
       const data = await response.json();

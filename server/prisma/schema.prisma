@@ -48,6 +48,7 @@ model Organization {
   auditLogs               AuditLog[]
   bankAccounts            BankAccount[]
   bankFeeds               BankFeed[]
+  bankRules               BankRule[]
   bankTransactions        BankTransaction[]
   benefits                Benefit[]
   billOfMaterials         BillOfMaterial[]
@@ -74,6 +75,8 @@ model Organization {
   efrisExcisableList      EFRISExcisableList[]
   eInvoiceConfig          EInvoiceConfig?
   employees               Employee[]
+  expenseClaims           ExpenseClaim[]
+  expensePolicies         ExpensePolicy[]
   eventLogs               EventLog[]
   fiscalPeriods           FiscalPeriod[]
   integrations            Integration[]
@@ -151,6 +154,8 @@ model Organization {
   invites                 OrganizationInvite[]
   unitsOfMeasure          UnitOfMeasure[]
   
+  crmTasks                CrmTask[]
+  
   // Multi-Currency Relations
   currencies              Currency[]
   exchangeRates           ExchangeRate[]
@@ -220,6 +225,10 @@ model Branch {
   vendors              Vendor[]
   workOrders           WorkOrder[]
   documentSequences    DocumentSequence[]
+  crmCompanies         Company[]             @relation("CompanyBranch")
+  crmContacts          Contact[]             @relation("ContactBranch")
+  crmOpportunities     Opportunity[]         @relation("OpportunityBranch")
+  employees            Employee[]            @relation("EmployeeBranch")
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -409,6 +418,10 @@ model User {
   createdGoodsReceipts       GoodsReceipt[]
   paymentsCreated            Payment[]               @relation("PaymentCreatedBy")
   paymentsUpdated            Payment[]               @relation("PaymentUpdatedBy")
+  managedCompanies           Company[]               @relation("CompanyAccountManager")
+  assignedCrmTasks           CrmTask[]               @relation("CrmTaskAssignee")
+  createdCrmTasks            CrmTask[]               @relation("CrmTaskCreator")
+  ownedOpportunities         Opportunity[]           @relation("OpportunityOwner")
 
   @@index([email])
 }
@@ -1272,27 +1285,37 @@ model PaymentTerm {
 }
 
 model BankAccount {
-  id              String               @id @default(cuid())
-  organizationId  String
-  accountName     String
-  accountNumber   String
-  bankName        String
-  currency        String               @default("USD")
-  accountType     BankAccountType
-  openingBalance  Decimal              @default(0) @db.Decimal(19, 4)
-  currentBalance  Decimal              @default(0) @db.Decimal(19, 4)
-  glAccountId     String?
-  isActive        Boolean              @default(true)
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
-  branchId        String?
-  Branch          Branch?              @relation(fields: [branchId], references: [id])
-  organization    Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  bankFeeds       BankFeed[]
-  reconciliations BankReconciliation[]
-  payments        Payment[]
+  id                     String               @id @default(cuid())
+  organizationId         String
+  accountName            String
+  accountNumber          String
+  bankName               String
+  currency               String               @default("USD")
+  accountType            BankAccountType
+  openingBalance         Decimal              @default(0) @db.Decimal(19, 4)
+  currentBalance         Decimal              @default(0) @db.Decimal(19, 4)
+  statementBalance       Decimal?             @db.Decimal(19, 4)           // Last imported statement balance
+  glAccountId            String?
+  routingNumber          String?                                           // Bank routing / sort code
+  swiftCode              String?                                           // SWIFT/BIC for international
+  mobileMerchantId       String?                                           // Mobile Money Merchant ID
+  mobileShortcode        String?                                           // Mobile Money shortcode
+  lastReconciledDate     DateTime?                                         // Date of last reconciliation
+  lastReconciledBalance  Decimal?             @db.Decimal(19, 4)           // Balance at last reconciliation
+  description            String?
+  isActive               Boolean              @default(true)
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+  branchId               String?
+  Branch                 Branch?              @relation(fields: [branchId], references: [id])
+  organization           Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bankFeeds              BankFeed[]
+  reconciliations        BankReconciliation[]
+  payments               Payment[]
 
+  @@unique([organizationId, glAccountId])                                  // Prevent two bank accounts on same GL
   @@index([organizationId])
+  @@index([organizationId, accountType])
 }
 
 model BankReconciliation {
@@ -2559,12 +2582,18 @@ model BankTransaction {
   transactionDate      DateTime
   amount               Decimal             @db.Decimal(19, 4)
   description          String
+  rawDescription       String?
   payee                String?
   referenceNo          String?
   transactionType      String
-  status               String              @default("PENDING")
+  status               String              @default("UNPROCESSED")
+  duplicateHash        String?
   matchedPaymentId     String?
   matchedTransactionId String?
+  matchedInvoiceId     String?
+  matchedBillId        String?
+  categoryAccountId    String?
+  appliedRuleId        String?
   confidenceScore      Decimal?            @db.Decimal(5, 2)
   clearedDate          DateTime?
   reconciliationId     String?
@@ -2573,11 +2602,39 @@ model BankTransaction {
   bankFeed             BankFeed            @relation(fields: [bankFeedId], references: [id], onDelete: Cascade)
   organization         Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   reconciliation       BankReconciliation? @relation(fields: [reconciliationId], references: [id])
+  appliedRule          BankRule?           @relation(fields: [appliedRuleId], references: [id])
 
+  @@unique([organizationId, duplicateHash])
   @@index([organizationId, transactionDate])
+  @@index([organizationId, status])
   @@index([status, matchedPaymentId])
   @@index([reconciliationId])
   @@index([isReconciled])
+  @@index([appliedRuleId])
+}
+
+model BankRule {
+  id                 String            @id @default(cuid())
+  organizationId     String
+  ruleName           String
+  description        String?
+  priority           Int               @default(0)
+  isActive           Boolean           @default(true)
+  conditionField     String            @default("description")
+  conditionOperator  String            @default("contains")
+  conditionValue     String
+  categoryAccountId  String?
+  taxRateId          String?
+  payee              String?
+  timesApplied       Int               @default(0)
+  lastAppliedAt      DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  organization       Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  appliedTransactions BankTransaction[]
+
+  @@index([organizationId, isActive])
+  @@index([priority])
 }
 
 model Document {
@@ -2665,65 +2722,124 @@ model ProjectCost {
 }
 
 model Company {
-  id             String        @id @default(cuid())
-  organizationId String
-  name           String
-  type           String
-  industry       String?
-  website        String?
-  email          String?
-  phone          String?
-  address        String?
-  city           String?
-  country        String?
-  taxId          String?
-  status         String        @default("ACTIVE")
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  activities     Activity[]
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  contacts       Contact[]
-  opportunities  Opportunity[]
+  id                  String        @id @default(cuid())
+  organizationId      String
+  name                String
+  type                String        // CLIENT, VENDOR, PARTNER, PROSPECT
+  lifecycleStage      String        @default("LEAD") // LEAD, PROSPECT, CUSTOMER, DORMANT
+  industry            String?
+  website             String?
+  email               String?
+  phone               String?
+  address             String?
+  city                String?
+  country             String?
+  taxId               String?       // TIN / Tax Number
+  status              String        @default("ACTIVE")
+
+  // CRM Relationship Fields
+  accountManagerId    String?       // Internal staff owner
+  branchId            String?       // Branch that acquired the customer
+
+  // Default Financial Settings (auto-fill invoices / estimates)
+  defaultCurrency     String?       // e.g. "UGX", "USD"
+  defaultPaymentTerms Int?          // days, e.g. 30
+
+  // Tracking
+  lastContactedAt     DateTime?     // Last interaction date
+  lifetimeValue       Decimal       @default(0) @db.Decimal(19, 4)
+  outstandingBalance  Decimal       @default(0) @db.Decimal(19, 4)
+  notes               String?
+
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  // Relations
+  accountManager      User?         @relation("CompanyAccountManager", fields: [accountManagerId], references: [id])
+  branch              Branch?       @relation("CompanyBranch", fields: [branchId], references: [id])
+  organization        Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contacts            Contact[]
+  opportunities       Opportunity[]
+  activities          Activity[]
+  crmTasks            CrmTask[]
 
   @@index([organizationId, type])
+  @@index([organizationId, lifecycleStage])
+  @@index([accountManagerId])
+  @@index([branchId])
 }
 
 model Contact {
   id             String       @id @default(cuid())
   organizationId String
-  companyId      String
+  companyId      String?      // Nullable for independent/B2C contacts
   firstName      String
   lastName       String
   email          String?
   phone          String?
-  title          String?
+  whatsapp       String?      // WhatsApp number (may differ from phone)
+  extension      String?      // Phone extension
+  linkedIn       String?      // LinkedIn profile URL
+  title          String?      // Job title, e.g. "Procurement Manager"
+  department     String?      // e.g. "Finance", "Operations"
+  contactRole    String       @default("GENERAL") // BILLING, SALES, TECHNICAL, EXECUTIVE, GENERAL
+  isPrimary      Boolean      @default(false) // Primary contact for statements / emails
+  isDecisionMaker Boolean     @default(false)
+  branchId       String?      // Branch awareness
+  optOutMarketing Boolean     @default(false)
+  sendInvoicesWhatsApp Boolean @default(false)
+  lastInteractionAt DateTime? // Timestamp of last activity with this contact
   notes          String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   activities     Activity[]
-  company        Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  opportunities  Opportunity[] @relation("OpportunityContact")
+  company        Company?     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branch         Branch?      @relation("ContactBranch", fields: [branchId], references: [id])
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, companyId])
+  @@index([organizationId, contactRole])
+  @@index([branchId])
 }
 
 model Opportunity {
   id             String       @id @default(cuid())
   organizationId String
   companyId      String
+  contactId      String?      // Primary contact for this deal
+  assignedTo     String?      // Sales rep / owner
+  branchId       String?      // Which branch owns this deal
   name           String
+  description    String?
   value          Decimal?     @db.Decimal(19, 4)
   currency       String       @default("USD")
-  stage          String
-  probability    Decimal      @default(50) @db.Decimal(5, 2)
+  stage          String       @default("QUALIFICATION") // QUALIFICATION, PROPOSAL, NEGOTIATION, WON, LOST
+  probability    Decimal      @default(10) @db.Decimal(5, 2)
+  expectedCloseDate DateTime? // When we expect to close
+  source         String?      // REFERRAL, WEBSITE, TRADE_SHOW, COLD_CALL, INBOUND, PARTNER, OTHER
+  reasonLost     String?      // Required when stage = LOST
+  wonDate        DateTime?    // Auto-set when stage → WON
+  lostDate       DateTime?    // Auto-set when stage → LOST
+  convertedEstimateId String? // Link to converted estimate
+  convertedInvoiceId  String? // Link to converted invoice
   closedDate     DateTime?
-  reason         String?
+  reason         String?      // Legacy — use reasonLost for lost deals
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+
+  // Relations
   company        Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  contact        Contact?     @relation("OpportunityContact", fields: [contactId], references: [id])
+  assignedUser   User?        @relation("OpportunityOwner", fields: [assignedTo], references: [id])
+  branch         Branch?      @relation("OpportunityBranch", fields: [branchId], references: [id])
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, stage])
+  @@index([assignedTo])
+  @@index([branchId])
+  @@index([expectedCloseDate])
+  @@index([companyId])
 }
 
 model Activity {
@@ -2731,7 +2847,7 @@ model Activity {
   organizationId String
   companyId      String
   contactId      String?
-  type           String
+  type           String       // CALL, EMAIL, MEETING, NOTE, TASK, SYSTEM
   subject        String
   description    String?
   dueDate        DateTime?
@@ -2744,20 +2860,53 @@ model Activity {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, companyId])
+  @@index([createdAt])
+}
+
+model CrmTask {
+  id             String       @id @default(cuid())
+  organizationId String
+  companyId      String
+  assignedTo     String?      // User ID
+  title          String
+  description    String?
+  dueDate        DateTime?
+  priority       String       @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  status         String       @default("OPEN")   // OPEN, IN_PROGRESS, COMPLETED, CANCELLED
+  completedAt    DateTime?
+  createdBy      String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  company        Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  assignedUser   User?        @relation("CrmTaskAssignee", fields: [assignedTo], references: [id])
+  createdByUser  User         @relation("CrmTaskCreator", fields: [createdBy], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, companyId])
+  @@index([assignedTo])
+  @@index([dueDate])
+  @@index([status])
 }
 
 model Employee {
   id                 String              @id @default(cuid())
   organizationId     String
   userId             String?             @unique
+  branchId           String?             // Which branch this employee belongs to
   employeeNumber     String
   firstName          String
   middleName         String?
   lastName           String
+  gender             String?             // MALE, FEMALE, OTHER
   email              String?
   phone              String?
+  whatsapp           String?             // WhatsApp number
+  profileImage       String?             // URL or path to profile photo
   dateOfBirth        DateTime?
+  nationalId         String?             // National ID / NIN (country-agnostic)
+  socialSecurityNo   String?             // NSSF / Social Security Number (country-agnostic)
   hireDate           DateTime
+  probationEndDate   DateTime?           // End of probation period
   terminationDate    DateTime?
   status             EmployeeStatus      @default(ACTIVE)
   jobTitleId         String?
@@ -2769,14 +2918,26 @@ model Employee {
   payrollCurrency    String              @default("USD")
   baseSalary         Decimal?            @db.Decimal(19, 4)
   payFrequency       PayFrequency        @default(MONTHLY)
-  taxIdNumber        String?
+  taxIdNumber        String?             // TIN / Tax Identification Number
   bankAccountNumber  String?
   bankName           String?
+  bankBranch         String?             // Bank branch name
+  bankSortCode       String?             // Bank sort code / routing number
   address            String?
   city               String?
-  state              String?
+  state              String?             // State / Province / Region
   postalCode         String?
   country            String?
+  // Local address fields (village/parish/district — useful in many countries)
+  localVillage       String?
+  localParish        String?
+  localDistrict      String?
+  localRegion        String?
+  // Next of Kin
+  nextOfKinName      String?
+  nextOfKinPhone     String?
+  nextOfKinRelation  String?             // e.g. Spouse, Parent, Sibling
+  // Legacy emergency contact fields
   emergencyContact   String?
   emergencyPhone     String?
   notes              String?
@@ -2784,6 +2945,7 @@ model Employee {
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   benefitEnrollments BenefitEnrollment[]
+  branch             Branch?             @relation("EmployeeBranch", fields: [branchId], references: [id])
   department         Department?         @relation(fields: [departmentId], references: [id])
   jobTitle           JobTitle?           @relation(fields: [jobTitleId], references: [id])
   manager            Employee?           @relation("EmployeeHierarchy", fields: [managerId], references: [id])
@@ -2803,6 +2965,7 @@ model Employee {
   @@index([organizationId, status])
   @@index([departmentId])
   @@index([managerId])
+  @@index([branchId])
 }
 
 model Department {
@@ -2964,19 +3127,21 @@ model BenefitEnrollment {
 }
 
 model LeaveType {
-  id               String         @id @default(cuid())
-  organizationId   String
-  code             String
-  name             String
-  description      String?
-  daysPerYear      Decimal?       @db.Decimal(8, 2)
-  isPaid           Boolean        @default(true)
-  requiresApproval Boolean        @default(true)
-  isActive         Boolean        @default(true)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  leaveRequests    LeaveRequest[]
-  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                 String         @id @default(cuid())
+  organizationId     String
+  code               String
+  name               String
+  description        String?
+  daysPerYear        Decimal?       @db.Decimal(8, 2)
+  isPaid             Boolean        @default(true)
+  requiresApproval   Boolean        @default(true)
+  requiresAttachment Boolean        @default(false)
+  maxCarryForward    Decimal?       @db.Decimal(8, 2)
+  isActive           Boolean        @default(true)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  leaveRequests      LeaveRequest[]
+  organization       Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -2989,7 +3154,10 @@ model LeaveRequest {
   startDate       DateTime
   endDate         DateTime
   daysRequested   Decimal     @db.Decimal(8, 2)
+  isHalfDay       Boolean     @default(false)
+  halfDayPeriod   String?     // MORNING or AFTERNOON
   reason          String?
+  attachmentUrl   String?
   status          LeaveStatus @default(PENDING)
   approvedBy      String?
   approvedAt      DateTime?
@@ -3003,6 +3171,7 @@ model LeaveRequest {
   @@index([employeeId])
   @@index([leaveTypeId])
   @@index([status])
+  @@index([startDate, endDate])
 }
 
 model TimeEntry {
@@ -3028,46 +3197,92 @@ model TimeEntry {
 }
 
 model ExpenseClaim {
-  id            String             @id @default(cuid())
-  employeeId    String
-  claimNumber   String
-  claimDate     DateTime
-  totalAmount   Decimal            @default(0) @db.Decimal(19, 4)
-  currency      String             @default("USD")
-  status        ExpenseClaimStatus @default(DRAFT)
-  purpose       String?
-  notes         String?
-  approvedBy    String?
-  approvedAt    DateTime?
-  paidBy        String?
-  paidAt        DateTime?
-  transactionId String?            @unique
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
-  approver      User?              @relation("ExpenseApprover", fields: [approvedBy], references: [id])
-  employee      Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  payer         User?              @relation("ExpensePayer", fields: [paidBy], references: [id])
-  transaction   Transaction?       @relation(fields: [transactionId], references: [id])
-  items         ExpenseItem[]
+  id                    String             @id @default(cuid())
+  organizationId        String
+  employeeId            String
+  claimNumber           String
+  claimDate             DateTime
+  totalAmount           Decimal            @default(0) @db.Decimal(19, 4)
+  totalTax              Decimal            @default(0) @db.Decimal(19, 4)
+  netAmount             Decimal            @default(0) @db.Decimal(19, 4)
+  currency              String             @default("USD")
+  exchangeRate          Decimal            @default(1) @db.Decimal(12, 6)
+  amountInBase          Decimal            @default(0) @db.Decimal(19, 4)
+  paymentMethod         String?
+  merchantName          String?
+  projectId             String?
+  status                ExpenseClaimStatus @default(DRAFT)
+  purpose               String?
+  notes                 String?
+  rejectionReason       String?
+  submittedAt           DateTime?
+  approvedBy            String?
+  approvedAt            DateTime?
+  accountingValidatedBy String?
+  accountingValidatedAt DateTime?
+  paidBy                String?
+  paidAt                DateTime?
+  paidViaPayroll        Boolean            @default(false)
+  payrollRunId          String?
+  transactionId         String?            @unique
+  reimbursementTxnId    String?            @unique
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  approver              User?              @relation("ExpenseApprover", fields: [approvedBy], references: [id])
+  employee              Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  organization          Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  payer                 User?              @relation("ExpensePayer", fields: [paidBy], references: [id])
+  transaction           Transaction?       @relation(fields: [transactionId], references: [id])
+  items                 ExpenseItem[]
 
-  @@unique([employeeId, claimNumber])
+  @@unique([organizationId, claimNumber])
+  @@index([organizationId, status])
   @@index([employeeId])
   @@index([status])
+  @@index([claimDate])
 }
 
 model ExpenseItem {
   id             String       @id @default(cuid())
   expenseClaimId String
   expenseDate    DateTime
+  categoryId     String?
   category       String
   description    String
   amount         Decimal      @db.Decimal(19, 4)
+  taxInclusive   Boolean      @default(false)
+  taxRate        Decimal      @default(0) @db.Decimal(5, 2)
+  taxAmount      Decimal      @default(0) @db.Decimal(19, 4)
+  netAmount      Decimal      @default(0) @db.Decimal(19, 4)
   receiptUrl     String?
+  receiptName    String?
+  merchantName   String?
   notes          String?
   createdAt      DateTime     @default(now())
   expenseClaim   ExpenseClaim @relation(fields: [expenseClaimId], references: [id], onDelete: Cascade)
 
   @@index([expenseClaimId])
+}
+
+model ExpensePolicy {
+  id               String       @id @default(cuid())
+  organizationId   String
+  name             String
+  categoryPattern  String?
+  maxAmountPerItem Decimal?     @db.Decimal(19, 4)
+  maxDailyTotal    Decimal?     @db.Decimal(19, 4)
+  maxMonthlyTotal  Decimal?     @db.Decimal(19, 4)
+  requiresReceipt  Boolean      @default(true)
+  requiresApproval Boolean      @default(true)
+  autoApproveBelow Decimal?     @db.Decimal(19, 4)
+  currency         String       @default("USD")
+  isActive         Boolean      @default(true)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
 }
 
 model PerformanceReview {
@@ -5090,6 +5305,9 @@ enum BankAccountType {
   CREDIT_CARD
   LINE_OF_CREDIT
   MONEY_MARKET
+  CASH
+  MOBILE_MONEY
+  OTHER
 }
 
 enum ReconciliationStatus {
@@ -5450,6 +5668,8 @@ enum ExpenseClaimStatus {
   DRAFT
   SUBMITTED
   APPROVED
+  ACCOUNTING_REVIEW
+  QUERIED
   REJECTED
   PAID
 }

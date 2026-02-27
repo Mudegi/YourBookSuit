@@ -11,6 +11,7 @@ import { Modal } from '@/components/ui/modal';
 import { Alert } from '@/components/ui/alert';
 import Loading from '@/components/ui/loading';
 import { useOrganization } from '@/hooks/useOrganization';
+import { useBranch } from '@/hooks/useBranch';
 import { formatCurrency } from '@/lib/utils';
 
 interface Vendor {
@@ -35,6 +36,7 @@ export default function VendorsPage() {
   const params = useParams();
   const orgSlug = params.orgSlug as string;
   const { currency } = useOrganization();
+  const { branchId } = useBranch();
 
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [filteredVendors, setFilteredVendors] = useState<Vendor[]>([]);
@@ -48,7 +50,7 @@ export default function VendorsPage() {
 
   useEffect(() => {
     fetchVendors();
-  }, [orgSlug]);
+  }, [orgSlug, branchId]);
 
   useEffect(() => {
     filterVendors();
@@ -57,7 +59,9 @@ export default function VendorsPage() {
   async function fetchVendors() {
     try {
       setLoading(true);
-      const response = await fetch(`/api/orgs/${orgSlug}/vendors`);
+      const params = new URLSearchParams();
+      if (branchId) params.append('branchId', branchId);
+      const response = await fetch(`/api/orgs/${orgSlug}/vendors?${params}`);
       if (!response.ok) throw new Error('Failed to fetch vendors');
       const data = await response.json();
       setVendors(data.vendors);

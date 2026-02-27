@@ -128,59 +128,33 @@ export async function POST(
       );
     }
 
-    // Map user-friendly unit codes to EFRIS codes
+    // Map user-friendly unit codes to EFRIS T115 unit of measure codes
+    // CONFIRMED from EFRIS API — only 9 codes exist:
+    //   101 = Stick (countable items: pieces, units, boxes, bags, etc.)
+    //   102 = Litre
+    //   103 = Kg
+    //   104 = User per day of access
+    //   105 = Minute
+    //   106 = 1000 sticks
+    //   107 = 50kgs
+    //   108 = - (reserved)
+    //   109 = g (gram)
     const mapToEfrisUnitCode = (unitCode?: string, unitAbbr?: string, unitName?: string): string => {
       const input = (unitCode || unitAbbr || unitName || '').toLowerCase().trim();
       
       console.log('[EFRIS] Unit Mapping - Input:', { unitCode, unitAbbr, unitName, input });
       
-      // EFRIS unit code mapping - maps our system codes to EFRIS 3-digit codes
-      // Most EFRIS codes are passed through as-is, but common aliases are mapped
       const efrisUnitMap: { [key: string]: string } = {
-        // === EFRIS T115 rateUnit Codes (per EFRIS documentation) ===
-        
-        // EFRIS 101: per stick (countable units - cigarettes, sticks, etc.)
+        // === 101: Stick — ALL countable/discrete items ===
         'stick': '101', 'sticks': '101',
-        
-        // EFRIS 102: per litre (liquids/beverages) ← FIXED: was incorrectly '104'!
-        'l': '102', 'ltr':  '102', 'ltr2': '102', 'litre': '102', 'litres': '102', 
-        'liter': '102', 'liters': '102',
-        
-        // EFRIS 103: per kg (weight)
-        'kg': '103', 'kgs': '103', 'kilogram': '103', 'kilograms': '103', 'kgm': '103',
-        'kgm2': '103', 'gram': '103', 'grams': '103', 'grm': '103', 'g': '103',
-        
-        // EFRIS 104: per user per day of access (telecom/OTT services)
-        'user': '104', 'users': '104', 'access': '104', 'ott': '104',
-        
-        // EFRIS 105: per minute (time-based services)
-        'min': '105', 'minute': '105', 'minutes': '105',
-        
-        // EFRIS 106: per 1,000 sticks (bulk cigarettes)
-        'th': '106', 'thousand': '106', 'thousands': '106', '1000sticks': '106',
-        '1000stick': '106', 'thousand_sticks': '106',
-        
-        // EFRIS 107: per 50kgs (bulk weight)
-        '50kg': '107', '50kgs': '107', 'fifty_kg': '107',
-        
-        // EFRIS 108: undefined/reserved (-)
-        
-        // EFRIS 109: per 1 g (small weight measurements)
-        '1g': '109', '1gram': '109', 'gram_unit': '109',
-        
-        // === General Units (map to closest EFRIS code) ===
-        
-        // Pieces/Units - map to stick (101) as closest countable unit
         'pcs': '101', 'pc': '101', 'piece': '101', 'pieces': '101', 'pce': '101',
         'unit': '101', 'units': '101', 'ea': '101', 'each': '101', 'pp': '101',
         'item': '101', 'items': '101',
-        'pr': '101', 'pair': '101', 'pairs': '101',  // Pair → Stick (countable)
-        
-        // Packaging/Container units - map to stick (101) as countable
+        'pr': '101', 'pair': '101', 'pairs': '101',
         'box': '101', 'boxes': '101', 'bx': '101',
         'bag': '101', 'bags': '101', 'bg': '101',
         'sack': '101', 'sacks': '101', 'sa': '101',
-        'carton': '101', 'cartons': '101', 'ct': '101',
+        'carton': '101', 'cartons': '101', 'ct': '101', 'ctn': '101',
         'crate': '101', 'crates': '101', 'cr': '101',
         'case': '101', 'cases': '101', 'cs': '101',
         'pack': '101', 'packs': '101', 'pk': '101',
@@ -197,24 +171,63 @@ export async function POST(
         'drum': '101', 'drums': '101',
         'barrel': '101', 'barrels': '101',
         'container': '101', 'containers': '101',
-        
-        // Length/Distance - map to stick (101) for countable lengths
-        'mtr': '101', 'mtr2': '101', 'meter': '101', 'meters': '101',
+        'tablet': '101', 'tablets': '101',
+        'capsule': '101', 'capsules': '101',
+        'tube': '101', 'tubes': '101',
+        'ream': '101', 'reams': '101',
+        'dzn': '101', 'dz': '101', 'dozen': '101', 'dozens': '101',
+        // Length/distance items — countable units, use Stick
+        'mtr': '101', 'meter': '101', 'meters': '101',
         'metre': '101', 'metres': '101', 'm': '101',
-        'yrd': '101', 'yrd2': '101', 'yard': '101', 'yards': '101',
+        'yrd': '101', 'yard': '101', 'yards': '101', 'yd': '101',
         'ft': '101', 'foot': '101', 'feet': '101',
         'inch': '101', 'inches': '101', 'in': '101',
         'cm': '101', 'centimeter': '101', 'centimeters': '101',
         'mm': '101', 'millimeter': '101', 'millimeters': '101',
+        // Area/volume — countable, use Stick
+        'm2': '101', 'sqm': '101', 'ft2': '101', 'sqft': '101',
+        'acre': '101', 'hectare': '101', 'ha': '101',
+        'm3': '101', 'cum': '101',
+        // Time/service — countable, use Stick
+        'hour': '101', 'hours': '101', 'hr': '101', 'hrs': '101',
+        'day': '101', 'days': '101',
         
-        // Quantity groupings - map to stick (101) as countable
-        'dzn': '101', 'dzn2': '101', 'dz': '101', 'dozen': '101',
+        // === 102: Litre — liquid volumes ===
+        'l': '102', 'ltr': '102', 'litre': '102', 'litres': '102',
+        'liter': '102', 'liters': '102',
+        'gallon': '102', 'gallons': '102', 'gal': '102',
+        'pint': '102', 'pints': '102', 'pt': '102',
+        'cup': '102', 'cups': '102',
+        'ml': '102', 'millilitre': '102', 'millilitres': '102',
+        'milliliter': '102', 'milliliters': '102',
+        'tbsp': '102', 'tsp': '102',
         
-        // Weight (heavy) - map to kg (103)
+        // === 103: Kg — weight ===
+        'kg': '103', 'kgs': '103', 'kilogram': '103', 'kilograms': '103',
+        'kgm': '103',
         'ton': '103', 'tons': '103', 'tonne': '103', 'tonnes': '103', 'mt': '103',
+        'metric_ton': '103',
+        'lb': '103', 'lbs': '103', 'pound': '103', 'pounds': '103',
+        'oz': '103', 'ounce': '103', 'ounces': '103',
         
-        // Time units - map to minute (105)
-        'hour': '105', 'hours': '105', 'hr': '105', 'hrs': '105',
+        // === 104: User per day of access (OTT/telecom) ===
+        'user': '104', 'users': '104', 'access': '104', 'ott': '104',
+        
+        // === 105: Minute — time-based ===
+        'min': '105', 'minute': '105', 'minutes': '105',
+        
+        // === 106: 1000 sticks (bulk cigarettes) ===
+        'th': '106', 'thousand': '106', 'thousands': '106',
+        '1000sticks': '106', '1000stick': '106', 'thousand_sticks': '106',
+        
+        // === 107: 50kgs (bulk weight) ===
+        '50kg': '107', '50kgs': '107', 'fifty_kg': '107',
+        
+        // === 108: reserved (-) ===
+        
+        // === 109: g (gram) ===
+        'g': '109', 'gram': '109', 'grams': '109', 'grm': '109',
+        'mg': '109', 'milligram': '109',
       };
       
       // First check if input matches a mapped value
@@ -224,17 +237,15 @@ export async function POST(
         return mapped;
       }
       
-      // If input is already a 3-digit code (101-199), use it directly
-      if (/^\d{3}$/.test(input)) {
+      // If input is already a 3-digit code (101-109), use it directly
+      if (/^\d{3}$/.test(input) && parseInt(input) >= 101 && parseInt(input) <= 109) {
         console.log('[EFRIS] Unit Mapping - Already EFRIS code:', input);
         return input;
       }
       
-      // If input is a letter code (like 'pp', 'pa', 'ot', etc.), try to map it
-      // Many EFRIS codes are 2-letter codes that should be passed through
-      // Default to Stick (101) for countable items if we can't determine the unit
+      // Default to Stick (101) — EFRIS generic countable unit
       const defaultCode = '101';
-      console.log('[EFRIS] Unit Mapping - Using default:', defaultCode);
+      console.log('[EFRIS] Unit Mapping - Using default Stick (101) for:', input);
       return defaultCode;
     };
 

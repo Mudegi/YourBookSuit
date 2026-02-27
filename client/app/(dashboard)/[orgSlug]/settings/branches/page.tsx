@@ -164,7 +164,7 @@ export default function BranchesPage() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">
-              {branches.reduce((sum, b) => sum + b._count.transactions, 0)}
+              {branches.reduce((sum, b) => sum + (b._count?.transactions ?? 0), 0)}
             </div>
           </CardContent>
         </Card>

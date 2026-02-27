@@ -45,6 +45,7 @@ import {
 } from 'lucide-react';
 import { getBusinessModelProfile, isFeatureEnabledForBusiness, type BusinessModel } from '@/lib/business-models';
 import { fetchWithAuth } from '@/lib/fetch-client';
+import BranchSwitcher from '@/components/branch-switcher';
 
 interface User {
   id: string;
@@ -385,7 +386,6 @@ export default function DashboardLayout({
         { name: 'Statements', href: `/${orgSlug}/accounts-receivable/statements/new` },
         { name: 'Credit Notes', href: `/${orgSlug}/credit-notes` },
         { name: 'Customer Payments', href: `/${orgSlug}/payments/customer` },
-        { name: 'Sales Pipeline', href: `/${orgSlug}/crm/opportunities` },
         { name: 'Estimates', href: `/${orgSlug}/accounts-receivable/estimates` },
       ],
     },
@@ -417,6 +417,7 @@ export default function DashboardLayout({
         { name: 'Cycle Counts', href: `/${orgSlug}/inventory/cycle-counts` },
         { name: 'Lot Tracking', href: `/${orgSlug}/inventory/lots` },
         { name: 'Valuations', href: `/${orgSlug}/inventory/valuations` },
+        { name: 'Branch Transfers (IBT)', href: `/${orgSlug}/inventory/inter-branch-transfers` },
       ],
     },
     {
@@ -471,6 +472,7 @@ export default function DashboardLayout({
       children: [
         { name: 'CRM Companies', href: `/${orgSlug}/crm/companies` },
         { name: 'CRM Contacts', href: `/${orgSlug}/crm/contacts` },
+        { name: 'Sales Pipeline', href: `/${orgSlug}/crm/opportunities` },
         { name: 'Employees', href: `/${orgSlug}/hcm/employees` },
         { name: 'Leave Requests', href: `/${orgSlug}/hcm/leave-requests` },
         { name: 'Expense Claims', href: `/${orgSlug}/hcm/expense-claims` },
@@ -1034,6 +1036,9 @@ export default function DashboardLayout({
             </div>
 
             <div className="flex items-center gap-4">
+              {/* Branch Switcher */}
+              <BranchSwitcher orgSlug={orgSlug} />
+
               {/* Global Search Bar */}
               <div className="relative">
                 <input

@@ -8,62 +8,37 @@ export async function GET(
   { params }: { params: { orgSlug: string; id: string } }
 ) {
   try {
-    const user = await requireAuth(params.orgSlug);
-    const organizationId = user.organizationId;
+    const { organizationId } = await requireAuth(params.orgSlug);
 
-    console.log('🔍 Chart of Account API - Looking for account:', {
-      accountId: params.id,
-      organizationId,
-      orgSlug: params.orgSlug
-    });
-
-    // Get query parameters for date filtering
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
 
     const account = await prisma.chartOfAccount.findFirst({
-      where: {
-        id: params.id,
-        organizationId,
-      },
+      where: { id: params.id, organizationId },
       include: {
-        _count: {
-          select: {
-            ledgerEntries: true,
-          },
+        parent: { select: { id: true, code: true, name: true } },
+        children: {
+          select: { id: true, code: true, name: true, accountType: true, balance: true, isActive: true },
+          orderBy: { code: 'asc' },
         },
+        _count: { select: { ledgerEntries: true, children: true } },
       },
     });
 
     if (!account) {
-      console.log('❌ Account not found with query:', { id: params.id, organizationId });
-      return NextResponse.json(
-        { error: 'Account not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Account not found' }, { status: 404 });
     }
 
-    console.log('✅ Account found:', account.code, '-', account.name);
-
-    // Build where clause for ledger entries
-    const ledgerWhere: any = {
-      accountId: params.id,
-    };
+    // Build ledger entry filter
+    const ledgerWhere: any = { accountId: params.id };
 
     if (startDate || endDate) {
-      ledgerWhere.transaction = {
-        transactionDate: {},
-      };
-      if (startDate) {
-        ledgerWhere.transaction.transactionDate.gte = new Date(startDate);
-      }
-      if (endDate) {
-        ledgerWhere.transaction.transactionDate.lte = new Date(endDate);
-      }
+      ledgerWhere.transaction = { transactionDate: {} };
+      if (startDate) ledgerWhere.transaction.transactionDate.gte = new Date(startDate);
+      if (endDate) ledgerWhere.transaction.transactionDate.lte = new Date(endDate);
     }
 
-    // Fetch ledger entries with date filtering
     const ledgerEntries = await prisma.ledgerEntry.findMany({
       where: ledgerWhere,
       include: {
@@ -73,32 +48,29 @@ export async function GET(
             transactionDate: true,
             transactionNumber: true,
             description: true,
+            transactionType: true,
           },
         },
       },
       orderBy: [
-        {
-          transaction: {
-            transactionDate: 'asc',
-          },
-        },
-        {
-          createdAt: 'asc',
-        },
+        { transaction: { transactionDate: 'asc' } },
+        { createdAt: 'asc' },
       ],
     });
 
     // Calculate running balance
     let runningBalance = 0;
     const entriesWithBalance = ledgerEntries.map((entry) => {
+      const amount = Number(entry.amount);
       if (entry.entryType === 'DEBIT') {
-        runningBalance += entry.amount;
+        runningBalance += amount;
       } else {
-        runningBalance -= entry.amount;
+        runningBalance -= amount;
       }
-
       return {
         ...entry,
+        amount,
+        amountInBase: Number(entry.amountInBase),
         balance: runningBalance,
       };
     });
@@ -106,16 +78,24 @@ export async function GET(
     return NextResponse.json({
       success: true,
       data: {
-        account,
+        account: {
+          ...account,
+          balance: Number(account.balance),
+          foreignBalance: account.foreignBalance ? Number(account.foreignBalance) : null,
+          children: account.children.map((c) => ({
+            ...c,
+            balance: Number(c.balance),
+          })),
+        },
         ledgerEntries: entriesWithBalance,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching account:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch account' },
-      { status: 500 }
-    );
+    if (error?.status) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    return NextResponse.json({ error: 'Failed to fetch account' }, { status: 500 });
   }
 }
 
@@ -124,9 +104,7 @@ export async function PUT(
   { params }: { params: { orgSlug: string; id: string } }
 ) {
   try {
-    const user = await requireAuth(params.orgSlug);
-    const organizationId = user.organizationId;
-    const userId = user.userId;
+    const { organizationId } = await requireAuth(params.orgSlug);
 
     const body = await request.json();
 
@@ -143,66 +121,98 @@ export async function PUT(
 
     // Check if account exists
     const existingAccount = await prisma.chartOfAccount.findFirst({
-      where: {
-        id: params.id,
-        organizationId,
-      },
+      where: { id: params.id, organizationId },
     });
 
     if (!existingAccount) {
-      return NextResponse.json(
-        { error: 'Account not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Account not found' }, { status: 404 });
     }
 
-    // Check if code is being changed and if new code already exists
-    if (data.code !== existingAccount.code) {
-      const codeExists = await prisma.chartOfAccount.findFirst({
-        where: {
-          organizationId,
-          code: data.code,
-          NOT: {
-            id: params.id,
-          },
-        },
-      });
-
-      if (codeExists) {
+    // ── System account protection ──
+    if (existingAccount.isSystem) {
+      // Cannot change account type on system accounts
+      if (data.accountType !== existingAccount.accountType) {
         return NextResponse.json(
-          { error: 'Account code already exists' },
+          { error: 'Cannot change the account type of a system account' },
+          { status: 400 }
+        );
+      }
+      // Cannot change code on system accounts
+      if (data.code !== existingAccount.code) {
+        return NextResponse.json(
+          { error: 'Cannot change the code of a system account' },
           { status: 400 }
         );
       }
     }
 
-    // Update account
+    // Check unique code (only if code changed)
+    if (data.code !== existingAccount.code) {
+      const codeExists = await prisma.chartOfAccount.findFirst({
+        where: {
+          organizationId,
+          code: data.code,
+          NOT: { id: params.id },
+        },
+      });
+
+      if (codeExists) {
+        return NextResponse.json(
+          { error: `Account code "${data.code}" already exists` },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Build update data
+    const updateData: any = {
+      code: data.code,
+      name: data.name,
+      accountType: data.accountType,
+      accountSubType: data.accountSubType || null,
+      description: data.description || null,
+      currency: data.currency,
+    };
+
+    // Allow toggling active status (but not for system accounts if they have entries)
+    if (body.isActive !== undefined) {
+      if (existingAccount.isSystem && body.isActive === false) {
+        return NextResponse.json(
+          { error: 'Cannot deactivate a system account' },
+          { status: 400 }
+        );
+      }
+      updateData.isActive = body.isActive;
+    }
+
+    // Allow toggling allowManualJournal
+    if (body.allowManualJournal !== undefined) {
+      updateData.allowManualJournal = body.allowManualJournal;
+    }
+
     const account = await prisma.chartOfAccount.update({
-      where: {
-        id: params.id,
-      },
-      data: {
-        code: data.code,
-        name: data.name,
-        type: data.type,
-        category: data.category,
-        subCategory: data.subCategory,
-        description: data.description,
-        isActive: data.isActive,
-        currency: data.currency,
+      where: { id: params.id },
+      data: updateData,
+      include: {
+        parent: { select: { id: true, code: true, name: true } },
+        _count: { select: { ledgerEntries: true, children: true } },
       },
     });
 
     return NextResponse.json({
       success: true,
-      data: account,
+      data: {
+        ...account,
+        balance: Number(account.balance),
+        foreignBalance: account.foreignBalance ? Number(account.foreignBalance) : null,
+      },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error updating account:', error);
-    return NextResponse.json(
-      { error: 'Failed to update account' },
-      { status: 500 }
-    );
+    if (error?.status) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    return NextResponse.json({ error: 'Failed to update account' }, { status: 500 });
   }
 }
 
@@ -211,55 +221,64 @@ export async function DELETE(
   { params }: { params: { orgSlug: string; id: string } }
 ) {
   try {
-    const user = await requireAuth(params.orgSlug);
-    const organizationId = user.organizationId;
+    const { organizationId } = await requireAuth(params.orgSlug);
 
-    // Check if account exists
     const account = await prisma.chartOfAccount.findFirst({
-      where: {
-        id: params.id,
-        organizationId,
-      },
+      where: { id: params.id, organizationId },
       include: {
-        _count: {
-          select: {
-            ledgerEntries: true,
-          },
-        },
+        _count: { select: { ledgerEntries: true, children: true } },
       },
     });
 
     if (!account) {
-      return NextResponse.json(
-        { error: 'Account not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Account not found' }, { status: 404 });
     }
 
-    // Check if account has transactions
-    if (account._count.ledgerEntries > 0) {
+    // ── System account protection ──
+    if (account.isSystem) {
       return NextResponse.json(
-        { error: 'Cannot delete account with existing transactions. Please deactivate it instead.' },
+        { error: 'Cannot delete a system account. System accounts are protected and required for core functionality.' },
         { status: 400 }
       );
     }
 
-    // Delete account
-    await prisma.chartOfAccount.delete({
-      where: {
-        id: params.id,
-      },
-    });
+    // Cannot delete parent with children
+    if (account._count.children > 0) {
+      return NextResponse.json(
+        { error: 'Cannot delete account with child accounts. Remove or reassign children first.' },
+        { status: 400 }
+      );
+    }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Account deleted successfully',
-    });
-  } catch (error) {
+    // Cannot delete account with transactions
+    if (account._count.ledgerEntries > 0) {
+      return NextResponse.json(
+        { error: 'Cannot delete account with existing transactions. Deactivate it instead.' },
+        { status: 400 }
+      );
+    }
+
+    await prisma.chartOfAccount.delete({ where: { id: params.id } });
+
+    // If parent now has no children, update hasChildren flag
+    if (account.parentId) {
+      const siblingCount = await prisma.chartOfAccount.count({
+        where: { parentId: account.parentId },
+      });
+      if (siblingCount === 0) {
+        await prisma.chartOfAccount.update({
+          where: { id: account.parentId },
+          data: { hasChildren: false },
+        });
+      }
+    }
+
+    return NextResponse.json({ success: true, message: 'Account deleted successfully' });
+  } catch (error: any) {
     console.error('Error deleting account:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete account' },
-      { status: 500 }
-    );
+    if (error?.status) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    return NextResponse.json({ error: 'Failed to delete account' }, { status: 500 });
   }
 }

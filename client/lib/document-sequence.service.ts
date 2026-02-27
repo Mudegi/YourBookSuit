@@ -26,8 +26,22 @@ export class DocumentSequenceService {
     const now = new Date();
     const year = config?.includeYear ? now.getFullYear() : undefined;
     const month = config?.includeMonth ? now.getMonth() + 1 : undefined;
-    const prefix = config?.prefix || this.getDefaultPrefix(documentType);
     const padding = config?.padding || 4;
+
+    // Resolve document-type prefix (caller override > default)
+    const docPrefix = config?.prefix || this.getDefaultPrefix(documentType);
+
+    // Resolve branch-level prefix (e.g. "KLA") to prepend when set
+    let branchPrefix = '';
+    if (branchId) {
+      const branch = await prisma.branch.findUnique({
+        where: { id: branchId },
+        select: { prefix: true },
+      });
+      if (branch?.prefix) branchPrefix = branch.prefix;
+    }
+
+    const prefix = branchPrefix ? `${branchPrefix}-${docPrefix}` : docPrefix;
 
     // Try branch-specific sequence first, then organization-wide
     let sequence = await this.getOrCreateSequence(organizationId, documentType, branchId, year, month);

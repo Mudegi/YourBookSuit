@@ -418,7 +418,7 @@ export default function ExpenseTrackingPage() {
                   <option value="">-- Select Payment Account --</option>
                   {paymentAccounts.map((account) => (
                     <option key={account.id} value={account.id}>
-                      {account.accountName} - {account.bankName} ({account.currency})
+                      {account.code ? `${account.code} - ` : ''}{account.name || account.accountName} ({account.currency})
                     </option>
                   ))}
                 </select>

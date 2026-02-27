@@ -11,6 +11,7 @@ import { Alert } from '@/components/ui/alert';
 import Loading from '@/components/ui/loading';
 import { useOrganization } from '@/hooks/useOrganization';
 import { useAuth } from '@/hooks/useAuth';
+import { useBranch } from '@/hooks/useBranch';
 import { formatCurrency } from '@/lib/utils';
 
 interface Vendor {
@@ -58,6 +59,7 @@ export default function BillsPage() {
   const vendorIdFilter = searchParams.get('vendorId');
   const { currency, organization } = useOrganization();
   const { user } = useAuth();
+  const { branchId } = useBranch();
 
   const [bills, setBills] = useState<Bill[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -68,7 +70,7 @@ export default function BillsPage() {
 
   useEffect(() => {
     fetchBills();
-  }, [orgSlug, statusFilter, efrisFilter, vendorIdFilter]);
+  }, [orgSlug, statusFilter, efrisFilter, vendorIdFilter, branchId]);
 
   async function fetchBills() {
     try {
@@ -82,6 +84,9 @@ export default function BillsPage() {
       }
       if (vendorIdFilter) {
         params.append('vendorId', vendorIdFilter);
+      }
+      if (branchId) {
+        params.append('branchId', branchId);
       }
 
       const response = await fetch(

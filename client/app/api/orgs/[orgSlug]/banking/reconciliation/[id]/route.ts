@@ -5,7 +5,7 @@ import prisma from '@/lib/prisma';
 
 /**
  * GET /api/orgs/[orgSlug]/banking/reconciliation/[id]
- * Get reconciliation details with unreconciled items
+ * Get reconciliation details with clearable items and real-time gap
  */
 export async function GET(
   request: NextRequest,
@@ -15,19 +15,11 @@ export async function GET(
     const { organizationId } = await requireAuth(params.orgSlug);
 
     const reconciliation = await prisma.bankReconciliation.findUnique({
-      where: {
-        id: params.id,
-      },
+      where: { id: params.id },
       include: {
         bankAccount: true,
         bankTransactions: {
-          include: {
-            bankFeed: {
-              select: {
-                feedName: true,
-              },
-            },
-          },
+          include: { bankFeed: { select: { feedName: true } } },
         },
       },
     });
@@ -39,11 +31,35 @@ export async function GET(
       );
     }
 
-    // Get unreconciled items
-    const unreconciledItems = await ReconciliationService.getUnreconciledItems(
+    // Get clearable items (payments + bank transactions eligible for ticking)
+    const clearableItems = await ReconciliationService.getClearableItems(
       organizationId,
       reconciliation.bankAccountId,
-      reconciliation.statementDate
+      reconciliation.statementDate,
+      reconciliation.id
+    );
+
+    // Build set of already-cleared IDs
+    const clearedIds = new Set([
+      ...(reconciliation.clearedPaymentIds || []),
+      ...(reconciliation.clearedTransactionIds || []),
+    ]);
+
+    // Determine opening balance
+    const openingBalance = reconciliation.openingBalance
+      ? parseFloat(reconciliation.openingBalance.toString())
+      : parseFloat(
+          reconciliation.bankAccount.lastReconciledBalance?.toString() ||
+            reconciliation.bankAccount.openingBalance.toString()
+        );
+
+    // Calculate the reconciliation gap in real time
+    const statementBalance = parseFloat(reconciliation.statementBalance.toString());
+    const gap = ReconciliationService.calculateReconciliationGap(
+      openingBalance,
+      statementBalance,
+      clearableItems,
+      clearedIds
     );
 
     // Get match suggestions
@@ -51,14 +67,6 @@ export async function GET(
       organizationId,
       reconciliation.bankAccountId,
       reconciliation.statementDate
-    );
-
-    // Get summary
-    const summary = await ReconciliationService.calculateSummary(
-      organizationId,
-      reconciliation.bankAccountId,
-      reconciliation.statementDate,
-      parseFloat(reconciliation.statementBalance.toString())
     );
 
     return NextResponse.json({
@@ -71,16 +79,18 @@ export async function GET(
           accountNumber: reconciliation.bankAccount.accountNumber,
           currency: reconciliation.bankAccount.currency,
           statementDate: reconciliation.statementDate,
-          statementBalance: parseFloat(reconciliation.statementBalance.toString()),
+          statementBalance,
           bookBalance: parseFloat(reconciliation.bookBalance.toString()),
-          difference: parseFloat(reconciliation.difference.toString()),
+          openingBalance,
           status: reconciliation.status,
           notes: reconciliation.notes,
+          clearedPaymentIds: reconciliation.clearedPaymentIds || [],
+          clearedTransactionIds: reconciliation.clearedTransactionIds || [],
+          adjustmentEntries: reconciliation.adjustmentEntries || [],
         },
-        unreconciledPayments: unreconciledItems.payments,
-        unreconciledBankTransactions: unreconciledItems.bankTransactions,
+        clearableItems,
+        gap,
         matchSuggestions,
-        summary,
       },
     });
   } catch (error) {

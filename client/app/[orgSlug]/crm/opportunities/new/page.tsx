@@ -1,99 +1,135 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Plus } from 'lucide-react';
+import React, { useEffect, useState, useCallback } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { ArrowLeft, Plus, Building2, User, Target, Calendar, DollarSign, Briefcase } from 'lucide-react';
 import { useOrganization } from '@/hooks/useOrganization';
 
-type Stage = 'PROSPECT' | 'QUALIFIED' | 'PROPOSAL' | 'NEGOTIATION' | 'WON' | 'LOST';
+type Stage = 'QUALIFICATION' | 'PROPOSAL' | 'NEGOTIATION' | 'WON' | 'LOST';
 
-interface CompanyOption {
-  id: string;
-  name: string;
-}
+interface CompanyOption { id: string; name: string }
+interface ContactOption { id: string; firstName: string; lastName: string; email: string | null }
+interface BranchOption { id: string; name: string; code: string }
+interface UserOption { id: string; firstName: string; lastName: string }
 
-const stageOptions: { value: Stage; label: string }[] = [
-  { value: 'PROSPECT', label: 'Prospect' },
-  { value: 'QUALIFIED', label: 'Qualified' },
+const STAGES: { value: Stage; label: string }[] = [
+  { value: 'QUALIFICATION', label: 'Qualification' },
   { value: 'PROPOSAL', label: 'Proposal' },
   { value: 'NEGOTIATION', label: 'Negotiation' },
   { value: 'WON', label: 'Won' },
   { value: 'LOST', label: 'Lost' },
 ];
 
+const STAGE_PROBABILITY: Record<string, number> = {
+  QUALIFICATION: 10, PROPOSAL: 50, NEGOTIATION: 70, WON: 100, LOST: 0,
+};
+
+const SOURCES = ['REFERRAL', 'WEBSITE', 'TRADE_SHOW', 'COLD_CALL', 'INBOUND', 'PARTNER', 'OTHER'];
+
+const INPUT_CLS = 'w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none';
+const LABEL_CLS = 'block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider';
+
 export default function NewOpportunityPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const orgSlug = params?.orgSlug as string;
   const { currency: orgCurrency } = useOrganization();
 
+  // Pre-fill from URL params (e.g. from Company Profile)
+  const preCompanyId = searchParams?.get('companyId') || '';
+
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
-  const [loadingCompanies, setLoadingCompanies] = useState(true);
+  const [contacts, setContacts] = useState<ContactOption[]>([]);
+  const [branches, setBranches] = useState<BranchOption[]>([]);
+  const [users, setUsers] = useState<UserOption[]>([]);
+  const [loadingRef, setLoadingRef] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const [form, setForm] = useState({
     name: '',
-    companyId: '',
+    description: '',
+    companyId: preCompanyId,
+    contactId: '',
     value: '',
     currency: '',
-    stage: 'PROSPECT' as Stage,
-    probability: 50,
+    stage: 'QUALIFICATION' as Stage,
+    probability: 10,
+    expectedCloseDate: '',
+    source: '',
+    branchId: '',
+    assignedTo: '',
   });
 
+  // Set org currency when loaded
   useEffect(() => {
-    if (orgCurrency) {
-      setForm(prev => ({ ...prev, currency: prev.currency || orgCurrency }));
-    }
+    if (orgCurrency) setForm((p) => ({ ...p, currency: p.currency || orgCurrency }));
   }, [orgCurrency]);
 
-  useEffect(() => {
-    loadCompanies();
+  // Load reference data
+  const loadRef = useCallback(async () => {
+    setLoadingRef(true);
+    try {
+      const [compRes, contactRes, branchRes, userRes] = await Promise.all([
+        fetch(`/api/${orgSlug}/crm/companies`),
+        fetch(`/api/${orgSlug}/crm/contacts`),
+        fetch(`/api/${orgSlug}/branches`).catch(() => null),
+        fetch(`/api/${orgSlug}/users`).catch(() => null),
+      ]);
+
+      if (compRes.ok) {
+        const j = await compRes.json();
+        setCompanies(j.companies || j.data || []);
+      }
+      if (contactRes.ok) {
+        const j = await contactRes.json();
+        setContacts(j.contacts || j.data || []);
+      }
+      if (branchRes?.ok) {
+        const j = await branchRes.json();
+        setBranches(j.branches || j.data || []);
+      }
+      if (userRes?.ok) {
+        const j = await userRes.json();
+        setUsers(j.users || j.data || j.members || []);
+      }
+    } catch { /* best effort */ } finally { setLoadingRef(false); }
   }, [orgSlug]);
 
-  const loadCompanies = async () => {
-    setLoadingCompanies(true);
-    try {
-      const res = await fetch(`/api/${orgSlug}/crm/companies`);
-      if (!res.ok) throw new Error('Failed to load companies');
-      const json = await res.json();
-      setCompanies(json.companies || json.data || []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load companies');
-    } finally {
-      setLoadingCompanies(false);
-    }
-  };
+  useEffect(() => { loadRef(); }, [loadRef]);
 
-  const onChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({
-      ...prev,
-      [name]: name === 'probability' ? Number(value) : value,
-    }));
-  };
+  function handleStageChange(stage: Stage) {
+    setForm((p) => ({ ...p, stage, probability: STAGE_PROBABILITY[stage] ?? p.probability }));
+  }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setError(null);
     try {
+      const payload: any = {
+        name: form.name,
+        description: form.description || undefined,
+        companyId: form.companyId || undefined,
+        contactId: form.contactId || undefined,
+        value: form.value ? Number(form.value) : undefined,
+        currency: form.currency,
+        stage: form.stage,
+        probability: form.probability,
+        expectedCloseDate: form.expectedCloseDate || undefined,
+        source: form.source || undefined,
+        branchId: form.branchId || undefined,
+        assignedTo: form.assignedTo || undefined,
+      };
       const res = await fetch(`/api/${orgSlug}/crm/opportunities`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: form.name,
-          companyId: form.companyId,
-          value: form.value ? Number(form.value) : undefined,
-          currency: form.currency,
-          stage: form.stage,
-          probability: form.probability,
-        }),
+        body: JSON.stringify(payload),
       });
       const json = await res.json();
-      if (!res.ok) {
-        throw new Error(json.error || 'Failed to create opportunity');
-      }
-      router.push(`/${orgSlug}/crm/opportunities/${json.opportunity.id}`);
+      if (!res.ok) throw new Error(json.error || 'Failed to create opportunity');
+      router.push(`/${orgSlug}/crm/opportunities/${json.opportunity?.id || json.data?.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create opportunity');
     } finally {
@@ -102,121 +138,164 @@ export default function NewOpportunityPage() {
   };
 
   return (
-    <div className="p-6 max-w-3xl">
-      <button
-        onClick={() => router.back()}
-        className="flex items-center gap-2 text-blue-600 mb-4 hover:text-blue-800"
-      >
-        <ArrowLeft className="w-4 h-4" /> Back
-      </button>
-
-      <div className="bg-white border rounded-lg p-6">
-        <div className="flex items-center justify-between mb-4">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+      {/* Header */}
+      <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-6 py-4">
+        <div className="flex items-center gap-3">
+          <button onClick={() => router.push(`/${orgSlug}/crm/opportunities`)}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
+            <ArrowLeft className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+          </button>
           <div>
-            <h1 className="text-2xl font-bold">New Opportunity</h1>
-            <p className="text-gray-600">Create a new deal and place it on the pipeline.</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">New Opportunity</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Create a new deal and add it to your pipeline</p>
           </div>
-          <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-sm font-medium">CRM</span>
         </div>
+      </div>
 
-        {error && <div className="mb-4 text-sm text-red-600">{error}</div>}
+      <div className="max-w-3xl mx-auto px-6 py-8">
+        {error && (
+          <div className="mb-6 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 rounded-lg text-sm">
+            {error}
+            <button onClick={() => setError(null)} className="ml-2 underline">Dismiss</button>
+          </div>
+        )}
 
-        <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700">Opportunity Name</label>
-            <input
-              name="name"
-              value={form.name}
-              onChange={onChange}
-              required
-              className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              placeholder="New customer deal"
-            />
+        <form onSubmit={submit} className="space-y-6">
+          {/* Basic Info */}
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
+            <h2 className="text-sm font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <Target className="w-4 h-4 text-blue-500" /> Deal Information
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className={LABEL_CLS}>Deal Name *</label>
+                <input type="text" required placeholder="e.g. Annual contract — Acme Corp"
+                  value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className={INPUT_CLS} />
+              </div>
+              <div className="md:col-span-2">
+                <label className={LABEL_CLS}>Description</label>
+                <textarea rows={3} placeholder="Brief description of this opportunity..."
+                  value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  className={INPUT_CLS} />
+              </div>
+              <div>
+                <label className={LABEL_CLS}>Source</label>
+                <select value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })}
+                  className={INPUT_CLS}>
+                  <option value="">Select source...</option>
+                  {SOURCES.map((s) => (
+                    <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={LABEL_CLS}>Expected Close Date</label>
+                <input type="date" value={form.expectedCloseDate}
+                  onChange={(e) => setForm({ ...form, expectedCloseDate: e.target.value })}
+                  className={INPUT_CLS} />
+              </div>
+            </div>
           </div>
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700">Company</label>
-            <select
-              name="companyId"
-              value={form.companyId}
-              onChange={onChange}
-              required
-              className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            >
-              <option value="">{loadingCompanies ? 'Loading companies...' : 'Select company'}</option>
-              {companies.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+
+          {/* Value & Stage */}
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
+            <h2 className="text-sm font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <DollarSign className="w-4 h-4 text-green-500" /> Value & Pipeline Stage
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className={LABEL_CLS}>Deal Value</label>
+                <input type="number" step="0.01" min={0} placeholder="0.00"
+                  value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })}
+                  className={INPUT_CLS} />
+              </div>
+              <div>
+                <label className={LABEL_CLS}>Currency</label>
+                <input type="text" maxLength={3} placeholder="USD"
+                  value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase() })}
+                  className={INPUT_CLS} />
+                <p className="text-[10px] text-gray-400 mt-1">ISO 4217 code (auto-filled from org settings)</p>
+              </div>
+              <div>
+                <label className={LABEL_CLS}>Stage</label>
+                <select value={form.stage} onChange={(e) => handleStageChange(e.target.value as Stage)}
+                  className={INPUT_CLS}>
+                  {STAGES.map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={LABEL_CLS}>Probability (%)</label>
+                <input type="number" min={0} max={100}
+                  value={form.probability} onChange={(e) => setForm({ ...form, probability: Number(e.target.value) })}
+                  className={INPUT_CLS} />
+                <p className="text-[10px] text-gray-400 mt-1">Auto-adjusts when you change stage</p>
+              </div>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Value</label>
-            <input
-              name="value"
-              type="number"
-              step="0.01"
-              value={form.value}
-              onChange={onChange}
-              className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              placeholder="10000"
-            />
+
+          {/* Relationships */}
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
+            <h2 className="text-sm font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-purple-500" /> Relationships
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className={LABEL_CLS}>Company</label>
+                <select value={form.companyId} onChange={(e) => setForm({ ...form, companyId: e.target.value })}
+                  className={INPUT_CLS}>
+                  <option value="">{loadingRef ? 'Loading...' : 'Select company'}</option>
+                  {companies.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={LABEL_CLS}>Contact</label>
+                <select value={form.contactId} onChange={(e) => setForm({ ...form, contactId: e.target.value })}
+                  className={INPUT_CLS}>
+                  <option value="">Select contact...</option>
+                  {contacts.map((c) => (
+                    <option key={c.id} value={c.id}>{c.firstName} {c.lastName}{c.email ? ` (${c.email})` : ''}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={LABEL_CLS}>Assigned To</label>
+                <select value={form.assignedTo} onChange={(e) => setForm({ ...form, assignedTo: e.target.value })}
+                  className={INPUT_CLS}>
+                  <option value="">Auto-assign to me</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
+                  ))}
+                </select>
+              </div>
+              {branches.length > 0 && (
+                <div>
+                  <label className={LABEL_CLS}>Branch</label>
+                  <select value={form.branchId} onChange={(e) => setForm({ ...form, branchId: e.target.value })}
+                    className={INPUT_CLS}>
+                    <option value="">Select branch...</option>
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>{b.name} ({b.code})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Currency</label>
-            <select
-              name="currency"
-              value={form.currency}
-              onChange={onChange}
-              className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            >
-              <option value="USD">USD</option>
-              <option value="EUR">EUR</option>
-              <option value="UGX">UGX</option>
-              <option value="KES">KES</option>
-              <option value="TZS">TZS</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Stage</label>
-            <select
-              name="stage"
-              value={form.stage}
-              onChange={onChange}
-              className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            >
-              {stageOptions.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Probability (%)</label>
-            <input
-              name="probability"
-              type="number"
-              min={0}
-              max={100}
-              value={form.probability}
-              onChange={onChange}
-              className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            />
-          </div>
-          <div className="md:col-span-2 flex items-center gap-3 pt-2">
-            <button
-              type="submit"
-              disabled={saving}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md shadow hover:bg-blue-700 disabled:opacity-60"
-            >
+
+          {/* Actions */}
+          <div className="flex items-center gap-3">
+            <button type="submit" disabled={saving}
+              className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700 disabled:opacity-60 font-semibold text-sm">
               <Plus className="w-4 h-4" /> {saving ? 'Creating...' : 'Create Opportunity'}
             </button>
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="px-4 py-2 border rounded-md hover:bg-gray-50"
-            >
+            <button type="button" onClick={() => router.push(`/${orgSlug}/crm/opportunities`)}
+              className="px-6 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 text-sm text-gray-700 dark:text-gray-300">
               Cancel
             </button>
           </div>

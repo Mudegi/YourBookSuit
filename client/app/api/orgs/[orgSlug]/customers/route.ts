@@ -138,10 +138,12 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');
     const isActive = searchParams.get('isActive');
+    const branchId = searchParams.get('branchId') || undefined;
 
     // Build where clause
     const where: any = {
       organizationId,
+      ...(branchId ? { branchId } : {}),
     };
 
     if (search) {

@@ -2,8 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Prevent white flash during page transitions */
-html, body {
+/* Prevent white flash during page transitions (dark mode only) */
+html.dark, html.dark body {
   background-color: #020617; /* slate-950 — matches landing/login/register */
 }
 

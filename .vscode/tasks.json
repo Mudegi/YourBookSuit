@@ -42,6 +42,83 @@
 			"command": "cd client && npx prisma migrate dev --name add_system_admin_and_subscriptions",
 			"isBackground": false,
 			"group": "build"
+		},
+		{
+			"label": "prisma-generate-crm",
+			"type": "shell",
+			"command": "cd d:\\YourBookSuit\\client && npx prisma generate && npx prisma migrate status",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "prisma-generate-and-migrate",
+			"type": "shell",
+			"command": "cd d:\\YourBookSuit\\client && npx prisma generate && npx prisma migrate deploy",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "prisma-migrate-opportunities",
+			"type": "shell",
+			"command": "cd d:\\YourBookSuit\\client && npx prisma migrate dev --name enhance_opportunities_pipeline && npx prisma generate",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "prisma-migrate-opportunities",
+			"type": "shell",
+			"command": "cd d:\\YourBookSuit\\client && npx prisma migrate dev --name enhance_opportunities_pipeline",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "prisma-opp-migrate",
+			"type": "shell",
+			"command": "cd d:\\YourBookSuit\\client && npx prisma migrate dev --name enhance_opportunities_pipeline 2>&1 && npx prisma generate 2>&1",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "migrate-opportunities",
+			"type": "shell",
+			"command": "cd d:\\YourBookSuit\\client && npx prisma migrate dev --name enhance_opportunities_pipeline && npx prisma generate",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "prisma-migrate-hcm",
+			"type": "shell",
+			"command": "cd d:\\YourBookSuit\\client && npx prisma migrate dev --name hcm_employee_enhancements && npx prisma generate",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "prisma-migrate-expense-claims",
+			"type": "shell",
+			"command": "cd d:\\YourBookSuit\\client && npx prisma migrate dev --name enhance_expense_claims_module",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "prisma-migrate-expense",
+			"type": "shell",
+			"command": "cd d:\\YourBookSuit\\client && npx prisma migrate dev --name enhance_expense_claims_module",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "prisma-migrate-expense-claims",
+			"type": "shell",
+			"command": "cd d:\\YourBookSuit\\client && npx prisma migrate dev --name enhance_expense_claims_module",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "prisma-gen-expense",
+			"type": "shell",
+			"command": "cd /d d:\\YourBookSuit\\client && npx prisma generate",
+			"isBackground": false,
+			"group": "build"
 		}
 	]
 }

@@ -448,6 +448,71 @@ export class GLService {
   }
 
   /**
+   * Get account balance for a specific date range
+   * Calculates from ledger entries: sum(DEBIT) - sum(CREDIT) in base currency
+   */
+  async getAccountBalance(
+    accountId: string,
+    dateRange?: { startDate?: Date; endDate?: Date }
+  ): Promise<{
+    balance: number;
+    foreignBalance: number;
+    totalDebits: number;
+    totalCredits: number;
+    entryCount: number;
+    currency: string;
+  }> {
+    const account = await this.prisma.chartOfAccount.findUnique({
+      where: { id: accountId },
+      select: { currency: true },
+    });
+
+    if (!account) throw new Error('Account not found');
+
+    const transactionFilter: any = {};
+    if (dateRange?.startDate || dateRange?.endDate) {
+      transactionFilter.transaction = { transactionDate: {} };
+      if (dateRange.startDate) transactionFilter.transaction.transactionDate.gte = dateRange.startDate;
+      if (dateRange.endDate) transactionFilter.transaction.transactionDate.lte = dateRange.endDate;
+    }
+
+    const grouped = await this.prisma.ledgerEntry.groupBy({
+      by: ['entryType'],
+      where: { accountId, ...transactionFilter },
+      _sum: { amountInBase: true, amount: true },
+      _count: true,
+    });
+
+    let totalDebits = 0;
+    let totalCredits = 0;
+    let foreignDebits = 0;
+    let foreignCredits = 0;
+    let entryCount = 0;
+
+    for (const g of grouped) {
+      const base = Number(g._sum.amountInBase || 0);
+      const foreign = Number(g._sum.amount || 0);
+      entryCount += g._count;
+      if (g.entryType === 'DEBIT') {
+        totalDebits += base;
+        foreignDebits += foreign;
+      } else {
+        totalCredits += base;
+        foreignCredits += foreign;
+      }
+    }
+
+    return {
+      balance: totalDebits - totalCredits,
+      foreignBalance: foreignDebits - foreignCredits,
+      totalDebits,
+      totalCredits,
+      entryCount,
+      currency: account.currency,
+    };
+  }
+
+  /**
    * Search accounts with filtering
    */
   async searchAccounts(

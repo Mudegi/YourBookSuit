@@ -64,8 +64,10 @@ export async function GET(
     const isActive = isActiveParam === null ? undefined : isActiveParam === 'true';
     const take = Number(searchParams.get('limit') || 50);
 
+    const branchId = searchParams.get('branchId') || undefined;
+
     // Build where
-    const where: any = { organizationId };
+    const where: any = { organizationId, ...(branchId ? { branchId } : {}) };
     if (typeof isActive === 'boolean') where.isActive = isActive;
     if (search && search.trim()) {
       const term = search.trim();

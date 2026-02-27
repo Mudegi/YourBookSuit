@@ -27,6 +27,7 @@ interface Branch {
   taxIdNumber: string | null;
   currency: string;
   timezone: string;
+  prefix: string;
   openingDate: string;
   settings?: {
     baseCurrency: string;
@@ -236,6 +237,7 @@ export default function EditBranchPage() {
                   onChange={(e) => setBranch({ ...branch, type: e.target.value })}
                   className="w-full border rounded px-3 py-2"
                 >
+                  <option value="HEADQUARTERS">Headquarters</option>
                   <option value="OFFICE">Office</option>
                   <option value="WAREHOUSE">Warehouse</option>
                   <option value="RETAIL_STORE">Retail Store</option>
@@ -244,6 +246,19 @@ export default function EditBranchPage() {
                   <option value="SERVICE_CENTER">Service Center</option>
                   <option value="REMOTE">Remote</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Document Prefix</label>
+                <input
+                  type="text"
+                  value={branch.prefix ?? ''}
+                  onChange={(e) => setBranch({ ...branch, prefix: e.target.value.toUpperCase() })}
+                  className="w-full border rounded px-3 py-2 uppercase"
+                  placeholder="e.g. KLA"
+                  maxLength={6}
+                />
+                <p className="text-xs text-gray-500 mt-1">Used in document numbers, e.g. KLA-INV-0001</p>
               </div>
 
               <div className="flex items-center space-x-2">

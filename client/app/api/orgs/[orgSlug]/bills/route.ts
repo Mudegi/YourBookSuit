@@ -80,10 +80,12 @@ export async function GET(
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
     const efrisStatus = searchParams.get('efrisStatus');
+    const branchId = searchParams.get('branchId') || undefined;
 
     // Build where clause
     const where: any = {
       organizationId,
+      ...(branchId ? { branchId } : {}),
     };
 
     const normalizeFilterStatus = (value: string | null) => {
