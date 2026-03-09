@@ -42,14 +42,12 @@ jobs:
           cp -r public .next/standalone/public 2>/dev/null || true
           cp -r prisma .next/standalone/prisma 2>/dev/null || true
           
-          # Copy Prisma client (with Linux binaries)
-          mkdir -p .next/standalone/prisma-client/.prisma
-          mkdir -p .next/standalone/prisma-client/@prisma
-          cp -r node_modules/.prisma/client .next/standalone/prisma-client/.prisma/
-          cp -r node_modules/@prisma/client .next/standalone/prisma-client/@prisma/
+          # Copy Prisma client (with Linux binaries) into standalone node_modules
+          cp -r node_modules/.prisma .next/standalone/node_modules/.prisma 2>/dev/null || true
+          cp -r node_modules/@prisma .next/standalone/node_modules/@prisma 2>/dev/null || true
           
-          # Remove node_modules from standalone (CloudLinux manages it)
-          rm -rf .next/standalone/node_modules
+          # Rename standalone node_modules to avoid symlink conflict on server
+          mv .next/standalone/node_modules .next/standalone/standalone_modules
           
           # Create deployment tarball in workspace (so scp-action can find it)
           cd .next/standalone
@@ -94,11 +92,12 @@ jobs:
             cp /tmp/yourbooks-env-backup .env 2>/dev/null || true
             cp /tmp/yourbooks-htaccess-backup .htaccess 2>/dev/null || true
             
-            # Copy Prisma client to venv node_modules
-            if [ -d "prisma-client/.prisma" ]; then
-              cp -r prisma-client/.prisma "$VENV_MODULES/"
-              cp -r prisma-client/@prisma "$VENV_MODULES/"
-              rm -rf prisma-client
+            # Copy standalone node_modules into venv (includes all runtime deps)
+            if [ -d "standalone_modules" ]; then
+              cp -rf standalone_modules/* "$VENV_MODULES/" 2>/dev/null || true
+              cp -rf standalone_modules/.prisma "$VENV_MODULES/" 2>/dev/null || true
+              cp -rf standalone_modules/@prisma "$VENV_MODULES/" 2>/dev/null || true
+              rm -rf standalone_modules
             fi
             
             # Ensure node_modules symlink exists
