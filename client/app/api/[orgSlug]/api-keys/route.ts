@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createHash, randomBytes } from 'crypto';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/[orgSlug]/api-keys - List API keys
 export async function GET(
   request: NextRequest,
