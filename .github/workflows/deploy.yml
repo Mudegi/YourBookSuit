@@ -51,25 +51,9 @@ jobs:
           # Remove node_modules from standalone (CloudLinux manages it)
           rm -rf .next/standalone/node_modules
           
-          # Create deployment tarball
+          # Create deployment tarball in workspace (so scp-action can find it)
           cd .next/standalone
-          tar -czf /tmp/deployment.tar.gz .
-
-      - name: Deploy to cPanel via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.CPANEL_HOST }}
-          username: ${{ secrets.CPANEL_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT }}
-          script: |
-            # Activate Node environment
-            source /home/${{ secrets.CPANEL_USER }}/nodevenv/yourbooksuit.com/20/bin/activate
-            cd /home/${{ secrets.CPANEL_USER }}/yourbooksuit.com
-
-            # Backup .env and .htaccess
-            cp .env /tmp/yourbooks-env-backup 2>/dev/null || true
-            cp .htaccess /tmp/yourbooks-htaccess-backup 2>/dev/null || true
+          tar -czf $GITHUB_WORKSPACE/deployment.tar.gz .
 
       - name: Upload deployment package
         uses: appleboy/scp-action@v0.1.7
@@ -78,9 +62,8 @@ jobs:
           username: ${{ secrets.CPANEL_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          source: "/tmp/deployment.tar.gz"
-          target: "/home/${{ secrets.CPANEL_USER }}/yourbooksuit.com/"
-          strip_components: 2
+          source: "deployment.tar.gz"
+          target: "/home/${{ secrets.CPANEL_USER }}/yourbooksuit.com"
 
       - name: Extract and finalize deployment
         uses: appleboy/ssh-action@v1
@@ -94,6 +77,10 @@ jobs:
             APP_DIR="/home/${{ secrets.CPANEL_USER }}/yourbooksuit.com"
             VENV_MODULES="/home/${{ secrets.CPANEL_USER }}/nodevenv/yourbooksuit.com/20/lib/node_modules"
             cd "$APP_DIR"
+            
+            # Backup .env and .htaccess
+            cp .env /tmp/yourbooks-env-backup 2>/dev/null || true
+            cp .htaccess /tmp/yourbooks-htaccess-backup 2>/dev/null || true
             
             # Clean old files (preserve node_modules symlink, .env, .htaccess, tmp)
             chmod -R u+rwX .next 2>/dev/null || true
