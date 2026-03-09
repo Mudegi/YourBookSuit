@@ -130,6 +130,25 @@ function LoginForm() {
               Create one now
             </Link>
           </div>
+
+          {/* Demo Account */}
+          <div className="mt-4 p-4 bg-slate-900/50 rounded-lg border border-slate-700/50">
+            <p className="text-xs text-slate-400 text-center mb-2">Demo Account</p>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-500">Email:</span>
+              <button
+                type="button"
+                onClick={() => setFormData({ email: 'admin@example.com', password: 'password123' })}
+                className="text-blue-400 hover:text-blue-300 font-mono cursor-pointer"
+              >
+                admin@example.com
+              </button>
+            </div>
+            <div className="flex items-center justify-between text-xs mt-1">
+              <span className="text-slate-500">Password:</span>
+              <span className="text-slate-300 font-mono">password123</span>
+            </div>
+          </div>
         </div>
 
         {/* Back to Home */}

@@ -1,0 +1,126 @@
+name: Deploy to cPanel
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: client
+        run: npx prisma generate
+
+      - name: Build Next.js
+        working-directory: client
+        run: npx next build
+        env:
+          DATABASE_URL: "mysql://placeholder:placeholder@localhost:3306/placeholder"
+
+      - name: Prepare deployment package
+        working-directory: client
+        run: |
+          # Copy static assets into standalone
+          cp -r .next/static .next/standalone/.next/static
+          cp -r public .next/standalone/public 2>/dev/null || true
+          cp -r prisma .next/standalone/prisma 2>/dev/null || true
+          
+          # Copy Prisma client (with Linux binaries)
+          mkdir -p .next/standalone/prisma-client/.prisma
+          mkdir -p .next/standalone/prisma-client/@prisma
+          cp -r node_modules/.prisma/client .next/standalone/prisma-client/.prisma/
+          cp -r node_modules/@prisma/client .next/standalone/prisma-client/@prisma/
+          
+          # Remove node_modules from standalone (CloudLinux manages it)
+          rm -rf .next/standalone/node_modules
+          
+          # Create deployment tarball
+          cd .next/standalone
+          tar -czf /tmp/deployment.tar.gz .
+
+      - name: Deploy to cPanel via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.CPANEL_HOST }}
+          username: ${{ secrets.CPANEL_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            # Activate Node environment
+            source /home/${{ secrets.CPANEL_USER }}/nodevenv/yourbooksuit.com/20/bin/activate
+            cd /home/${{ secrets.CPANEL_USER }}/yourbooksuit.com
+
+            # Backup .env and .htaccess
+            cp .env /tmp/yourbooks-env-backup 2>/dev/null || true
+            cp .htaccess /tmp/yourbooks-htaccess-backup 2>/dev/null || true
+
+      - name: Upload deployment package
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.CPANEL_HOST }}
+          username: ${{ secrets.CPANEL_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          source: "/tmp/deployment.tar.gz"
+          target: "/home/${{ secrets.CPANEL_USER }}/yourbooksuit.com/"
+          strip_components: 2
+
+      - name: Extract and finalize deployment
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.CPANEL_HOST }}
+          username: ${{ secrets.CPANEL_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            source /home/${{ secrets.CPANEL_USER }}/nodevenv/yourbooksuit.com/20/bin/activate
+            APP_DIR="/home/${{ secrets.CPANEL_USER }}/yourbooksuit.com"
+            VENV_MODULES="/home/${{ secrets.CPANEL_USER }}/nodevenv/yourbooksuit.com/20/lib/node_modules"
+            cd "$APP_DIR"
+            
+            # Clean old files (preserve node_modules symlink, .env, .htaccess, tmp)
+            chmod -R u+rwX .next 2>/dev/null || true
+            find . -maxdepth 1 ! -name '.' ! -name 'node_modules' ! -name '.env' ! -name '.htaccess' ! -name 'tmp' ! -name 'deployment.tar.gz' -exec rm -rf {} + 2>/dev/null || true
+            
+            # Extract new build
+            tar -xzf deployment.tar.gz
+            rm -f deployment.tar.gz
+            
+            # Restore .env and .htaccess
+            cp /tmp/yourbooks-env-backup .env 2>/dev/null || true
+            cp /tmp/yourbooks-htaccess-backup .htaccess 2>/dev/null || true
+            
+            # Copy Prisma client to venv node_modules
+            if [ -d "prisma-client/.prisma" ]; then
+              cp -r prisma-client/.prisma "$VENV_MODULES/"
+              cp -r prisma-client/@prisma "$VENV_MODULES/"
+              rm -rf prisma-client
+            fi
+            
+            # Ensure node_modules symlink exists
+            if [ ! -L "node_modules" ]; then
+              ln -s "$VENV_MODULES" node_modules
+            fi
+            
+            # Restart Passenger
+            mkdir -p tmp
+            touch tmp/restart.txt
+            
+            echo "Deployment complete! $(date)"
