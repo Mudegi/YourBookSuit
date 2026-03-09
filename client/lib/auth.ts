@@ -159,3 +159,6 @@ export async function getSessionFromHeaders(
     return null;
   }
 }
+
+// Re-export verifyAuth from api-auth for routes that import it from here
+export { verifyAuth } from './api-auth';
