@@ -21,7 +21,8 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `(function(){
               var p = window.location.pathname;
-              var isDash = p.match(/^\/[^\/]+\//) && !p.startsWith('/login') && !p.startsWith('/register') && !p.startsWith('/onboarding') && p !== '/';
+              var parts = p.split('/').filter(Boolean);
+              var isDash = parts.length >= 1 && !p.startsWith('/login') && !p.startsWith('/register') && !p.startsWith('/onboarding') && p !== '/';
               var isAdmin = p.startsWith('/system-admin');
               if (isDash || isAdmin) {
                 var t = ''; try { t = localStorage.getItem('theme') || ''; } catch(e) {}
