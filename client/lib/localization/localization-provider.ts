@@ -5,7 +5,6 @@
  */
 
 import prisma from '@/lib/prisma';
-import { SUPPORTED_COUNTRIES } from '../tax/compliance-pack-selector';
 
 export interface LocalizationContext {
   organizationId: string;
@@ -559,15 +558,21 @@ export abstract class BaseLocalizationStrategy implements LocalizationStrategy {
   }
 }
 
-// Import and register all localization drivers
-import './drivers/index';
-
 // Main Localization Provider Service
 export class LocalizationProvider {
   private static instance: LocalizationProvider;
   private currentStrategy: LocalizationStrategy | null = null;
+  private static driversInitialized = false;
 
   private constructor() {}
+
+  private static async ensureDrivers() {
+    if (!LocalizationProvider.driversInitialized) {
+      const { initializeLocalizationDrivers } = await import('./drivers/index');
+      initializeLocalizationDrivers();
+      LocalizationProvider.driversInitialized = true;
+    }
+  }
 
   static getInstance(): LocalizationProvider {
     if (!LocalizationProvider.instance) {
@@ -583,6 +588,7 @@ export class LocalizationProvider {
 
   // Set the current localization strategy based on country
   async setLocalizationStrategy(context: LocalizationContext): Promise<void> {
+    await LocalizationProvider.ensureDrivers();
     const strategy = strategyRegistry.get(context.country);
     if (!strategy) {
       throw new Error(`Localization strategy not found for country: ${context.country}`);

@@ -79,7 +79,7 @@ export async function GET(req: Request, { params }: { params: { orgSlug: string 
         orderBy: { createdAt: 'desc' },
         take: 10,
         select: {
-          id: true, invoiceNumber: true, total: true, amountDue: true, status: true, invoiceDate: true,
+          id: true, invoiceNumber: true, total: true, amountDue: true, status: true, invoiceDate: true, dueDate: true,
           customer: { select: { companyName: true, firstName: true, lastName: true } },
         },
       }).catch(() => []),

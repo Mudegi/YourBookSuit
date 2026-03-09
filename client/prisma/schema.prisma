@@ -1,9 +1,10 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-1.1.x", "debian-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -18,7 +19,7 @@ model Organization {
   fiscalYearStart         Int                      @default(1)
   homeCountry             String                   @default("US")
   compliancePack          String                   @default("DEFAULT")
-  address                 String?
+  address                 String? @db.Text
   phone                   String?
   email                   String?
   logo                    String?
@@ -35,7 +36,7 @@ model Organization {
   subscriptionEndDate     DateTime?
   approvedAt              DateTime?                // When system admin approved the org
   approvedById            String?                  // System admin who approved
-  suspendedReason         String?
+  suspendedReason         String? @db.Text
 
   // Multi-Currency Settings
   fxGainAccountId         String?
@@ -173,6 +174,7 @@ model Organization {
   exchangeRates           ExchangeRate[]
   fxGainLossTransactions  ForeignExchangeGainLoss[]
   interBranchTransfers    InterBranchTransfer[]
+  warehouseStockLevels    WarehouseStockLevel[]
 
   @@index([slug])
   @@index([homeCountry])
@@ -203,7 +205,7 @@ model Branch {
   code                 String
   name                 String
   type                 BranchType            @default(OFFICE)
-  address              String?
+  address              String? @db.Text
   city                 String?
   state                String?
   country              String?
@@ -246,6 +248,7 @@ model Branch {
   crmContacts          Contact[]             @relation("ContactBranch")
   crmOpportunities     Opportunity[]         @relation("OpportunityBranch")
   employees            Employee[]            @relation("EmployeeBranch")
+  stockMovements       StockMovement[]
 
   @@unique([organizationId, code])
   @@index([organizationId])
@@ -441,6 +444,7 @@ model User {
   assignedCrmTasks           CrmTask[]               @relation("CrmTaskAssignee")
   createdCrmTasks            CrmTask[]               @relation("CrmTaskCreator")
   ownedOpportunities         Opportunity[]           @relation("OpportunityOwner")
+  managedWarehouses          InventoryWarehouse[]    @relation("WarehouseManager")
 
   @@index([email])
 }
@@ -508,7 +512,7 @@ model ChartOfAccount {
   accountSubType              String?
   parentId                    String?
   currency                    String            @default("USD")
-  description                 String?
+  description                 String? @db.Text
   isActive                    Boolean           @default(true)
   isSystem                    Boolean           @default(false)
   allowManualJournal          Boolean           @default(true)
@@ -519,7 +523,7 @@ model ChartOfAccount {
   level                       Int               @default(0)
   hasChildren                 Boolean           @default(false)
   fullPath                    String?
-  tags                        String[]
+  tags                        Json
   metadata                    Json?
   createdAt                   DateTime          @default(now())
   updatedAt                   DateTime          @updatedAt
@@ -557,9 +561,9 @@ model Transaction {
   transactionType     TransactionType
   referenceType       String?
   referenceId         String?
-  description         String
-  notes               String?
-  attachments         String[]
+  description         String @db.Text
+  notes               String? @db.Text
+  attachments         Json
   status              TransactionStatus    @default(DRAFT)
   isReconciled        Boolean              @default(false)
   createdById         String
@@ -605,7 +609,7 @@ model LedgerEntry {
   currency      String         @default("USD")
   exchangeRate  Decimal        @default(1) @db.Decimal(12, 6)
   amountInBase  Decimal        @db.Decimal(19, 4)
-  description   String?
+  description   String? @db.Text
   reconciled    Boolean        @default(false)
   reconciledAt  DateTime?
   isLocked      Boolean        @default(false)
@@ -635,12 +639,12 @@ model Customer {
   creditLimit             Decimal?               @db.Decimal(19, 4)
   billingAddress          Json?
   shippingAddress         Json?
-  notes                   String?
+  notes                   String? @db.Text
   isActive                Boolean                @default(true)
   region                  String?
   taxCategory             String?
   taxExempt               Boolean                @default(false) // New: Tax exemption status
-  taxExemptionReason      String? // New: Reason for tax exemption
+  taxExemptionReason      String? @db.Text // New: Reason for tax exemption
   buyerType               String                 @default("1") // EFRIS: 0=B2B, 1=B2C, 2=Foreigner, 3=B2G
   defaultRevenueAccountId String?
   createdAt               DateTime               @default(now())
@@ -700,9 +704,9 @@ model Invoice {
 
   // References & Notes
   reference   String? // Customer PO/LPO number
-  notes       String?
-  terms       String?
-  attachments String[]
+  notes       String? @db.Text
+  terms       String? @db.Text
+  attachments Json
 
   // Branch & Location
   branchId    String?
@@ -736,9 +740,9 @@ model Invoice {
 
   // Credit Check & Validation
   creditCheckPassed Boolean @default(true)
-  creditCheckNotes  String?
+  creditCheckNotes  String? @db.Text
   requiresApproval  Boolean @default(false)
-  approvalReason    String?
+  approvalReason    String? @db.Text
 
   // Salesperson & Commission
   salespersonId    String?
@@ -780,7 +784,7 @@ model InvoiceItem {
   invoiceId   String
   productId   String?
   serviceId   String?
-  description String
+  description String @db.Text
 
   // Quantity & Pricing
   quantity        Decimal  @db.Decimal(12, 4)
@@ -797,7 +801,7 @@ model InvoiceItem {
   taxRateId       String?
   taxAgencyRateId String? // New: Reference to TaxAgencyRate
   taxExempt       Boolean @default(false)
-  taxExemptReason String?
+  taxExemptReason String? @db.Text
   
   // EFRIS T109 Tax Classification Fields
   goodsCategoryId  String? // VAT commodity category from T124 (e.g., "10111301")
@@ -812,7 +816,7 @@ model InvoiceItem {
   stick            Decimal? @db.Decimal(12, 8) // Piece value for excise calculation
   exciseUnit       String? // 101=per stick, 102=per litre, 103=per kg, etc.
   exciseCurrency   String? // Currency for excise (usually same as invoice)
-  exciseRateName   String? // Display name (e.g., "18%" or "UGX650 per litre")
+  exciseRateName   String? @db.Text // Display name (e.g., "18%" or "UGX650 per litre")
 
   // Totals
   subtotal Decimal @default(0) @db.Decimal(19, 4) // quantity * unitPrice
@@ -828,7 +832,7 @@ model InvoiceItem {
 
   // Display & Ordering
   sortOrder Int     @default(0)
-  notes     String?
+  notes     String? @db.Text
 
   // Relations
   invoice       Invoice             @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
@@ -905,9 +909,9 @@ model Estimate {
 
   // References & Content
   reference   String?   // Customer RFQ number
-  notes       String?
-  terms       String?   // e.g. "50% deposit required before work begins"
-  attachments String[]  // URLs to Scope of Work PDFs, brochures, etc.
+  notes       String? @db.Text
+  terms       String?   @db.Text // e.g. "50% deposit required before work begins"
+  attachments Json  // URLs to Scope of Work PDFs, brochures, etc.
 
   // Delivery
   deliveryAddress Json?  // If shipping differs from billing
@@ -940,7 +944,7 @@ model EstimateItem {
   estimateId  String
   productId   String?
   serviceId   String?
-  description String
+  description String @db.Text
   isOptional  Boolean @default(false) // Customer can accept/reject optional lines
 
   // Quantity & Pricing
@@ -962,7 +966,7 @@ model EstimateItem {
 
   // Display & Ordering
   sortOrder Int     @default(0)
-  notes     String?
+  notes     String? @db.Text
 
   // Relations
   estimate     Estimate        @relation(fields: [estimateId], references: [id], onDelete: Cascade)
@@ -1013,11 +1017,11 @@ model SalesReceipt {
   // Status (Simpler than Invoice - no approval needed)
   status            SalesReceiptStatus @default(COMPLETED)
   voidedAt          DateTime?
-  voidReason        String?
+  voidReason        String? @db.Text
   
   // References & Notes
   reference         String?
-  notes             String?
+  notes             String? @db.Text
   
   // E-Invoicing & Fiscalization (Uganda EFRIS)
   transactionId     String?            // GL Transaction reference
@@ -1066,7 +1070,7 @@ model SalesReceiptItem {
   salesReceiptId  String
   productId       String?
   serviceId       String?
-  description     String
+  description     String @db.Text
   
   // Quantity & Pricing
   quantity        Decimal       @db.Decimal(19, 4)
@@ -1137,7 +1141,7 @@ model Vendor {
   paymentTermId         String?                // New: Reference to PaymentTerm
   bankAccount           Json?
   billingAddress        Json?
-  notes                 String?
+  notes                 String? @db.Text
   isActive              Boolean                @default(true)
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
@@ -1172,7 +1176,7 @@ model PurchaseOrder {
   taxAmount      Decimal             @default(0) @db.Decimal(19, 4)
   total          Decimal             @db.Decimal(19, 4)
   status         POStatus            @default(DRAFT)
-  notes          String?
+  notes          String? @db.Text
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
   bills          Bill[]
@@ -1189,7 +1193,7 @@ model PurchaseOrderItem {
   id               String             @id @default(cuid())
   purchaseOrderId  String
   productId        String?
-  description      String
+  description      String @db.Text
   quantity         Decimal            @db.Decimal(12, 4)
   receivedQty      Decimal            @default(0) @db.Decimal(12, 4)
   unitPrice        Decimal            @db.Decimal(19, 4)
@@ -1218,7 +1222,7 @@ model GoodsReceipt {
   taxAmount         Decimal             @db.Decimal(19, 4)
   total             Decimal             @db.Decimal(19, 4)
   status            GRStatus            @default(DRAFT)
-  notes             String?
+  notes             String? @db.Text
   freightCost       Decimal?            @db.Decimal(19, 4)
   insuranceCost     Decimal?            @db.Decimal(19, 4)
   customsDuty       Decimal?            @db.Decimal(19, 4)
@@ -1250,7 +1254,7 @@ model GoodsReceiptItem {
   goodsReceiptId   String
   productId        String
   poItemId         String?
-  description      String?
+  description      String? @db.Text
   quantity         Decimal             @db.Decimal(12, 4)
   unitPrice        Decimal             @db.Decimal(19, 4)
   taxRate          Decimal             @default(0) @db.Decimal(5, 2)
@@ -1259,7 +1263,7 @@ model GoodsReceiptItem {
   originalUnitCost Decimal             @db.Decimal(19, 4)
   landedUnitCost   Decimal?            @db.Decimal(19, 4)
   qcStatus         QCStatus?           @default(PENDING)
-  qcNotes          String?
+  qcNotes          String? @db.Text
   sortOrder        Int                 @default(0)
   goodsReceipt     GoodsReceipt        @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
   product          Product             @relation(fields: [productId], references: [id])
@@ -1286,8 +1290,8 @@ model Bill {
   amountPaid          Decimal              @default(0) @db.Decimal(19, 4)
   amountDue           Decimal              @db.Decimal(19, 4)
   status              BillStatus           @default(DRAFT)
-  notes               String?
-  attachments         String[]
+  notes               String? @db.Text
+  attachments         Json
   transactionId       String?
   transaction         Transaction?         @relation(fields: [transactionId], references: [id])
   whtApplicable       Boolean              @default(false)
@@ -1323,7 +1327,7 @@ model BillItem {
   productId       String?
   serviceId       String?
   accountId       String?
-  description     String
+  description     String @db.Text
   quantity        Decimal         @db.Decimal(12, 4)
   unitPrice       Decimal         @db.Decimal(19, 4)
   taxRate         Decimal         @default(0) @db.Decimal(5, 2)
@@ -1372,8 +1376,8 @@ model Payment {
   bankAccountId       String?
   customerId          String?
   vendorId            String?
-  notes               String?
-  attachments         String[]
+  notes               String? @db.Text
+  attachments         Json
   transactionId       String?
   isReconciled        Boolean              @default(false)
   reconciledDate      DateTime?
@@ -1382,7 +1386,7 @@ model Payment {
   lockedAt            DateTime?
   voidedAt            DateTime?
   voidedById          String?
-  voidReason          String?
+  voidReason          String? @db.Text
   createdById         String?
   updatedById         String?
   createdAt           DateTime             @default(now())
@@ -1448,7 +1452,7 @@ model PaymentTerm {
   organizationId    String
   code              String       // e.g., "NET30", "NET15", "COD"
   name              String       // e.g., "Net 30 Days", "Due on Receipt"
-  description       String?
+  description       String? @db.Text
   daysUntilDue      Int          // Number of days after invoice date
   discountPercentage Decimal?    @db.Decimal(5, 2) // e.g., 2.00 for 2%
   discountDays      Int?         // Days within which discount applies
@@ -1484,7 +1488,7 @@ model BankAccount {
   mobileShortcode        String?                                           // Mobile Money shortcode
   lastReconciledDate     DateTime?                                         // Date of last reconciliation
   lastReconciledBalance  Decimal?             @db.Decimal(19, 4)           // Balance at last reconciliation
-  description            String?
+  description            String? @db.Text
   isActive               Boolean              @default(true)
   createdAt              DateTime             @default(now())
   updatedAt              DateTime             @updatedAt
@@ -1514,15 +1518,15 @@ model BankReconciliation {
   reconciledBy          String?
   reconciledAt          DateTime?
   finalizedAt           DateTime?
-  notes                 String?
+  notes                 String? @db.Text
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
   bankAccount           BankAccount       @relation(fields: [bankAccountId], references: [id])
   bankTransactions      BankTransaction[]
-  clearedTransactionIds String[]            // IDs of all cleared/ticked transactions
-  clearedPaymentIds     String[]            // IDs of all cleared/ticked payments
+  clearedTransactionIds Json            // IDs of all cleared/ticked transactions
+  clearedPaymentIds     Json            // IDs of all cleared/ticked payments
   adjustmentEntries     Json?
-  reconciliationReport  String?
+  reconciliationReport  String? @db.Text
   openingBalance        Decimal?            @db.Decimal(19, 4) // Opening balance used for calculation
 
   @@index([bankAccountId, statementDate])
@@ -1534,7 +1538,7 @@ model Product {
   organizationId         String
   sku                    String
   name                   String
-  description            String?
+  description            String? @db.Text
   productType            ProductType
   category               String?
   unitOfMeasureId        String?
@@ -1607,6 +1611,7 @@ model Product {
   workOrderMaterials     WorkOrderMaterial[]
   goodsReceiptItems      GoodsReceiptItem[]
   ibtItems               InterBranchTransferItem[]
+  warehouseStockLevels   WarehouseStockLevel[]
 
   @@index([organizationId, sku])
   @@index([organizationId, productType])
@@ -1631,10 +1636,10 @@ model RecurringTemplate {
   payload          Json
   status           RecurringStatus       @default(ACTIVE)
   approvalRequired Boolean               @default(false)
-  approverRoles    String[]              @default([])
+  approverRoles    Json              @default("[]")
   maxExecutions    Int?
   executedCount    Int                   @default(0)
-  notes            String?
+  notes            String? @db.Text
   createdById      String
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
@@ -1658,8 +1663,8 @@ model RecurringExecution {
   invoiceId       String?
   billId          String?
   paymentId       String?
-  message         String?
-  errorStack      String?
+  message         String? @db.Text
+  errorStack      String? @db.Text
   payloadSnapshot Json?
   createdById     String?
   createdAt       DateTime          @default(now())
@@ -1693,23 +1698,35 @@ model InventoryItem {
 }
 
 model StockMovement {
-  id                String       @id @default(cuid())
+  id                String              @id @default(cuid())
   productId         String
   movementType      MovementType
-  quantity          Decimal      @db.Decimal(12, 4)
-  unitCost          Decimal      @default(0) @db.Decimal(19, 4)
-  totalCost         Decimal      @default(0) @db.Decimal(19, 4)
-  warehouseLocation String       @default("Main")
-  referenceType     String?
+  quantity          Decimal             @db.Decimal(12, 4) // Signed: + for in, - for out
+  unitCost          Decimal             @default(0) @db.Decimal(19, 4)
+  totalCost         Decimal             @default(0) @db.Decimal(19, 4)
+  balanceAfter      Decimal?            @db.Decimal(12, 4) // Running balance after this movement
+  warehouseLocation String              @default("Main")
+  branchId          String?
+  warehouseId       String?
+  performedById     String?             // User who performed/authorized
+  referenceType     String?             // INVOICE, BILL, GRN, ADJUSTMENT, TRANSFER, RETURN
   referenceId       String?
-  notes             String?
-  movementDate      DateTime     @default(now())
+  referenceNumber   String?             // Human-readable ref (e.g., INV-102, GRN-55)
+  notes             String? @db.Text
+  movementDate      DateTime            @default(now())
   transactionId     String?
-  createdAt         DateTime     @default(now())
-  product           Product      @relation(fields: [productId], references: [id])
+  transferGroupId   String?             // Links paired TRANSFER movements
+  createdAt         DateTime            @default(now())
+  product           Product             @relation(fields: [productId], references: [id])
+  branch            Branch?             @relation(fields: [branchId], references: [id])
+  warehouse         InventoryWarehouse? @relation(fields: [warehouseId], references: [id])
 
   @@index([productId, movementDate])
   @@index([referenceType, referenceId])
+  @@index([branchId, movementDate])
+  @@index([warehouseId])
+  @@index([transferGroupId])
+  @@index([performedById])
 }
 
 model InventoryWarehouse {
@@ -1718,10 +1735,21 @@ model InventoryWarehouse {
   branchId           String?
   code               String
   name               String
+  description        String? @db.Text
   type               WarehouseType        @default(GENERAL)
   isDefault          Boolean              @default(false)
   isActive           Boolean              @default(true)
-  address            String?
+  address            String? @db.Text
+  city               String?
+  country            String?
+  phone              String?
+  email              String?
+  managerId          String?
+  capacityVolume     Decimal?             @db.Decimal(12, 2) // Max volume in cubic meters
+  capacityWeight     Decimal?             @db.Decimal(12, 2) // Max weight in kg
+  usedVolume         Decimal?             @db.Decimal(12, 2) // Current used volume
+  usedWeight         Decimal?             @db.Decimal(12, 2) // Current used weight
+  metadata           Json?
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
   assemblyLines      AssemblyLine[]
@@ -1746,10 +1774,39 @@ model InventoryWarehouse {
   salesReceiptItems  SalesReceiptItem[]
   purchaseOrders     PurchaseOrder[]
   goodsReceipts      GoodsReceipt[]
+  stockMovements     StockMovement[]
+  stockLevels        WarehouseStockLevel[]
+  manager            User?                @relation("WarehouseManager", fields: [managerId], references: [id])
 
   @@unique([organizationId, code])
   @@index([organizationId])
   @@index([branchId])
+}
+
+model WarehouseStockLevel {
+  id                String             @id @default(cuid())
+  organizationId    String
+  warehouseId       String
+  productId         String
+  quantityOnHand    Decimal            @default(0) @db.Decimal(12, 4)
+  quantityReserved  Decimal            @default(0) @db.Decimal(12, 4)
+  quantityAvailable Decimal            @default(0) @db.Decimal(12, 4)
+  averageCost       Decimal            @default(0) @db.Decimal(19, 4)
+  totalValue        Decimal            @default(0) @db.Decimal(19, 4)
+  reorderLevel      Decimal?           @db.Decimal(12, 4)
+  maxStockLevel     Decimal?           @db.Decimal(12, 4)
+  lastMovementDate  DateTime?
+  lastCountDate     DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  warehouse         InventoryWarehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  product           Product            @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([warehouseId, productId])
+  @@index([organizationId])
+  @@index([warehouseId])
+  @@index([productId])
 }
 
 model InventoryBin {
@@ -1783,7 +1840,7 @@ model InventoryLot {
   quantityAvailable Decimal             @default(0) @db.Decimal(12, 4)
   receivedDate      DateTime?           @default(now())
   expiryDate        DateTime?
-  notes             String?
+  notes             String? @db.Text
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
   assemblyLines     AssemblyLine[]
@@ -1812,7 +1869,7 @@ model InventorySerial {
   receivedAt     DateTime?           @default(now())
   assignedAt     DateTime?
   consumedAt     DateTime?
-  notes          String?
+  notes          String? @db.Text
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
   bin            InventoryBin?       @relation(fields: [binId], references: [id])
@@ -1838,7 +1895,7 @@ model TransferOrder {
   shippedAt           DateTime?
   receivedAt          DateTime?
   reference           String?
-  notes               String?
+  notes               String? @db.Text
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
   fromWarehouse       InventoryWarehouse  @relation("TransferFromWarehouse", fields: [fromWarehouseId], references: [id])
@@ -1858,7 +1915,7 @@ model TransferOrderLine {
   quantity        Decimal       @db.Decimal(12, 4)
   unitOfMeasureId String?
   lotId           String?
-  notes           String?
+  notes           String? @db.Text
   lot             InventoryLot? @relation(fields: [lotId], references: [id])
   product         Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
   transferOrder   TransferOrder @relation(fields: [transferOrderId], references: [id], onDelete: Cascade)
@@ -1872,7 +1929,7 @@ model WorkCenter {
   organizationId  String
   code            String
   name            String
-  description     String?
+  description     String? @db.Text
   costRate        Decimal       @default(0) @db.Decimal(19, 4)
   capacityPerHour Decimal       @default(0) @db.Decimal(12, 4)
   isActive        Boolean       @default(true)
@@ -1894,7 +1951,7 @@ model BillOfMaterial {
   version              String                @default("1.0")
   status               BomStatus             @default(DRAFT)
   isDefault            Boolean               @default(false)
-  revisionNotes        String?
+  revisionNotes        String? @db.Text
   yieldPercent         Decimal               @default(100) @db.Decimal(6, 2)
   scrapPercent         Decimal               @default(0) @db.Decimal(6, 2)
   effectiveFrom        DateTime?             @default(now())
@@ -1935,7 +1992,7 @@ model Routing {
   version        String         @default("1.0")
   status         RoutingStatus  @default(DRAFT)
   isDefault      Boolean        @default(false)
-  notes          String?
+  notes          String? @db.Text
   effectiveFrom  DateTime?      @default(now())
   effectiveTo    DateTime?
   createdAt      DateTime       @default(now())
@@ -1956,7 +2013,7 @@ model RoutingStep {
   workCenterId         String?
   sequence             Int
   name                 String
-  description          String?
+  description          String? @db.Text
   setupTimeMins        Int                  @default(0)
   runTimeMinsPerUnit   Int                  @default(0)
   laborTimeMinsPerUnit Int                  @default(0)
@@ -1988,7 +2045,7 @@ model WorkOrder {
   dueDate           DateTime?
   completedAt       DateTime?
   priority          Int                  @default(3)
-  notes             String?
+  notes             String? @db.Text
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
   serials           InventorySerial[]
@@ -2046,7 +2103,7 @@ model TaxConfiguration {
   taxName        String
   taxType        TaxType
   rate           Decimal      @db.Decimal(5, 2)
-  description    String?
+  description    String? @db.Text
   taxAccountId   String?
   isActive       Boolean      @default(true)
   effectiveFrom  DateTime
@@ -2133,7 +2190,7 @@ model TaxRate {
   isActive        Boolean          @default(true)
   effectiveFrom   DateTime
   effectiveTo     DateTime?
-  description     String?
+  description     String? @db.Text
   taxCode         String?
   claimable       Boolean          @default(true)
   requiresEFRIS   Boolean          @default(false)
@@ -2164,10 +2221,10 @@ model WHTRule {
   rate              Decimal          @db.Decimal(5, 2)
   threshold         Decimal?         @db.Decimal(15, 2)
   isActive          Boolean          @default(true)
-  description       String?
+  description       String? @db.Text
   effectiveFrom     DateTime
   effectiveTo       DateTime?
-  serviceCategories String[]
+  serviceCategories Json
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
   organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -2190,7 +2247,7 @@ model WHTTransaction {
   whtAmount        Decimal   @db.Decimal(15, 2)
   netAmount        Decimal   @db.Decimal(15, 2)
   whtDate          DateTime
-  description      String?
+  description      String? @db.Text
   whtCertificateNo String?
   filed            Boolean   @default(false)
   filedDate        DateTime?
@@ -2231,8 +2288,8 @@ model TaxReturn {
   paymentAmount    Decimal?        @db.Decimal(15, 2)
   paymentReference String?
   returnData       Json?
-  attachments      String[]
-  notes            String?
+  attachments      Json
+  notes            String? @db.Text
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -2273,7 +2330,7 @@ model TaxAgency {
   taxType            TaxType // VAT, SALES_TAX, GST, etc.
 
   // Contact Information
-  address    String?
+  address    String? @db.Text
   city       String?
   state      String?
   postalCode String?
@@ -2296,7 +2353,7 @@ model TaxAgency {
 
   // Status
   isActive Boolean @default(true)
-  notes    String?
+  notes    String? @db.Text
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2346,13 +2403,13 @@ model TaxAgencyRate {
   recoveryPercentage Decimal @default(100) @db.Decimal(5, 2) // Partial recovery %
 
   // Applicability & Scope
-  applicableContext String[] @default(["SALES", "PURCHASES"]) // Where can this be used?
+  applicableContext Json? // Where can this be used? Default: ["SALES", "PURCHASES"]
 
   // Status
   isDefault        Boolean @default(false)
   isActive         Boolean @default(true)
   requiresApproval Boolean @default(false)
-  description      String?
+  description      String? @db.Text
   metadata         Json? // For country-specific settings
 
   createdAt DateTime @default(now())
@@ -2381,7 +2438,7 @@ model TaxGroup {
   taxAgencyId    String? // Optional: group can span multiple agencies
   name           String // e.g., "Standard Import", "Retail with Levy"
   code           String // Short code: "STD_IMPORT"
-  description    String?
+  description    String? @db.Text
 
   // Calculation Settings
   compoundMethod String @default("SEQUENTIAL") // SEQUENTIAL or PARALLEL
@@ -2427,7 +2484,7 @@ model TaxExemptionReason {
   organizationId String
   code           String // e.g., "EXEMPT_EXPORT", "EXEMPT_NONPROFIT"
   name           String // e.g., "Export - Zero-Rated"
-  description    String?
+  description    String? @db.Text
   category       String // EXEMPTION, ZERO_RATED, DIPLOMATIC, etc.
   country        String? // Country-specific reasons
 
@@ -2451,7 +2508,7 @@ model AssetCategory {
   organizationId        String
   name                  String
   code                  String
-  description           String?
+  description           String? @db.Text
   assetAccountId        String
   depreciationAccountId String
   expenseAccountId      String
@@ -2479,7 +2536,7 @@ model Asset {
   categoryId              String
   assetNumber             String
   name                    String
-  description             String?
+  description             String? @db.Text
   purchaseDate            DateTime
   purchasePrice           Decimal                @db.Decimal(19, 4)
   vendor                  String?
@@ -2491,7 +2548,7 @@ model Asset {
   depreciationStartDate   DateTime
   currentBookValue        Decimal                @db.Decimal(19, 4)
   accumulatedDepreciation Decimal                @default(0) @db.Decimal(19, 4)
-  location                String?
+  location                String? @db.Text
   serialNumber            String?
   model                   String?
   manufacturer            String?
@@ -2502,11 +2559,11 @@ model Asset {
   disposalDate            DateTime?
   disposalMethod          String?
   disposalPrice           Decimal?               @db.Decimal(19, 4)
-  disposalNotes           String?
-  tags                    String[]
+  disposalNotes           String? @db.Text
+  tags                    Json
   customFields            Json?
-  attachments             String[]
-  notes                   String?
+  attachments             Json
+  notes                   String? @db.Text
   createdAt               DateTime               @default(now())
   updatedAt               DateTime               @updatedAt
   branch                  Branch?                @relation(fields: [branchId], references: [id])
@@ -2544,7 +2601,7 @@ model AssetDepreciation {
   postedDate              DateTime?
   postedBy                String?
   calculationDetails      Json?
-  notes                   String?
+  notes                   String? @db.Text
   createdAt               DateTime           @default(now())
   updatedAt               DateTime           @updatedAt
   asset                   Asset              @relation(fields: [assetId], references: [id], onDelete: Cascade)
@@ -2573,11 +2630,11 @@ model AssetDisposal {
   transactionId       String?
   postedDate          DateTime?
   postedBy            String?
-  reason              String?
+  reason              String? @db.Text
   approvedBy          String?
   approvedDate        DateTime?
-  notes               String?
-  attachments         String[]
+  notes               String? @db.Text
+  attachments         Json
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
   asset               Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
@@ -2592,7 +2649,7 @@ model AssetMaintenance {
   assetId              String
   maintenanceType      MaintenanceType
   maintenanceDate      DateTime
-  description          String
+  description          String @db.Text
   vendor               String?
   cost                 Decimal           @default(0) @db.Decimal(19, 4)
   isScheduled          Boolean           @default(false)
@@ -2604,8 +2661,8 @@ model AssetMaintenance {
   meterReading         Int?
   performedBy          String?
   billId               String?
-  notes                String?
-  attachments          String[]
+  notes                String? @db.Text
+  attachments          Json
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
   asset                Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
@@ -2629,19 +2686,19 @@ model CreditNote {
   remainingAmount  Decimal                 @default(0) @db.Decimal(19, 4)
   creditDate       DateTime                @default(now())
   reason           CreditNoteReason
-  description      String
-  internalNotes    String?
+  description      String @db.Text
+  internalNotes    String? @db.Text
   status           CreditNoteStatus        @default(DRAFT)
   approvedBy       String?
   approvedAt       DateTime?
-  approvalNotes    String?
+  approvalNotes    String? @db.Text
   voidedBy         String?
   voidedAt         DateTime?
-  voidReason       String?
+  voidReason       String? @db.Text
   isPosted         Boolean                 @default(false)
   postedAt         DateTime?
   transactionId    String?
-  attachments      String[]
+  attachments      Json
   
   // E-Invoicing & Fiscalization (Uganda EFRIS)
   efrisFDN          String?            // Fiscal Document Number
@@ -2674,7 +2731,7 @@ model CreditNoteItem {
   id           String          @id @default(cuid())
   creditNoteId String
   productId    String?
-  description  String
+  description  String @db.Text
   quantity     Decimal         @db.Decimal(12, 4)
   unitPrice    Decimal         @db.Decimal(19, 4)
   taxRateId    String?
@@ -2699,7 +2756,7 @@ model CreditNoteApplication {
   amount       Decimal    @db.Decimal(19, 4)
   appliedDate  DateTime   @default(now())
   appliedBy    String
-  notes        String?
+  notes        String? @db.Text
   creditNote   CreditNote @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
   invoice      Invoice    @relation(fields: [invoiceId], references: [id])
 
@@ -2722,19 +2779,19 @@ model DebitNote {
   debitDate       DateTime        @default(now())
   dueDate         DateTime?
   reason          DebitNoteReason
-  description     String
-  internalNotes   String?
+  description     String @db.Text
+  internalNotes   String? @db.Text
   status          DebitNoteStatus @default(DRAFT)
   approvedBy      String?
   approvedAt      DateTime?
-  approvalNotes   String?
+  approvalNotes   String? @db.Text
   voidedBy        String?
   voidedAt        DateTime?
-  voidReason      String?
+  voidReason      String? @db.Text
   isPosted        Boolean         @default(false)
   postedAt        DateTime?
   transactionId   String?
-  attachments     String[]
+  attachments     Json
   createdBy       String
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
@@ -2757,7 +2814,7 @@ model DebitNoteItem {
   id          String          @id @default(cuid())
   debitNoteId String
   productId   String?
-  description String
+  description String @db.Text
   quantity    Decimal         @db.Decimal(12, 4)
   unitPrice   Decimal         @db.Decimal(19, 4)
   taxRateId   String?
@@ -2802,8 +2859,8 @@ model BankTransaction {
   externalId           String?
   transactionDate      DateTime
   amount               Decimal             @db.Decimal(19, 4)
-  description          String
-  rawDescription       String?                                           // Original unedited description from bank
+  description          String @db.Text
+  rawDescription       String?                                           @db.Text // Original unedited description from bank
   payee                String?
   referenceNo          String?
   transactionType      String
@@ -2840,7 +2897,7 @@ model BankRule {
   id                 String            @id @default(cuid())
   organizationId     String
   ruleName           String
-  description        String?
+  description        String? @db.Text
   priority           Int               @default(0)                      // Higher = applied first
   isActive           Boolean           @default(true)
   // Conditions
@@ -2871,7 +2928,7 @@ model Document {
   fileSize       Int
   fileUrl        String
   status         String       @default("UPLOADED")
-  extractedText  String?
+  extractedText  String? @db.Text
   ocrConfidence  Decimal?     @db.Decimal(5, 2)
   transactionId  String?
   invoiceId      String?
@@ -2879,8 +2936,8 @@ model Document {
   linkedEntities Json?
   uploadedBy     String
   uploadedAt     DateTime     @default(now())
-  tags           String[]
-  notes          String?
+  tags           Json
+  notes          String? @db.Text
   createdAt      DateTime     @default(now())
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   uploadedByUser User         @relation(fields: [uploadedBy], references: [id])
@@ -2894,7 +2951,7 @@ model Project {
   organizationId String
   code           String
   name           String
-  description    String?
+  description    String? @db.Text
   status         String        @default("ACTIVE")
   startDate      DateTime
   endDate        DateTime?
@@ -2919,7 +2976,7 @@ model ProjectTask {
   id          String    @id @default(cuid())
   projectId   String
   name        String
-  description String?
+  description String? @db.Text
   status      String    @default("TODO")
   startDate   DateTime?
   endDate     DateTime?
@@ -2935,7 +2992,7 @@ model ProjectTask {
 model ProjectCost {
   id            String   @id @default(cuid())
   projectId     String
-  description   String
+  description   String @db.Text
   amount        Decimal  @db.Decimal(19, 4)
   category      String?
   transactionId String?
@@ -2957,7 +3014,7 @@ model Company {
   website             String?
   email               String?
   phone               String?
-  address             String?
+  address             String? @db.Text
   city                String?
   country             String?
   taxId               String?       // TIN / Tax Number
@@ -2975,7 +3032,7 @@ model Company {
   lastContactedAt     DateTime?     // Last interaction date
   lifetimeValue       Decimal       @default(0) @db.Decimal(19, 4)
   outstandingBalance  Decimal       @default(0) @db.Decimal(19, 4)
-  notes               String?
+  notes               String? @db.Text
 
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
@@ -3015,7 +3072,7 @@ model Contact {
   optOutMarketing Boolean     @default(false)
   sendInvoicesWhatsApp Boolean @default(false)
   lastInteractionAt DateTime? // Timestamp of last activity with this contact
-  notes          String?
+  notes          String? @db.Text
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   activities     Activity[]
@@ -3037,7 +3094,7 @@ model Opportunity {
   assignedTo     String?      // Sales rep / owner
   branchId       String?      // Which branch owns this deal
   name           String
-  description    String?
+  description    String? @db.Text
   value          Decimal?     @db.Decimal(19, 4)
   currency       String       @default("USD")
   stage          String       @default("QUALIFICATION") // QUALIFICATION, PROPOSAL, NEGOTIATION, WON, LOST
@@ -3050,7 +3107,7 @@ model Opportunity {
   convertedEstimateId String? // Link to converted estimate
   convertedInvoiceId  String? // Link to converted invoice
   closedDate     DateTime?
-  reason         String?      // Legacy — use reasonLost for lost deals
+  reason         String?      @db.Text // Legacy — use reasonLost for lost deals
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -3075,7 +3132,7 @@ model Activity {
   contactId      String?
   type           String       // CALL, EMAIL, MEETING, NOTE, TASK, SYSTEM
   subject        String
-  description    String?
+  description    String? @db.Text
   dueDate        DateTime?
   completedAt    DateTime?
   createdBy      String
@@ -3095,7 +3152,7 @@ model CrmTask {
   companyId      String
   assignedTo     String?      // User ID
   title          String
-  description    String?
+  description    String? @db.Text
   dueDate        DateTime?
   priority       String       @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
   status         String       @default("OPEN")   // OPEN, IN_PROGRESS, COMPLETED, CANCELLED
@@ -3149,7 +3206,7 @@ model Employee {
   bankName           String?
   bankBranch         String?             // Bank branch name
   bankSortCode       String?             // Bank sort code / routing number
-  address            String?
+  address            String? @db.Text
   city               String?
   state              String?             // State / Province / Region
   postalCode         String?
@@ -3166,7 +3223,7 @@ model Employee {
   // Legacy emergency contact fields
   emergencyContact   String?
   emergencyPhone     String?
-  notes              String?
+  notes              String? @db.Text
   isActive           Boolean             @default(true)
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
@@ -3199,7 +3256,7 @@ model Department {
   organizationId String
   code           String
   name           String
-  description    String?
+  description    String? @db.Text
   parentId       String?
   managerId      String?
   costCenterId   String?
@@ -3222,7 +3279,7 @@ model JobTitle {
   organizationId String
   code           String
   title          String
-  description    String?
+  description    String? @db.Text
   level          String?
   isActive       Boolean      @default(true)
   createdAt      DateTime     @default(now())
@@ -3242,7 +3299,7 @@ model Position {
   jobTitleId     String
   departmentId   String
   status         PositionStatus @default(OPEN)
-  description    String?
+  description    String? @db.Text
   requirements   String?
   openedDate     DateTime       @default(now())
   closedDate     DateTime?
@@ -3270,7 +3327,7 @@ model PayrollRun {
   totalNetPay      Decimal       @default(0) @db.Decimal(19, 4)
   totalEmployerTax Decimal       @default(0) @db.Decimal(19, 4)
   transactionId    String?       @unique
-  notes            String?
+  notes            String? @db.Text
   processedBy      String?
   processedAt      DateTime?
   approvedBy       String?
@@ -3302,7 +3359,7 @@ model PayrollItem {
   otherDeductions   Decimal    @default(0) @db.Decimal(19, 4)
   netPay            Decimal    @default(0) @db.Decimal(19, 4)
   employerTaxes     Decimal    @default(0) @db.Decimal(19, 4)
-  notes             String?
+  notes             String? @db.Text
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
   employee          Employee   @relation(fields: [employeeId], references: [id])
@@ -3318,7 +3375,7 @@ model Benefit {
   organizationId String
   code           String
   name           String
-  description    String?
+  description    String? @db.Text
   benefitType    BenefitType
   employerCost   Decimal?            @db.Decimal(19, 4)
   employeeCost   Decimal?            @db.Decimal(19, 4)
@@ -3342,7 +3399,7 @@ model BenefitEnrollment {
   employeeCost   Decimal          @default(0) @db.Decimal(19, 4)
   employerCost   Decimal          @default(0) @db.Decimal(19, 4)
   status         EnrollmentStatus @default(ACTIVE)
-  notes          String?
+  notes          String? @db.Text
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   benefit        Benefit          @relation(fields: [benefitId], references: [id])
@@ -3357,7 +3414,7 @@ model LeaveType {
   organizationId     String
   code               String
   name               String
-  description        String?
+  description        String? @db.Text
   daysPerYear        Decimal?       @db.Decimal(8, 2)
   isPaid             Boolean        @default(true)
   requiresApproval   Boolean        @default(true)
@@ -3382,12 +3439,12 @@ model LeaveRequest {
   daysRequested   Decimal     @db.Decimal(8, 2)
   isHalfDay       Boolean     @default(false)
   halfDayPeriod   String?     // MORNING or AFTERNOON
-  reason          String?
+  reason          String? @db.Text
   attachmentUrl   String?
   status          LeaveStatus @default(PENDING)
   approvedBy      String?
   approvedAt      DateTime?
-  rejectionReason String?
+  rejectionReason String? @db.Text
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   approver        User?       @relation(fields: [approvedBy], references: [id])
@@ -3439,8 +3496,8 @@ model ExpenseClaim {
   projectId             String?            // Link to project for costing
   status                ExpenseClaimStatus @default(DRAFT)
   purpose               String?
-  notes                 String?
-  rejectionReason       String?
+  notes                 String? @db.Text
+  rejectionReason       String? @db.Text
   submittedAt           DateTime?
   approvedBy            String?
   approvedAt            DateTime?
@@ -3474,7 +3531,7 @@ model ExpenseItem {
   expenseDate    DateTime
   categoryId     String?      // GL Account ID for expense category
   category       String       // Display name fallback
-  description    String
+  description    String @db.Text
   amount         Decimal      @db.Decimal(19, 4)
   taxInclusive   Boolean      @default(false)
   taxRate        Decimal      @default(0) @db.Decimal(5, 2)
@@ -3483,7 +3540,7 @@ model ExpenseItem {
   receiptUrl     String?
   receiptName    String?      // Original filename
   merchantName   String?
-  notes          String?
+  notes          String? @db.Text
   createdAt      DateTime     @default(now())
   expenseClaim   ExpenseClaim @relation(fields: [expenseClaimId], references: [id], onDelete: Cascade)
   glAccount      ChartOfAccount? @relation(fields: [categoryId], references: [id])
@@ -3525,7 +3582,7 @@ model PerformanceReview {
   strengths           String?
   areasForImprovement String?
   goals               String?
-  comments            String?
+  comments            String? @db.Text
   status              ReviewStatus @default(DRAFT)
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
@@ -3568,7 +3625,7 @@ model ServiceWorkOrder {
   actualStart     DateTime?
   actualEnd       DateTime?
   technicianId    String?
-  description     String?
+  description     String? @db.Text
   resolution      String?
   laborHours      Decimal?           @db.Decimal(8, 2)
   laborCost       Decimal?           @db.Decimal(19, 4)
@@ -3598,7 +3655,7 @@ model ServiceTechnician {
   name                  String
   email                 String?
   phone                 String?
-  skills                String[]
+  skills                Json
   availability          String                 @default("AVAILABLE")
   isActive              Boolean                @default(true)
   createdAt             DateTime               @default(now())
@@ -3615,7 +3672,7 @@ model ServiceSLA {
   id             String             @id @default(cuid())
   organizationId String
   name           String
-  description    String?
+  description    String? @db.Text
   responseTime   Int
   resolutionTime Int
   priority       ServicePriority
@@ -3633,7 +3690,7 @@ model ServiceCatalog {
   organizationId      String
   serviceCode         String
   name                String
-  description         String?
+  description         String? @db.Text
   serviceType         ServiceType         @default(PROFESSIONAL)
   category            String?
   pricingModel        ServicePricingModel @default(FIXED_PRICE)
@@ -3655,7 +3712,7 @@ model ServiceCatalog {
   cancellationHours   Int?                @default(24)
   serviceUrl          String?
   serviceIcon         String?
-  tags                String[]            @default([])
+  tags                Json            @default("[]")
   metadata            Json? // Additional flexible fields
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
@@ -3682,16 +3739,16 @@ model ServiceActivity {
   serviceCatalogId String
   activityCode     String
   name             String
-  description      String?
+  description      String? @db.Text
   sequence         Int                    @default(1)
   estimatedHours   Decimal?               @db.Decimal(8, 2)
   standardRate     Decimal?               @db.Decimal(19, 4)
   skillRequired    ServiceSkillLevel      @default(STANDARD)
   isOptional       Boolean                @default(false)
   isMilestone      Boolean                @default(false)
-  dependencies     String[]               @default([]) // Activity codes that must complete first
-  deliverables     String[]               @default([])
-  qualityChecks    String[]               @default([])
+  dependencies     Json               @default("[]") // Activity codes that must complete first
+  deliverables     Json               @default("[]")
+  qualityChecks    Json               @default("[]")
   isActive         Boolean                @default(true)
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt
@@ -3709,17 +3766,17 @@ model ServiceOffering {
   serviceCatalogId   String
   offeringCode       String
   name               String
-  description        String?
+  description        String? @db.Text
   packagePrice       Decimal               @db.Decimal(19, 4)
   packageDuration    Int // total hours/days
   validityDays       Int                   @default(365)
   maxParticipants    Int?
   location           ServiceLocation       @default(CLIENT_SITE)
   deliveryMethod     ServiceDeliveryMethod @default(ON_SITE)
-  prerequisites      String[]              @default([])
-  includedActivities String[]              @default([]) // Activity codes
-  materials          String[]              @default([])
-  deliverables       String[]              @default([])
+  prerequisites      Json              @default("[]")
+  includedActivities Json              @default("[]") // Activity codes
+  materials          Json              @default("[]")
+  deliverables       Json              @default("[]")
   supportPeriodDays  Int?                  @default(30)
   warrantyPeriodDays Int?
   isActive           Boolean               @default(true)
@@ -3748,8 +3805,8 @@ model ServiceDelivery {
   plannedEndDate       DateTime
   actualStartDate      DateTime?
   actualEndDate        DateTime?
-  assignedTo           String[]               @default([]) // User IDs
-  location             String?
+  assignedTo           Json               @default("[]") // User IDs
+  location             String? @db.Text
   clientContactName    String?
   clientContactEmail   String?
   clientContactPhone   String?
@@ -3758,9 +3815,9 @@ model ServiceDelivery {
   progress             Int                    @default(0) // 0-100 percentage
   qualityScore         Int? // 1-5 rating
   customerSatisfaction Int? // 1-5 rating
-  notes                String?
-  deliverables         String[]               @default([])
-  completionCriteria   String[]               @default([])
+  notes                String? @db.Text
+  deliverables         Json               @default("[]")
+  completionCriteria   Json               @default("[]")
   signOffRequired      Boolean                @default(false)
   signOffBy            String? // User ID
   signOffDate          DateTime?
@@ -3795,7 +3852,7 @@ model ServiceBooking {
   confirmedDate      DateTime?
   status             ServiceBookingStatus @default(REQUESTED)
   priority           ServicePriority      @default(MEDIUM)
-  location           String?
+  location           String? @db.Text
   specialRequests    String?
   estimatedHours     Decimal?             @db.Decimal(8, 2)
   quotedPrice        Decimal?             @db.Decimal(19, 4)
@@ -3806,7 +3863,7 @@ model ServiceBooking {
   cancellationDate   DateTime?
   paymentTerms       String?
   paymentStatus      PaymentStatus?       @default(UNPAID)
-  notes              String?
+  notes              String? @db.Text
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
   organization       Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -3835,9 +3892,9 @@ model ServiceActivityEntry {
   progress        Int             @default(0) // 0-100 percentage
   qualityCheck    Boolean         @default(false)
   qualityNotes    String?
-  blockers        String[]        @default([])
+  blockers        Json        @default("[]")
   completionNotes String?
-  deliverables    String[]        @default([])
+  deliverables    Json        @default("[]")
   clientPresent   Boolean         @default(false)
   clientFeedback  String?
   billableHours   Decimal?        @db.Decimal(8, 2)
@@ -3862,7 +3919,7 @@ model ServiceTimeEntry {
   startTime      DateTime
   endTime        DateTime?
   durationHours  Decimal         @db.Decimal(8, 2)
-  description    String
+  description    String @db.Text
   workType       ServiceWorkType @default(DELIVERY)
   isBillable     Boolean         @default(true)
   hourlyRate     Decimal?        @db.Decimal(19, 4)
@@ -3892,8 +3949,8 @@ model ServiceResource {
   availability      ResourceAvailability @default(AVAILABLE)
   hourlyRate        Decimal?             @db.Decimal(19, 4)
   utilizationTarget Int                  @default(80) // Target utilization percentage
-  skills            String[]             @default([])
-  certifications    String[]             @default([])
+  skills            Json             @default("[]")
+  certifications    Json             @default("[]")
   isActive          Boolean              @default(true)
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
@@ -3911,7 +3968,7 @@ model MaintenancePlan {
   organizationId String
   planNumber     String
   name           String
-  description    String?
+  description    String? @db.Text
   assetId        String?
   planType       MaintenanceType        @default(PREVENTIVE)
   frequency      String?
@@ -3943,14 +4000,14 @@ model MaintenanceWorkOrder {
   scheduledDate     DateTime?
   completedDate     DateTime?
   technicianId      String?
-  description       String
+  description       String @db.Text
   resolution        String?
   laborHours        Decimal?           @db.Decimal(8, 2)
   laborCost         Decimal?           @db.Decimal(19, 4)
   partsCost         Decimal?           @db.Decimal(19, 4)
   totalCost         Decimal?           @db.Decimal(19, 4)
   downtimeHours     Decimal?           @db.Decimal(8, 2)
-  notes             String?
+  notes             String? @db.Text
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   asset             Asset?             @relation(fields: [assetId], references: [id])
@@ -3970,12 +4027,12 @@ model SparePart {
   organizationId String
   partNumber     String
   name           String
-  description    String?
+  description    String? @db.Text
   productId      String?
   minimumStock   Decimal?         @db.Decimal(12, 4)
   quantityOnHand Decimal          @default(0) @db.Decimal(12, 4)
   unitCost       Decimal?         @db.Decimal(19, 4)
-  location       String?
+  location       String? @db.Text
   isActive       Boolean          @default(true)
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
@@ -4007,7 +4064,7 @@ model Report {
   id             String            @id @default(cuid())
   organizationId String
   name           String
-  description    String?
+  description    String? @db.Text
   reportType     ReportType
   category       String?
   query          Json
@@ -4035,7 +4092,7 @@ model Dashboard {
   id             String            @id @default(cuid())
   organizationId String
   name           String
-  description    String?
+  description    String? @db.Text
   layout         Json
   isDefault      Boolean           @default(false)
   isPublic       Boolean           @default(false)
@@ -4106,7 +4163,7 @@ model DataCube {
   id              String       @id @default(cuid())
   organizationId  String
   name            String
-  description     String?
+  description     String? @db.Text
   sourceType      String
   dimensions      Json
   measures        Json
@@ -4124,7 +4181,7 @@ model ApprovalWorkflow {
   id             String             @id @default(cuid())
   organizationId String
   name           String
-  description    String?
+  description    String? @db.Text
   entityType     ApprovalEntityType
   isActive       Boolean            @default(true)
   createdAt      DateTime           @default(now())
@@ -4142,7 +4199,7 @@ model ApprovalStep {
   workflowId      String
   stepOrder       Int
   name            String
-  description     String?
+  description     String? @db.Text
   approverType    ApproverType
   approverIds     Json?
   approverRoles   Json?
@@ -4162,7 +4219,7 @@ model ApprovalRule {
   id          String           @id @default(cuid())
   workflowId  String
   name        String
-  description String?
+  description String? @db.Text
   conditions  Json
   isActive    Boolean          @default(true)
   createdAt   DateTime         @default(now())
@@ -4201,7 +4258,7 @@ model ApprovalAction {
   approverId  String
   action      ApprovalActionType
   delegatedTo String?
-  comment     String?
+  comment     String? @db.Text
   createdAt   DateTime           @default(now())
   approver    User               @relation("ApprovalActions", fields: [approverId], references: [id])
   delegateTo  User?              @relation("DelegatedApprovals", fields: [delegatedTo], references: [id])
@@ -4283,7 +4340,7 @@ model RowLevelSecurityRule {
   id             String       @id @default(cuid())
   organizationId String
   name           String
-  description    String?
+  description    String? @db.Text
   entityType     String
   roleId         String?
   userId         String?
@@ -4328,7 +4385,7 @@ model ItemMaster {
   organizationId String
   masterNumber   String
   name           String
-  description    String?
+  description    String? @db.Text
   category       String?
   productId      String?             @unique
   attributeSetId String?
@@ -4369,7 +4426,7 @@ model AttributeSet {
   id             String           @id @default(cuid())
   organizationId String
   name           String
-  description    String?
+  description    String? @db.Text
   attributes     Json
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
@@ -4402,7 +4459,7 @@ model PriceList {
   id             String          @id @default(cuid())
   organizationId String
   name           String
-  description    String?
+  description    String? @db.Text
   currency       String          @default("USD")
   isDefault      Boolean         @default(false)
   validFrom      DateTime?
@@ -4439,7 +4496,7 @@ model Discount {
   organizationId String
   code           String
   name           String
-  description    String?
+  description    String? @db.Text
   discountType   DiscountType
   value          Decimal      @db.Decimal(19, 4)
   minPurchase    Decimal?     @db.Decimal(19, 4)
@@ -4462,7 +4519,7 @@ model Promotion {
   id             String        @id @default(cuid())
   organizationId String
   name           String
-  description    String?
+  description    String? @db.Text
   promotionType  PromotionType
   rules          Json
   discountType   DiscountType
@@ -4488,7 +4545,7 @@ model CycleCount {
   scheduledDate  DateTime
   countedDate    DateTime?
   assignedToId   String?
-  notes          String?
+  notes          String? @db.Text
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
   assignedTo     User?               @relation(fields: [assignedToId], references: [id])
@@ -4508,7 +4565,7 @@ model CycleCountItem {
   countedQty    Decimal?   @db.Decimal(12, 4)
   variance      Decimal?   @db.Decimal(12, 4)
   varianceValue Decimal?   @db.Decimal(19, 4)
-  notes         String?
+  notes         String? @db.Text
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
   cycleCount    CycleCount @relation(fields: [cycleCountId], references: [id], onDelete: Cascade)
@@ -4584,7 +4641,7 @@ model StandardCost {
   approvedAt       DateTime?
   rejectedBy       String?
   rejectedAt       DateTime?
-  rejectionReason  String?
+  rejectionReason  String? @db.Text
 
   // Localization support
   baseCurrency   String @default("USD")
@@ -4601,7 +4658,7 @@ model StandardCost {
   lastRollupDate DateTime?
   rollupSource   String? // 'MANUAL' | 'BOM_ROLLUP' | 'IMPORT'
 
-  notes     String?
+  notes     String? @db.Text
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -4633,7 +4690,7 @@ model CostVariance {
   quantity         Decimal       @db.Decimal(12, 4)
   referenceType    String?
   referenceId      String?
-  notes            String?
+  notes            String? @db.Text
   createdAt        DateTime      @default(now())
   organization     Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   product          Product       @relation(fields: [productId], references: [id])
@@ -4660,7 +4717,7 @@ model LandedCost {
   allocationMethod LandedCostAllocation       @default(BY_VALUE)
   isAllocated      Boolean                    @default(false)
   allocatedAt      DateTime?
-  notes            String?
+  notes            String? @db.Text
   createdAt        DateTime                   @default(now())
   updatedAt        DateTime                   @updatedAt
   organization     Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -4692,7 +4749,7 @@ model CostRevaluation {
   productId         String?
   warehouseId       String?
   revaluationDate   DateTime
-  reason            String
+  reason            String @db.Text
   oldUnitCost       Decimal             @db.Decimal(19, 4)
   newUnitCost       Decimal             @db.Decimal(19, 4)
   quantity          Decimal             @db.Decimal(12, 4)
@@ -4701,7 +4758,7 @@ model CostRevaluation {
   status            RevaluationStatus   @default(DRAFT)
   approvedById      String?
   approvedAt        DateTime?
-  notes             String?
+  notes             String? @db.Text
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
   approvedBy        User?               @relation(fields: [approvedById], references: [id])
@@ -4728,7 +4785,7 @@ model DemandForecast {
   actualDemand     Decimal?            @db.Decimal(12, 4)
   accuracy         Decimal?            @db.Decimal(5, 2)
   confidenceLevel  Decimal?            @db.Decimal(5, 2)
-  notes            String?
+  notes            String? @db.Text
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
   organization     Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -4753,7 +4810,7 @@ model SafetyStock {
   isActive          Boolean             @default(true)
   effectiveFrom     DateTime
   effectiveTo       DateTime?
-  notes             String?
+  notes             String? @db.Text
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
   organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -4779,7 +4836,7 @@ model ReorderPolicy {
   isActive        Boolean             @default(true)
   effectiveFrom   DateTime
   effectiveTo     DateTime?
-  notes           String?
+  notes           String? @db.Text
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
   organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -4805,7 +4862,7 @@ model ProductPlanning {
   shelfLifeDays         Int?
   lotControl            Boolean           @default(false)
   serialControl         Boolean           @default(false)
-  notes                 String?
+  notes                 String? @db.Text
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
   vendor                Vendor?           @relation(fields: [defaultVendorId], references: [id])
@@ -4834,7 +4891,7 @@ model QualityInspection {
   inspectedAt      DateTime?
   dueDate          DateTime?
   priority         InspectionPriority     @default(NORMAL)
-  notes            String?
+  notes            String? @db.Text
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt
   coa              CertificateOfAnalysis?
@@ -4857,7 +4914,7 @@ model QualityMeasurement {
   measuredValue String
   uom           String?
   isCompliant   Boolean           @default(true)
-  notes         String?
+  notes         String? @db.Text
   createdAt     DateTime          @default(now())
   inspection    QualityInspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
 
@@ -4876,7 +4933,7 @@ model QualityHold {
   quantity          Decimal             @db.Decimal(12, 4)
   warehouseId       String?
   holdType          HoldType            @default(QUALITY)
-  holdReason        String
+  holdReason        String @db.Text
   status            HoldStatus          @default(ACTIVE)
   dispositionAction DispositionAction?
   dispositionNotes  String?
@@ -4913,7 +4970,7 @@ model CertificateOfAnalysis {
   conclusion      String
   issuedById      String
   issuedAt        DateTime
-  notes           String?
+  notes           String? @db.Text
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   inspection      QualityInspection @relation(fields: [inspectionId], references: [id])
@@ -4931,7 +4988,7 @@ model NonConformanceReport {
   organizationId      String
   ncrNumber           String
   title               String
-  description         String
+  description         String @db.Text
   source              NCRSource
   severity            NCRSeverity  @default(MEDIUM)
   status              NCRStatus    @default(OPEN)
@@ -4948,7 +5005,7 @@ model NonConformanceReport {
   targetCloseDate     DateTime?
   closedAt            DateTime?
   closedById          String?
-  notes               String?
+  notes               String? @db.Text
   localComplianceData Json? // Country-specific compliance data (UNBS, KEBS, etc.)
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
@@ -4976,7 +5033,7 @@ model CAPA {
   investigationMethod CAPAInvestigationMethod?
   type                CAPAType
   title               String
-  description         String
+  description         String @db.Text
   rootCause           String?
   correctiveAction    String?
   preventiveAction    String?
@@ -4991,7 +5048,7 @@ model CAPA {
   closureDate         DateTime?
   closedAt            DateTime?
   closedById          String?
-  notes               String?
+  notes               String? @db.Text
   localData           Json? // Country-specific compliance data (UNBS, KEBS, etc.)
   createdAt           DateTime                 @default(now())
   updatedAt           DateTime                 @updatedAt
@@ -5015,14 +5072,14 @@ model CapaTask {
   capaId         String
   taskNumber     String
   title          String
-  description    String?
+  description    String? @db.Text
   assignedToId   String?
   dueDate        DateTime?
   status         CapaTaskStatus @default(OPEN)
   priority       CAPAPriority   @default(MEDIUM)
   completedAt    DateTime?
   completedById  String?
-  notes          String?
+  notes          String? @db.Text
   localData      Json? // Country-specific task data
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -5056,7 +5113,7 @@ model TaxJurisdiction {
   requiresEInvoicing    Boolean           @default(false)
   metadata              Json? // Store EFRIS/eTIMS config, API keys, etc.
   isActive              Boolean           @default(true)
-  notes                 String?
+  notes                 String? @db.Text
   parentJurisdictionId  String?
   createdAt             DateTime          @default(now())
   updatedAt             DateTime          @updatedAt
@@ -5095,7 +5152,7 @@ model TaxRule {
   calculationFormula String?
   priority           Int              @default(1) // New: Priority for rule evaluation
   isActive           Boolean          @default(true)
-  notes              String?
+  notes              String? @db.Text
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
   invoiceTaxLines    InvoiceTaxLine[]
@@ -5129,9 +5186,9 @@ model TaxExemption {
   documentUrl       String? // New: URL to uploaded PDF certificate
   documentPath      String? // New: File system path
   efrisReason       String? // New: EFRIS exemption reason code
-  reason            String? // Human readable reason
+  reason            String? @db.Text // Human readable reason
   isActive          Boolean      @default(true)
-  notes             String?
+  notes             String? @db.Text
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
   organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -5204,8 +5261,8 @@ model AssemblyTransaction {
   status                 AssemblyStatus   @default(DRAFT)
   approvedBy             String?
   approvedAt             DateTime?
-  notes                  String?
-  attachments            String[]
+  notes                  String? @db.Text
+  attachments            Json
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
   lines                  AssemblyLine[]
@@ -5237,7 +5294,7 @@ model AssemblyLine {
   costVariance          Decimal             @default(0) @db.Decimal(19, 4)
   lotId                 String?
   warehouseId           String?
-  notes                 String?
+  notes                 String? @db.Text
   createdAt             DateTime            @default(now())
   assemblyTransaction   AssemblyTransaction @relation(fields: [assemblyTransactionId], references: [id], onDelete: Cascade)
   componentProduct      Product             @relation(fields: [componentProductId], references: [id])
@@ -5255,8 +5312,8 @@ model WastageTracking {
   totalWastageQuantity  Decimal             @db.Decimal(12, 4)
   totalWastageCost      Decimal             @db.Decimal(19, 4)
   wastagePercentage     Decimal             @db.Decimal(6, 2)
-  wastageReasons        String[]
-  description           String?
+  wastageReasons        Json
+  description           String? @db.Text
   scrapValue            Decimal             @default(0) @db.Decimal(19, 4)
   scrapAccountId        String?
   documentationUrl      String?
@@ -5288,7 +5345,7 @@ model UGExcisableDuty {
   whtRate               Decimal              @default(0) @db.Decimal(5, 2)
   whtAmount             Decimal              @default(0) @db.Decimal(19, 4)
   exciseDutyAccountId   String?
-  notes                 String?
+  notes                 String? @db.Text
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
   assemblyTransaction   AssemblyTransaction  @relation(fields: [assemblyTransactionId], references: [id], onDelete: Cascade)
@@ -5316,7 +5373,7 @@ model ManufacturingOverhead {
   id                String                   @id @default(cuid())
   organizationId    String
   name              String
-  description       String?
+  description       String? @db.Text
   allocationMethod  OverheadAllocationMethod
   rate              Decimal                  @db.Decimal(12, 4)
   overheadAccountId String?
@@ -5336,7 +5393,7 @@ model EFRISExcisableList {
   organizationId String
   categoryCode   String       // EFRIS excise duty code (e.g., "LED110000")
   categoryName   String       // Description (e.g., "Beer, Stout, Porter & other fermented beverages")
-  description    String?
+  description    String? @db.Text
   exciseRate     Decimal      @db.Decimal(21, 8) // Rate value (e.g., 0.60 for 60%, or 1500 for UGX1500)
   exciseUnit     String?      // EFRIS unit code: 101=%, 102=per Litre, 103=per Kg, etc.
   exciseRule     String?      // 1=by rate/percentage, 2=by quantity/fixed amount
@@ -5407,7 +5464,7 @@ model InterBranchTransfer {
   fromBranchId     String
   toBranchId       String
   status           IBTStatus   @default(DRAFT)
-  notes            String?
+  notes            String? @db.Text
   requestedById    String?
   approvedById     String?
   shippedAt        DateTime?
@@ -5688,6 +5745,9 @@ enum WarehouseType {
   SHIPPING
   QA_HOLD
   THIRD_PARTY
+  TRANSIT
+  DAMAGED
+  QUARANTINE
 }
 
 enum BinType {
@@ -6555,7 +6615,7 @@ model SystemSettings {
   showStats           Boolean  @default(true)
   showDemoCredentials Boolean  @default(true)
   // Contact Info
-  address             String?
+  address             String? @db.Text
   city                String?
   state               String?
   zipCode             String?
@@ -6593,11 +6653,11 @@ model SocialMediaLink {
 model PricingPlan {
   id               String         @id @default(cuid())
   name             String // "Starter", "Professional", "Enterprise"
-  description      String?
+  description      String? @db.Text
   price            Decimal        @db.Decimal(10, 2)
   currency         String         @default("USD")
   billingPeriod    String         @default("MONTHLY") // "MONTHLY", "YEARLY"
-  features         String[] // Array of feature descriptions
+  features         Json // Array of feature descriptions
   isPopular        Boolean        @default(false)
   displayOrder     Int            @default(0)
   isActive         Boolean        @default(true)
@@ -6614,7 +6674,7 @@ model PricingPlan {
 model FeatureHighlight {
   id               String         @id @default(cuid())
   title            String
-  description      String
+  description      String @db.Text
   icon             String? // Icon name or path
   color            String         @default("blue") // Color theme
   link             String? // Optional link for "Learn more"
@@ -6633,7 +6693,7 @@ model Testimonial {
   customerName     String
   customerRole     String?
   companyName      String?
-  content          String
+  content          String @db.Text
   rating           Int?           @default(5)
   avatar           String?
   displayOrder     Int            @default(0)
@@ -6720,7 +6780,7 @@ model ForeignExchangeGainLoss {
   glAccountId         String       // GL account where gain/loss was posted
   
   // References
-  notes               String?
+  notes               String? @db.Text
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
   

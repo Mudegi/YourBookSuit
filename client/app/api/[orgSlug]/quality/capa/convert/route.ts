@@ -7,7 +7,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { hasPermission, Permission } from '@/lib/permissions';
-import { capaService } from '@/services/capa.service';
+
+const getCapaService = async () => (await import('@/services/capa.service')).capaService;
 
 export async function POST(
   request: NextRequest,
@@ -45,7 +46,7 @@ export async function POST(
     }
 
     // Convert NCR to CAPA using service
-    const capa = await capaService.convertNCRToCAPA(ncrId, organization.id, riskLevel);
+    const capa = await (await getCapaService()).convertNCRToCAPA(ncrId, organization.id, riskLevel);
 
     return NextResponse.json({
       success: true,

@@ -8,7 +8,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { hasPermission, Permission } from '@/lib/permissions';
-import { capaService } from '@/services/capa.service';
+
+const getCapaService = async () => (await import('@/services/capa.service')).capaService;
 
 export async function POST(
   request: NextRequest,
@@ -62,7 +63,7 @@ export async function POST(
     }
 
     // Create task using service
-    const task = await capaService.createCAPATask(capaId, organization.id, {
+    const task = await (await getCapaService()).createCAPATask(capaId, organization.id, {
       title,
       description,
       assignedToId,

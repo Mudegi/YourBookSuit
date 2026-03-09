@@ -5,6 +5,7 @@
  */
 
 import { Prisma, MovementType } from '@prisma/client';
+import { WarehouseService } from '@/services/warehouse/warehouse.service';
 
 interface StockMovementContext {
   transactionType: string;
@@ -25,7 +26,8 @@ export class InventoryService {
     productId: string,
     warehouseLocation: string,
     quantity: number,
-    context: StockMovementContext
+    context: StockMovementContext,
+    warehouseId?: string
   ) {
     // Get or create inventory item
     let inventoryItem = await tx.inventoryItem.findUnique({
@@ -85,12 +87,24 @@ export class InventoryService {
         unitCost: new Prisma.Decimal(averageCost),
         totalCost: new Prisma.Decimal(-totalCost), // Negative for deduction
         warehouseLocation: warehouseLocation || 'Main',
+        warehouseId: warehouseId || null,
         referenceType: context.transactionType,
         referenceId: context.transactionId,
         notes: context.notes || `${context.transactionType}: ${context.transactionNumber}`,
         movementDate: new Date(),
       },
     });
+
+    // Sync WarehouseStockLevel if warehouseId provided
+    if (warehouseId) {
+      try {
+        await WarehouseService.updateStockLevel(
+          tx, organizationId, warehouseId, productId, -deductQty, averageCost
+        );
+      } catch (err) {
+        console.warn('[InventoryService] Failed to sync warehouse stock level:', err);
+      }
+    }
 
     return {
       inventoryItem,
@@ -110,7 +124,8 @@ export class InventoryService {
     warehouseLocation: string,
     quantity: number,
     context: StockMovementContext,
-    unitCost?: number
+    unitCost?: number,
+    warehouseId?: string
   ) {
     // Get or create inventory item
     let inventoryItem = await tx.inventoryItem.findUnique({
@@ -172,12 +187,24 @@ export class InventoryService {
         unitCost: new Prisma.Decimal(addCost),
         totalCost: new Prisma.Decimal(addedValue), // Positive for addition
         warehouseLocation: warehouseLocation || 'Main',
+        warehouseId: warehouseId || null,
         referenceType: context.transactionType,
         referenceId: context.transactionId,
         notes: context.notes || `${context.transactionType}: ${context.transactionNumber}`,
         movementDate: new Date(),
       },
     });
+
+    // Sync WarehouseStockLevel if warehouseId provided
+    if (warehouseId) {
+      try {
+        await WarehouseService.updateStockLevel(
+          tx, organizationId, warehouseId, productId, quantity, addCost
+        );
+      } catch (err) {
+        console.warn('[InventoryService] Failed to sync warehouse stock level:', err);
+      }
+    }
 
     return {
       inventoryItem,

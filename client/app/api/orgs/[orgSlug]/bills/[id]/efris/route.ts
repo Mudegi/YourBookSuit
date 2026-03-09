@@ -107,7 +107,7 @@ export async function POST(
       stock_movement_date: bill.billDate.toISOString().split('T')[0],
       supplier_name: bill.vendor.companyName,
       supplier_tin: bill.vendor.taxId || '',
-      stock_in_type: (bill as any).stockInType || \"102\", // Use bill's stockInType or default to Local Purchase
+      stock_in_type: (bill as any).stockInType || "102", // Use bill's stockInType or default to Local Purchase
       items: billItemsWithProducts,
       remarks: `Bill ${bill.billNumber} - Purchase from ${bill.vendor.companyName}`,
     };

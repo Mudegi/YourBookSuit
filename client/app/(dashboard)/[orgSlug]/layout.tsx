@@ -412,6 +412,7 @@ export default function DashboardLayout({
         { name: 'Stock Movements', href: `/${orgSlug}/inventory/movements` },
         { name: 'Adjustments', href: `/${orgSlug}/inventory/adjustments` },
         { name: 'Stock Decrease', href: `/${orgSlug}/inventory/stock-decrease` },
+        { name: 'Warehouse Dashboard', href: `/${orgSlug}/warehouse/dashboard` },
         { name: 'Warehouses', href: `/${orgSlug}/warehouse/warehouses` },
         { name: 'Transfer Orders', href: `/${orgSlug}/warehouse/transfer-orders` },
         { name: 'Cycle Counts', href: `/${orgSlug}/inventory/cycle-counts` },

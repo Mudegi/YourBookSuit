@@ -119,6 +119,20 @@
 			"command": "cd /d d:\\YourBookSuit\\client && npx prisma generate",
 			"isBackground": false,
 			"group": "build"
+		},
+		{
+			"label": "dev-server",
+			"type": "shell",
+			"command": "cd d:\\YourBookSuit\\client && npx next dev -p 3000",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "dev-server-2",
+			"type": "shell",
+			"command": "cd d:\\YourBookSuit\\client; npx next dev -p 3000",
+			"isBackground": true,
+			"problemMatcher": []
 		}
 	]
 }

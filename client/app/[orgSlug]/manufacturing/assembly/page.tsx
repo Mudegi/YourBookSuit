@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 
 type BomOption = {
   id: string;
@@ -38,6 +39,7 @@ type OrgInfo = {
 
 export default function AssemblyPage() {
   const params = useParams();
+  const router = useRouter();
   const orgSlug = params?.orgSlug as string;
 
   const [boms, setBoms] = useState<BomOption[]>([]);
@@ -219,9 +221,17 @@ export default function AssemblyPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Assembly Builds</h1>
-        <p className="text-gray-600">Execute build assemblies, preview cost rollup, and post to GL.</p>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => router.push(`/${orgSlug}`)}
+          className="p-2 rounded-lg hover:bg-gray-100"
+        >
+          <ArrowLeft className="h-5 w-5 text-gray-500" />
+        </button>
+        <div>
+          <h1 className="text-3xl font-bold">Assembly Builds</h1>
+          <p className="text-gray-600">Execute build assemblies, preview cost rollup, and post to GL.</p>
+        </div>
       </div>
 
       {loading && <div className="text-sm text-gray-600">Loading...</div>}

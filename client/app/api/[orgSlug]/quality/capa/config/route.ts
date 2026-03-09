@@ -8,7 +8,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth } from '@/lib/api-auth';
 import prisma from '@/lib/prisma';
 import { hasPermission, Permission } from '@/lib/permissions';
-import { capaService } from '@/services/capa.service';
+
+const getCapaService = async () => (await import('@/services/capa.service')).capaService;
 
 export async function GET(
   request: NextRequest,
@@ -38,7 +39,8 @@ export async function GET(
     const includeStats = searchParams.get('stats') === 'true';
 
     // Get form configuration
-    const config = await capaService.getCAPAFormConfig(organization.id);
+    const svc = await getCapaService();
+    const config = await svc.getCAPAFormConfig(organization.id);
 
     let response: any = {
       success: true,
@@ -47,7 +49,7 @@ export async function GET(
 
     // Include statistics if requested
     if (includeStats) {
-      const stats = await capaService.getCAPAStatistics(organization.id);
+      const stats = await svc.getCAPAStatistics(organization.id);
       response.data.statistics = stats;
     }
 

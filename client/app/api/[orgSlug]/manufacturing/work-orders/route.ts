@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { ensurePermission, requireOrgMembership } from '@/lib/access';
 import prisma from '@/lib/prisma';
-import { Permission } from '@/lib/permissions';
 import { workOrderSchema } from '@/lib/validation';
+import { WorkOrderService } from '@/services/manufacturing/work-order.service';
 
 function generateWorkOrderNumber(): string {
   const now = new Date();
@@ -20,51 +20,9 @@ export async function GET(_req: NextRequest, { params }: { params: { orgSlug: st
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
-    const { org, membership } = await requireOrgMembership(user.id, params.orgSlug);
-    ensurePermission(membership.role, Permission.VIEW_MANUFACTURING);
+    const { org } = await requireOrgMembership(user.id, params.orgSlug);
 
-    const workOrders = await prisma.workOrder.findMany({
-      where: { organizationId: org.id },
-      include: {
-        product: { select: { id: true, sku: true, name: true } },
-        bom: { select: { id: true, version: true, name: true } },
-        routing: { select: { id: true, version: true, name: true } },
-        materials: {
-          include: {
-            component: { select: { id: true, sku: true, name: true } },
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-    });
-
-    const data = workOrders.map((wo) => ({
-      id: wo.id,
-      workOrderNumber: wo.workOrderNumber,
-      productId: wo.productId,
-      productSku: wo.product?.sku,
-      productName: wo.product?.name,
-      status: wo.status,
-      quantityPlanned: Number(wo.quantityPlanned),
-      quantityCompleted: Number(wo.quantityCompleted),
-      quantityScrapped: Number(wo.quantityScrapped),
-      dueDate: wo.dueDate,
-      priority: wo.priority,
-      bom: wo.bom ? { id: wo.bom.id, version: wo.bom.version, name: wo.bom.name } : null,
-      routing: wo.routing ? { id: wo.routing.id, version: wo.routing.version, name: wo.routing.name } : null,
-      materials: wo.materials.map((m) => ({
-        id: m.id,
-        componentId: m.componentId,
-        componentSku: m.component?.sku,
-        componentName: m.component?.name,
-        requiredQuantity: Number(m.requiredQuantity),
-        issuedQuantity: Number(m.issuedQuantity),
-        scrapPercent: Number(m.scrapPercent),
-        backflush: m.backflush,
-      })),
-      createdAt: wo.createdAt,
-    }));
+    const data = await WorkOrderService.listWorkOrders(org.id);
 
     return NextResponse.json({ success: true, data });
   } catch (error) {
@@ -80,7 +38,7 @@ export async function POST(request: NextRequest, { params }: { params: { orgSlug
     if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
     const { org, membership } = await requireOrgMembership(user.id, params.orgSlug);
-    ensurePermission(membership.role, Permission.MANAGE_MANUFACTURING);
+    ensurePermission(membership.role, 'create');
     const body = await request.json();
     const parsed = workOrderSchema.safeParse(body);
 

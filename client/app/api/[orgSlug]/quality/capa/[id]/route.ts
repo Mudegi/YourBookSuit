@@ -9,7 +9,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { hasPermission, Permission } from '@/lib/permissions';
-import { capaService } from '@/services/capa.service';
+
+const getCapaService = async () => (await import('@/services/capa.service')).capaService;
 
 export async function GET(
   request: NextRequest,
@@ -36,7 +37,7 @@ export async function GET(
     }
 
     // Get CAPA using service
-    const capa = await capaService.getCAPA(params.id, organization.id);
+    const capa = await (await getCapaService()).getCAPA(params.id, organization.id);
 
     return NextResponse.json({
       success: true,
@@ -102,7 +103,7 @@ export async function PUT(
     } = body;
 
     // Update CAPA using service
-    const capa = await capaService.updateCAPA(params.id, organization.id, {
+    const capa = await (await getCapaService()).updateCAPA(params.id, organization.id, {
       title,
       description,
       source,

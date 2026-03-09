@@ -4,6 +4,7 @@ import { ensurePermission, requireOrgMembership } from '@/lib/access';
 import prisma from '@/lib/prisma';
 import { Permission } from '@/lib/permissions';
 import { bomSchema } from '@/lib/validation';
+import { BOMService } from '@/services/manufacturing/bom.service';
 
 // GET /api/[orgSlug]/manufacturing/boms
 export async function GET(_req: NextRequest, { params }: { params: { orgSlug: string } }) {
@@ -12,48 +13,9 @@ export async function GET(_req: NextRequest, { params }: { params: { orgSlug: st
     if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
     const { org, membership } = await requireOrgMembership(user.id, params.orgSlug);
-    ensurePermission(membership.role, Permission.VIEW_MANUFACTURING);
+    ensurePermission(membership.role, 'read');
 
-    const boms = await prisma.billOfMaterial.findMany({
-      where: { organizationId: org.id },
-      include: {
-        product: { select: { id: true, sku: true, name: true } },
-        lines: {
-          include: {
-            component: { select: { id: true, sku: true, name: true } },
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-    });
-
-    const data = boms.map((bom) => ({
-      id: bom.id,
-      productId: bom.productId,
-      productSku: bom.product?.sku,
-      productName: bom.product?.name,
-      name: bom.name,
-      version: bom.version,
-      status: bom.status,
-      isDefault: bom.isDefault,
-      yieldPercent: Number(bom.yieldPercent),
-      scrapPercent: Number(bom.scrapPercent),
-      effectiveFrom: bom.effectiveFrom,
-      effectiveTo: bom.effectiveTo,
-      lines: bom.lines.map((line) => ({
-        id: line.id,
-        componentId: line.componentId,
-        componentSku: line.component?.sku,
-        componentName: line.component?.name,
-        quantityPer: Number(line.quantityPer),
-        scrapPercent: Number(line.scrapPercent),
-        backflush: line.backflush,
-        operationSeq: line.operationSeq,
-      })),
-      createdAt: bom.createdAt,
-    }));
-
+    const data = await BOMService.listBOMs(org.id);
     return NextResponse.json({ success: true, data });
   } catch (error) {
     console.error('Error listing BOMs:', error);
@@ -68,7 +30,7 @@ export async function POST(request: NextRequest, { params }: { params: { orgSlug
     if (!user) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
 
     const { org, membership } = await requireOrgMembership(user.id, params.orgSlug);
-    ensurePermission(membership.role, Permission.MANAGE_MANUFACTURING);
+    ensurePermission(membership.role, 'create');
     const body = await request.json();
     const parsed = bomSchema.safeParse(body);
 
@@ -88,6 +50,16 @@ export async function POST(request: NextRequest, { params }: { params: { orgSlug
     }
 
     const componentIds = Array.from(new Set(input.lines.map((l) => l.componentId)));
+
+    // Circular reference check
+    const cycle = await BOMService.detectCircularReference(input.productId, componentIds, org.id);
+    if (cycle) {
+      return NextResponse.json(
+        { success: false, error: `Circular reference detected: ${cycle.join(' → ')}` },
+        { status: 400 }
+      );
+    }
+
     const components = await prisma.product.findMany({
       where: { id: { in: componentIds }, organizationId: org.id },
       select: { id: true },

@@ -3,8 +3,6 @@
  * Automatically selects and initializes the correct compliance pack based on country
  */
 
-import { initializeUgandaURAPack } from './uganda-ura-compliance';
-
 export interface CompliancePackInfo {
   country: string;
   countryName: string;
@@ -130,6 +128,7 @@ export async function initializeCompliancePackForCountry(
   switch (countryCode) {
     case 'UG':
       // Uganda - Full implementation
+      const { initializeUgandaURAPack } = await import('./uganda-ura-compliance');
       const ugandaResult = await initializeUgandaURAPack(organizationId);
       return {
         success: ugandaResult.success,

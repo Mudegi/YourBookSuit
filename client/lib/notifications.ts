@@ -1,8 +1,6 @@
-import { Queue, Worker } from 'bullmq';
-import IORedis from 'ioredis';
+import type { Queue as QueueType, Worker as WorkerType } from 'bullmq';
 
 const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
-const connection = new IORedis(redisUrl);
 
 export type NotificationJob = {
   type: 'email' | 'sms';
@@ -11,15 +9,27 @@ export type NotificationJob = {
   body: string;
 };
 
-export const notificationQueue = new Queue<NotificationJob>('notifications', {
-  connection,
-});
+let _queue: QueueType<NotificationJob> | null = null;
 
-export async function enqueueNotification(job: NotificationJob) {
-  await notificationQueue.add('notify', job, { attempts: 3, backoff: { type: 'exponential', delay: 3000 } });
+async function getQueue() {
+  if (!_queue) {
+    const { Queue } = await import('bullmq');
+    const IORedis = (await import('ioredis')).default;
+    const connection = new IORedis(redisUrl);
+    _queue = new Queue<NotificationJob>('notifications', { connection });
+  }
+  return _queue;
 }
 
-export function createNotificationWorker(handler: (job: { data: NotificationJob }) => Promise<void>) {
+export async function enqueueNotification(job: NotificationJob) {
+  const queue = await getQueue();
+  await queue.add('notify', job, { attempts: 3, backoff: { type: 'exponential', delay: 3000 } });
+}
+
+export async function createNotificationWorker(handler: (job: { data: NotificationJob }) => Promise<void>) {
+  const { Worker } = await import('bullmq');
+  const IORedis = (await import('ioredis')).default;
+  const connection = new IORedis(redisUrl);
   return new Worker<NotificationJob>('notifications', handler, { connection, concurrency: 5 });
 }
 

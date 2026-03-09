@@ -8,7 +8,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuth } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { hasPermission, Permission } from '@/lib/permissions';
-import { capaService } from '@/services/capa.service';
+
+const getCapaService = async () => (await import('@/services/capa.service')).capaService;
 
 export async function POST(
   request: NextRequest,
@@ -60,7 +61,7 @@ export async function POST(
     } = body;
 
     // Create CAPA using service
-    const capa = await capaService.createCAPA({
+    const capa = await (await getCapaService()).createCAPA({
       organizationId: organization.id,
       title,
       description,
@@ -132,7 +133,7 @@ export async function GET(
     const dateTo = searchParams.get('dateTo') ? new Date(searchParams.get('dateTo')!) : undefined;
 
     // Get CAPAs using service
-    const capas = await capaService.getCAPAs(organization.id, {
+    const capas = await (await getCapaService()).getCAPAs(organization.id, {
       status,
       riskLevel,
       source,
