@@ -153,6 +153,7 @@ export class DoubleEntryService {
         referenceId: input.referenceId,
         status: TransactionStatus.POSTED,
         createdById: input.createdById,
+        attachments: [],
         ...(input.metadata ? { metadata: input.metadata } : {}),
         ledgerEntries: {
           create: input.entries.map(entry => {
