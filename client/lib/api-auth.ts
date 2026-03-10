@@ -6,6 +6,16 @@ import { getSessionFromHeaders, verifyToken } from './auth';
 import { cookies } from 'next/headers';
 import { UserRole } from '@prisma/client';
 
+// Check if an API key has a specific permission
+export function apiKeyHasPermission(apiKey: any, permission: string): boolean {
+  if (!apiKey || !apiKey.permissions) return false;
+  const perms = typeof apiKey.permissions === 'string'
+    ? JSON.parse(apiKey.permissions)
+    : apiKey.permissions;
+  if (Array.isArray(perms)) return perms.includes(permission) || perms.includes('*');
+  return false;
+}
+
 // Middleware to validate API keys for external system access
 export async function validateApiKey(request: NextRequest): Promise<{
   valid: boolean;
