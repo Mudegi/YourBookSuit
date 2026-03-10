@@ -73,7 +73,8 @@ interface InvoiceLineItem {
   unitPrice?: number;
   displayRate: number;
   listPrice?: number;
-  discount: number;
+  discount: number;       // raw user input (% value or dollar amount)
+  discountAmount: number; // computed dollar discount amount
   discountType: 'AMOUNT' | 'PERCENTAGE';
   taxRateId?: string;
   warehouseId?: string;
@@ -186,7 +187,7 @@ export default function IntelligentInvoicePage() {
 
   // Calculated totals
   const subtotal = items.reduce((sum, item) => sum + item.subtotal, 0);
-  const totalDiscount = items.reduce((sum, item) => sum + item.discount, 0);
+  const totalDiscount = items.reduce((sum, item) => sum + item.discountAmount, 0);
   const totalTax = items.reduce((sum, item) => sum + item.taxAmount, 0);
   const total = subtotal - totalDiscount + totalTax;
 
@@ -456,6 +457,7 @@ export default function IntelligentInvoicePage() {
       unitPrice: 0,
       displayRate: 0,
       discount: 0,
+      discountAmount: 0,
       discountType: 'AMOUNT',
       taxRateId: undefined,
       warehouseId: type === 'product' ? (resolvedWarehouseId || undefined) : undefined,
@@ -590,7 +592,7 @@ export default function IntelligentInvoicePage() {
       return {
         ...updated,
         subtotal: lineCalc.lineSubtotal,
-        discount: lineCalc.lineDiscount,
+        discountAmount: lineCalc.lineDiscount,
         taxAmount: selectedTaxRate ? lineCalc.lineTax : 0,
         total: selectedTaxRate ? lineCalc.lineTotal : lineCalc.lineNet,
       };
