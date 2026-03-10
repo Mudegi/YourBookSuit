@@ -132,8 +132,8 @@ export async function GET(
 
     if (search) {
       whereClause.OR = [
-        { commodityCategoryName: { contains: search, mode: 'insensitive' } },
-        { commodityCategoryCode: { contains: search, mode: 'insensitive' } },
+        { commodityCategoryName: { contains: search} },
+        { commodityCategoryCode: { contains: search} },
       ];
     }
 

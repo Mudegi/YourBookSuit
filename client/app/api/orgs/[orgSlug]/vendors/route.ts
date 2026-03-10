@@ -72,9 +72,9 @@ export async function GET(
     if (search && search.trim()) {
       const term = search.trim();
       where.OR = [
-        { companyName: { contains: term, mode: 'insensitive' } },
-        { email: { contains: term, mode: 'insensitive' } },
-        { phone: { contains: term, mode: 'insensitive' } },
+        { companyName: { contains: term} },
+        { email: { contains: term} },
+        { phone: { contains: term} },
       ];
     }
 

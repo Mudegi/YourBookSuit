@@ -9,8 +9,8 @@ async function checkDropdownUnits() {
         { code: '102' },
         { code: '104' },
         { code: '103' },
-        { name: { contains: 'Piece', mode: 'insensitive' } },
-        { name: { contains: 'Litre', mode: 'insensitive' } },
+        { name: { contains: 'Piece'} },
+        { name: { contains: 'Litre'} },
       ]
     },
     orderBy: { code: 'asc' }

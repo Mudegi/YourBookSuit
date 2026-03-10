@@ -63,7 +63,7 @@ const createOpeningBalanceEntry = async (
       OR: [
         { code: '3900' },
         { code: { startsWith: '390' } },
-        { name: { contains: 'Opening Balance', mode: 'insensitive' } },
+        { name: { contains: 'Opening Balance'} },
       ],
       isActive: true,
     },
@@ -149,11 +149,11 @@ export async function GET(
 
     if (search) {
       where.OR = [
-        { firstName: { contains: search, mode: 'insensitive' } },
-        { lastName: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
-        { phone: { contains: search, mode: 'insensitive' } },
-        { companyName: { contains: search, mode: 'insensitive' } },
+        { firstName: { contains: search} },
+        { lastName: { contains: search} },
+        { email: { contains: search} },
+        { phone: { contains: search} },
+        { companyName: { contains: search} },
       ];
     }
 

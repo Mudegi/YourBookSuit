@@ -21,8 +21,8 @@ export async function GET(req: NextRequest, { params }: { params: { orgSlug: str
     if (!includeInactive) where.isActive = true;
     if (search) {
       where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { code: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search} },
+        { code: { contains: search} },
       ];
     }
 

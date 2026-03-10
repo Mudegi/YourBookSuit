@@ -16,9 +16,9 @@ async function findSpecificUnits() {
         { code: 'pp' },
         { code: '102' },
         { code: '104' },
-        { name: { contains: 'Piece', mode: 'insensitive' } },
-        { name: { contains: 'Litre', mode: 'insensitive' } },
-        { name: { contains: 'Liter', mode: 'insensitive' } }
+        { name: { contains: 'Piece'} },
+        { name: { contains: 'Litre'} },
+        { name: { contains: 'Liter'} }
       ]
     }
   });

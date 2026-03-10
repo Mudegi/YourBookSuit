@@ -656,8 +656,8 @@ export class ReconciliationService {
     const gainLoss = Math.abs(bankTransaction.amount) - payment.amount;
     if (Math.abs(gainLoss) < 0.01) return;
 
-    const fxGainAccount = await prisma.chartOfAccount.findFirst({ where: { organizationId, accountName: { contains: 'Exchange Gain', mode: 'insensitive' }, accountType: 'REVENUE' } });
-    const fxLossAccount = await prisma.chartOfAccount.findFirst({ where: { organizationId, accountName: { contains: 'Exchange Loss', mode: 'insensitive' }, accountType: 'EXPENSE' } });
+    const fxGainAccount = await prisma.chartOfAccount.findFirst({ where: { organizationId, accountName: { contains: 'Exchange Gain'}, accountType: 'REVENUE' } });
+    const fxLossAccount = await prisma.chartOfAccount.findFirst({ where: { organizationId, accountName: { contains: 'Exchange Loss'}, accountType: 'EXPENSE' } });
     if (!fxGainAccount || !fxLossAccount) { console.warn('FX Gain/Loss accounts not found. Skipping.'); return; }
 
     const isGain = gainLoss > 0;

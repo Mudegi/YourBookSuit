@@ -381,7 +381,7 @@ export class ExpenseService {
         status: 'POSTED',
         OR: [
           vendorId ? { metadata: { path: ['payeeVendorId'], equals: vendorId } } : {},
-          searchName ? { description: { contains: searchName, mode: 'insensitive' } } : {},
+          searchName ? { description: { contains: searchName} } : {},
         ],
       },
       include: {

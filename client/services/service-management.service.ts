@@ -164,9 +164,9 @@ export class ServiceManagementService {
       ...(filters.isBillable !== undefined && { isBillable: filters.isBillable }),
       ...(filters.search && {
         OR: [
-          { name: { contains: filters.search, mode: 'insensitive' } },
-          { description: { contains: filters.search, mode: 'insensitive' } },
-          { serviceCode: { contains: filters.search, mode: 'insensitive' } },
+          { name: { contains: filters.search} },
+          { description: { contains: filters.search} },
+          { serviceCode: { contains: filters.search} },
         ],
       }),
     };

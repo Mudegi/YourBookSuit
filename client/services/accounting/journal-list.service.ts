@@ -359,9 +359,9 @@ export class JournalListService {
 
     if (filters.search) {
       where.OR = [
-        { description: { contains: filters.search, mode: 'insensitive' } },
-        { transactionNumber: { contains: filters.search, mode: 'insensitive' } },
-        { notes: { contains: filters.search, mode: 'insensitive' } },
+        { description: { contains: filters.search} },
+        { transactionNumber: { contains: filters.search} },
+        { notes: { contains: filters.search} },
       ];
     }
 

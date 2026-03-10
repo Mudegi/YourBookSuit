@@ -62,7 +62,7 @@ export async function GET(
         organizationId: org.id,
         OR: [] as any[],
       };
-      if (company.name) customerWhere.OR.push({ companyName: { contains: company.name, mode: 'insensitive' } });
+      if (company.name) customerWhere.OR.push({ companyName: { contains: company.name} });
       if (company.taxId) customerWhere.OR.push({ taxIdNumber: company.taxId });
       if (company.email) customerWhere.OR.push({ email: company.email });
 

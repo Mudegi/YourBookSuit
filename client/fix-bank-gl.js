@@ -46,9 +46,7 @@ async function linkBankGLAccounts() {
           accountType: 'ASSET',
           accountSubType: 'BANK',
           name: {
-            contains: bankAccount.bankName,
-            mode: 'insensitive'
-          },
+            contains: bankAccount.bankName},
           isActive: true
         }
       });

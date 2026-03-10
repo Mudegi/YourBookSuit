@@ -203,14 +203,14 @@ export default function OrganizationsPage() {
                       </td>
                       <td className="px-5 py-4 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {/* Approve */}
-                          {(org.subscriptionStatus === 'PENDING_APPROVAL' || org.subscriptionStatus === 'TRIAL_EXPIRED') && (
+                          {/* Activate / Approve */}
+                          {(org.subscriptionStatus === 'PENDING_APPROVAL' || org.subscriptionStatus === 'TRIAL' || org.subscriptionStatus === 'TRIAL_EXPIRED') && (
                             <button
                               onClick={() => performAction(org.id, 'APPROVE')}
                               disabled={actionLoading === org.id}
                               className="px-2.5 py-1 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 transition disabled:opacity-50"
                             >
-                              Approve
+                              {org.subscriptionStatus === 'TRIAL' ? 'Activate' : 'Approve'}
                             </button>
                           )}
 

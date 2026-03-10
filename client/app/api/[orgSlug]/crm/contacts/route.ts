@@ -52,12 +52,12 @@ export async function GET(req: NextRequest, { params }: { params: { orgSlug: str
 
     if (search) {
       where.OR = [
-        { firstName: { contains: search, mode: 'insensitive' } },
-        { lastName: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
-        { phone: { contains: search, mode: 'insensitive' } },
-        { title: { contains: search, mode: 'insensitive' } },
-        { company: { name: { contains: search, mode: 'insensitive' } } },
+        { firstName: { contains: search} },
+        { lastName: { contains: search} },
+        { email: { contains: search} },
+        { phone: { contains: search} },
+        { title: { contains: search} },
+        { company: { name: { contains: search} } },
       ];
     }
 

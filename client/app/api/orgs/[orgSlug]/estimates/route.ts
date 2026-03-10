@@ -22,10 +22,10 @@ export async function GET(
     if (customerId) where.customerId = customerId;
     if (search) {
       where.OR = [
-        { estimateNumber: { contains: search, mode: 'insensitive' } },
-        { customer: { companyName: { contains: search, mode: 'insensitive' } } },
-        { customer: { firstName:   { contains: search, mode: 'insensitive' } } },
-        { customer: { lastName:    { contains: search, mode: 'insensitive' } } },
+        { estimateNumber: { contains: search} },
+        { customer: { companyName: { contains: search} } },
+        { customer: { firstName:   { contains: search} } },
+        { customer: { lastName:    { contains: search} } },
       ];
     }
 

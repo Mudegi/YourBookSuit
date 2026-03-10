@@ -26,9 +26,9 @@ export async function GET(
 
     if (search) {
       where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { code: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search} },
+        { code: { contains: search} },
+        { description: { contains: search} },
       ];
     }
 

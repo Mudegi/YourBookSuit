@@ -390,10 +390,10 @@ export class StockMovementService {
 
     if (search) {
       where.OR = [
-        { product: { name: { contains: search, mode: 'insensitive' } } },
-        { product: { sku: { contains: search, mode: 'insensitive' } } },
-        { referenceNumber: { contains: search, mode: 'insensitive' } },
-        { notes: { contains: search, mode: 'insensitive' } },
+        { product: { name: { contains: search} } },
+        { product: { sku: { contains: search} } },
+        { referenceNumber: { contains: search} },
+        { notes: { contains: search} },
       ];
     }
 

@@ -710,8 +710,8 @@ export class SalesReceiptService {
         organizationId,
         isActive: true,
         OR: [
-          { name: { contains: 'COGS', mode: 'insensitive' } },
-          { name: { contains: 'Cost of Goods', mode: 'insensitive' } },
+          { name: { contains: 'COGS'} },
+          { name: { contains: 'Cost of Goods'} },
           { code: { startsWith: '5' } },
         ],
       },

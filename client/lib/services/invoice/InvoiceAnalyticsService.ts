@@ -224,14 +224,14 @@ export class InvoiceAnalyticsService {
     // Search filter
     if (filters.search) {
       where.OR = [
-        { invoiceNumber: { contains: filters.search, mode: 'insensitive' } },
-        { reference: { contains: filters.search, mode: 'insensitive' } },
+        { invoiceNumber: { contains: filters.search} },
+        { reference: { contains: filters.search} },
         {
           customer: {
             OR: [
-              { firstName: { contains: filters.search, mode: 'insensitive' } },
-              { lastName: { contains: filters.search, mode: 'insensitive' } },
-              { companyName: { contains: filters.search, mode: 'insensitive' } },
+              { firstName: { contains: filters.search} },
+              { lastName: { contains: filters.search} },
+              { companyName: { contains: filters.search} },
             ],
           },
         },

@@ -536,9 +536,9 @@ export class GLService {
       }),
       ...(searchTerm && {
         OR: [
-          { code: { contains: searchTerm, mode: 'insensitive' } },
-          { name: { contains: searchTerm, mode: 'insensitive' } },
-          { description: { contains: searchTerm, mode: 'insensitive' } },
+          { code: { contains: searchTerm} },
+          { name: { contains: searchTerm} },
+          { description: { contains: searchTerm} },
         ],
       }),
     };

@@ -75,10 +75,10 @@ export async function GET(req: NextRequest, { params }: { params: { orgSlug: str
     if (employmentType) where.employmentType = employmentType;
     if (search) {
       where.OR = [
-        { firstName: { contains: search, mode: 'insensitive' } },
-        { lastName: { contains: search, mode: 'insensitive' } },
-        { employeeNumber: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
+        { firstName: { contains: search} },
+        { lastName: { contains: search} },
+        { employeeNumber: { contains: search} },
+        { email: { contains: search} },
       ];
     }
 

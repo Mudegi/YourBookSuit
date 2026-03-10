@@ -75,8 +75,8 @@ export async function GET(request: NextRequest) {
     if (search) {
       whereClause.product = {
         OR: [
-          { name: { contains: search, mode: 'insensitive' } },
-          { sku: { contains: search, mode: 'insensitive' } },
+          { name: { contains: search} },
+          { sku: { contains: search} },
         ]
       };
     }

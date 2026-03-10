@@ -95,13 +95,13 @@ export async function GET(
     // Search across paymentNumber, referenceNumber, customer name, vendor name
     if (search) {
       where.OR = [
-        { paymentNumber: { contains: search, mode: 'insensitive' } },
-        { referenceNumber: { contains: search, mode: 'insensitive' } },
-        { mobileMoneyTxnId: { contains: search, mode: 'insensitive' } },
-        { customer: { companyName: { contains: search, mode: 'insensitive' } } },
-        { customer: { firstName: { contains: search, mode: 'insensitive' } } },
-        { customer: { lastName: { contains: search, mode: 'insensitive' } } },
-        { vendor: { companyName: { contains: search, mode: 'insensitive' } } },
+        { paymentNumber: { contains: search} },
+        { referenceNumber: { contains: search} },
+        { mobileMoneyTxnId: { contains: search} },
+        { customer: { companyName: { contains: search} } },
+        { customer: { firstName: { contains: search} } },
+        { customer: { lastName: { contains: search} } },
+        { vendor: { companyName: { contains: search} } },
       ];
     }
 

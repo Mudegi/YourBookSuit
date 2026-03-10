@@ -166,13 +166,11 @@ export async function GET(
     if (excise_name) {
       whereClause.categoryName = {
         contains: excise_name,
-        mode: 'insensitive',
       };
     }
     if (excise_code) {
       whereClause.categoryCode = {
         contains: excise_code,
-        mode: 'insensitive',
       };
     }
 

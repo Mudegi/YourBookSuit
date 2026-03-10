@@ -116,9 +116,9 @@ export class WarehouseService {
       ...(isActive !== undefined && { isActive }),
       ...(search && {
         OR: [
-          { name: { contains: search, mode: 'insensitive' as const } },
-          { code: { contains: search, mode: 'insensitive' as const } },
-          { address: { contains: search, mode: 'insensitive' as const } },
+          { name: { contains: search} },
+          { code: { contains: search} },
+          { address: { contains: search} },
         ],
       }),
     };
@@ -438,8 +438,8 @@ export class WarehouseService {
       ...(search && {
         product: {
           OR: [
-            { name: { contains: search, mode: 'insensitive' as const } },
-            { sku: { contains: search, mode: 'insensitive' as const } },
+            { name: { contains: search} },
+            { sku: { contains: search} },
           ],
         },
       }),
