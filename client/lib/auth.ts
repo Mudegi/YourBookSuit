@@ -163,6 +163,69 @@ export async function getSessionFromHeaders(
   }
 }
 
+type AuthResult = {
+  organizationId: string;
+  userId: string;
+  role: UserRole;
+};
+
+export async function requirePermission(
+  orgSlug: string,
+  _permission: any
+): Promise<AuthResult> {
+  const session = await getSessionFromHeaders(headers() as unknown as Headers);
+
+  let resolvedSession = session;
+
+  if (!resolvedSession?.userId) {
+    const cookieToken = (await cookies()).get('auth-token')?.value;
+    if (cookieToken) {
+      const verified = await verifyToken(cookieToken);
+      if (verified?.userId) {
+        resolvedSession = verified as any;
+      }
+    }
+  }
+
+  if (!resolvedSession?.userId) {
+    const err = new Error('Unauthorized');
+    // @ts-expect-error attach http status
+    err.status = 401;
+    throw err;
+  }
+
+  const organization = await prisma.organization.findUnique({ where: { slug: orgSlug } });
+  if (!organization) {
+    const err = new Error('Organization not found');
+    // @ts-expect-error attach http status
+    err.status = 404;
+    throw err;
+  }
+
+  const membership = await prisma.organizationUser.findUnique({
+    where: {
+      organizationId_userId: {
+        organizationId: organization.id,
+        userId: resolvedSession.userId,
+      },
+    },
+    select: { role: true, isActive: true },
+  });
+
+  if (!membership || !membership.isActive) {
+    const err = new Error('Forbidden');
+    // @ts-expect-error attach http status
+    err.status = 403;
+    throw err;
+  }
+
+  return {
+    organizationId: organization.id,
+    userId: resolvedSession.userId,
+    role: membership.role,
+  };
+}
+
 export async function verifyAuth(request: NextRequest): Promise<{
   valid: boolean;
   userId?: string;
