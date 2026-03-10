@@ -101,6 +101,7 @@ export async function completeOnboardingWithCOA(
           isActive: true,
           isSystem: template.isSystem ?? false,
           balance: 0,
+          tags: [],
         },
       });
       createdAccounts.push(account);

@@ -357,6 +357,7 @@ export async function generateChartOfAccounts(
             isActive: true,
             isSystem: template.isSystem ?? false,
             balance: 0,
+            tags: [],
           },
           select: {
             id: true,

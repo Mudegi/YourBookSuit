@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
           accountType: 'ASSET',
           accountSubType: 'Current Assets',
           isActive: true,
+          tags: [],
         },
       });
     }
@@ -169,6 +170,7 @@ async function getOwnerCapitalAccountId(organizationId: string): Promise<string>
         accountSubType: 'Equity',
         isActive: true,
         balance: 0,
+        tags: [],
       },
     });
   }

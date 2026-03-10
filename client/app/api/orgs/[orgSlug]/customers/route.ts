@@ -81,6 +81,7 @@ const createOpeningBalanceEntry = async (
         description: 'Temporary account for migration balances',
         isSystem: false,
         isActive: true,
+        tags: [],
       },
     });
   }

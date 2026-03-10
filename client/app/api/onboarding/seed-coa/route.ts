@@ -177,6 +177,7 @@ export async function POST(request: NextRequest) {
             accountType: account.type,
             accountSubType: account.category,
             isActive: true,
+            tags: [],
           },
         })
       )

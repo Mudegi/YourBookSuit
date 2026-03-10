@@ -485,6 +485,7 @@ export class GoodsReceiptService {
             isActive: true,
             isSystem: true,
             allowManualJournal: true,
+            tags: [],
           },
         });
       }

@@ -617,6 +617,7 @@ export class RevaluationService {
           accountSubType: 'Other Income',
           isActive: true,
           description: 'Gains from inventory revaluations',
+          tags: [],
         },
       });
     }
@@ -642,6 +643,7 @@ export class RevaluationService {
           accountSubType: 'Other Expenses',
           isActive: true,
           description: 'Losses from inventory revaluations',
+          tags: [],
         },
       });
     }
