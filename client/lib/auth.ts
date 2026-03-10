@@ -6,6 +6,9 @@
 import { cookies, headers } from 'next/headers';
 import { SignJWT, jwtVerify, JWTPayload } from 'jose';
 import bcrypt from 'bcryptjs';
+import { NextRequest } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { UserRole } from '@prisma/client';
 
 const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production'
@@ -160,5 +163,51 @@ export async function getSessionFromHeaders(
   }
 }
 
-// Re-export verifyAuth from api-auth for routes that import it from here
-export { verifyAuth } from './api-auth';
+export async function verifyAuth(request: NextRequest): Promise<{
+  valid: boolean;
+  userId?: string;
+  organizationId?: string;
+  role?: UserRole;
+  error?: string;
+}> {
+  try {
+    const token = request.cookies.get('auth-token')?.value;
+
+    if (!token) {
+      return { valid: false, error: 'No auth token' };
+    }
+
+    const session = await verifyToken(token);
+
+    if (!session || !session.userId) {
+      return { valid: false, error: 'Invalid token' };
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: session.userId },
+      include: {
+        organizations: {
+          where: { isActive: true },
+          include: { organization: true },
+          take: 1,
+        },
+      },
+    });
+
+    if (!user || !user.organizations.length) {
+      return { valid: false, error: 'No active organization' };
+    }
+
+    const membership = user.organizations[0];
+
+    return {
+      valid: true,
+      userId: user.id,
+      organizationId: membership.organizationId,
+      role: membership.role,
+    };
+  } catch (error) {
+    console.error('[verifyAuth] Error:', error);
+    return { valid: false, error: 'Authentication failed' };
+  }
+}
