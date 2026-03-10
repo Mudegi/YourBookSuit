@@ -176,11 +176,11 @@ export default function VarianceHighlights({
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="text-center">
             <div className="text-2xl font-bold text-red-600">{summary.critical || 0}</div>
-            <div className="text-xs text-gray-600">Critical (>20%)</div>
+            <div className="text-xs text-gray-600">Critical (&gt;20%)</div>
           </div>
           <div className="text-center">
             <div className="text-2xl font-bold text-yellow-600">{summary.warning || 0}</div>
-            <div className="text-xs text-gray-600">Warning (>{threshold}%)</div>
+            <div className="text-xs text-gray-600">Warning (&gt;{threshold}%)</div>
           </div>
           <div className="text-center">
             <div className="text-2xl font-bold text-green-600">{summary.normal || 0}</div>

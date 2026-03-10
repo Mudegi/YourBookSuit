@@ -377,3 +377,21 @@ export function getRecommendedFeatures(businessModel: BusinessModel): string[] {
   const profile = getBusinessModelProfile(businessModel);
   return profile.features;
 }
+
+export function getCOAIndustryType(businessType: string): string {
+  const industryMapping: Record<string, string> = {
+    'MANUFACTURING': 'MANUFACTURING',
+    'WHOLESALE': 'RETAIL',
+    'RETAIL': 'RETAIL',
+    'SERVICE': 'SERVICES',
+    'ECOMMERCE': 'RETAIL',
+    'CONSTRUCTION': 'CONSTRUCTION',
+    'REAL_ESTATE': 'REAL_ESTATE',
+    'HEALTHCARE': 'HEALTHCARE',
+    'HOSPITALITY': 'HOSPITALITY',
+    'PROFESSIONAL_SERVICES': 'SERVICES',
+    'NONPROFIT': 'NONPROFIT',
+    'GENERAL': 'GENERAL',
+  };
+  return industryMapping[businessType] || 'GENERAL';
+}

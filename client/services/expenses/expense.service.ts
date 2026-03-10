@@ -14,7 +14,7 @@
 import { prisma } from '@/lib/prisma';
 import { JournalEntryService } from '../accounting/journal-entry.service';
 import { DoubleEntryService } from '../accounting/double-entry.service';
-import { TaxCalculationService } from '@/lib/tax/tax-calculation.service';
+import { TaxCalculationService } from '@/lib/services/tax/TaxCalculationService';
 import { Decimal } from 'decimal.js';
 
 export interface ExpenseLineItem {
