@@ -22,8 +22,8 @@ export async function getQualityHoldAccounts(
   prisma: PrismaClient,
   organizationId: string
 ): Promise<QualityHoldAccounts> {
-  // Get inventory account (ASSET, code 1300)
-  const inventoryAccount = await prisma.chartOfAccount.findFirst({
+  // Get inventory account (ASSET, code 1300, fallback to 1200 for legacy seeds)
+  let inventoryAccount = await prisma.chartOfAccount.findFirst({
     where: {
       organizationId,
       code: { startsWith: '1300' },
@@ -32,6 +32,17 @@ export async function getQualityHoldAccounts(
     },
     orderBy: { code: 'asc' },
   });
+  if (!inventoryAccount) {
+    inventoryAccount = await prisma.chartOfAccount.findFirst({
+      where: {
+        organizationId,
+        code: '1200',
+        accountType: 'ASSET',
+        isActive: true,
+        name: { contains: 'Inventory' },
+      },
+    });
+  }
 
   if (!inventoryAccount) {
     throw new Error('Inventory account not found. Please ensure an ASSET account with code 1300 exists.');

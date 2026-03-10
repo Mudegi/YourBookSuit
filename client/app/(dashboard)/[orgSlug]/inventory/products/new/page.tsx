@@ -379,12 +379,9 @@ export default function NewProductPage() {
                   value={form.description}
                   onChange={onChange}
                   rows={3}
-                  placeholder="Used as EFRIS item code (unique identifier). Falls back to Name if empty."
+                  placeholder="Enter product description"
                   className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                 />
-                <p className="mt-1 text-xs text-gray-500">
-                  <strong>Important:</strong> Description becomes EFRIS item_code. Each product must have a unique description or name.
-                </p>
               </div>
             </div>
           </div>

@@ -513,7 +513,7 @@ export class LandedCostService {
    * Get inventory GL account
    */
   private async getInventoryGLAccount(organizationId: string) {
-    return await this.prisma.chartOfAccount.findFirst({
+    const account = await this.prisma.chartOfAccount.findFirst({
       where: {
         organizationId,
         code: { startsWith: '1300' }, // Inventory Asset
@@ -521,6 +521,16 @@ export class LandedCostService {
         isActive: true,
       },
       orderBy: { code: 'asc' },
+    });
+    if (account) return account;
+    return await this.prisma.chartOfAccount.findFirst({
+      where: {
+        organizationId,
+        code: '1200',
+        accountType: 'ASSET',
+        isActive: true,
+        name: { contains: 'Inventory' },
+      },
     });
   }
 

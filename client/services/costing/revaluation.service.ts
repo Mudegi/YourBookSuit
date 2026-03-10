@@ -583,7 +583,7 @@ export class RevaluationService {
    */
   private async getGLAccountMappings(organizationId: string) {
     // Get inventory account (Asset)
-    const inventoryAccount = await this.prisma.chartOfAccount.findFirst({
+    let inventoryAccount = await this.prisma.chartOfAccount.findFirst({
       where: {
         organizationId,
         code: { startsWith: '1300' }, // Inventory Asset
@@ -591,6 +591,17 @@ export class RevaluationService {
         isActive: true,
       },
     });
+    if (!inventoryAccount) {
+      inventoryAccount = await this.prisma.chartOfAccount.findFirst({
+        where: {
+          organizationId,
+          code: '1200',
+          accountType: 'ASSET',
+          isActive: true,
+          name: { contains: 'Inventory' },
+        },
+      });
+    }
 
     if (!inventoryAccount) {
       throw new Error('Inventory account not found. Please ensure an Asset account with code 1300 exists.');

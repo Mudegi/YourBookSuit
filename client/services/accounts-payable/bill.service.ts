@@ -124,8 +124,8 @@ export class BillService {
     }
 
     // Find Inventory Asset account for inventory purchases (ASSET type)
-    // Common code: 1300 (Inventory / Stock)
-    const inventoryAssetAccount = await prisma.chartOfAccount.findFirst({
+    // Common code: 1300 (Inventory / Stock), fallback to 1200 for legacy onboarding seeds
+    let inventoryAssetAccount = await prisma.chartOfAccount.findFirst({
       where: {
         organizationId,
         code: { startsWith: '1300' },
@@ -134,6 +134,17 @@ export class BillService {
       },
       orderBy: { code: 'asc' },
     });
+    if (!inventoryAssetAccount) {
+      inventoryAssetAccount = await prisma.chartOfAccount.findFirst({
+        where: {
+          organizationId,
+          code: '1200',
+          accountType: 'ASSET',
+          isActive: true,
+          name: { contains: 'Inventory' },
+        },
+      });
+    }
 
     // Find Opening Balance Equity account for opening stock (EQUITY type)
     // Common code: 3900 (Opening Balance Equity)
