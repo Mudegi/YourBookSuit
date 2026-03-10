@@ -34,8 +34,12 @@ interface Bill {
 
 interface BankAccount {
   id: string;
-  code: string;
-  name: string;
+  accountName: string;
+  accountNumber: string;
+  bankName: string;
+  currency: string;
+  currentBalance: number;
+  glAccountId: string | null;
 }
 
 interface AllocationRow {
@@ -99,7 +103,7 @@ export default function VendorPaymentPage() {
       setLoading(true);
       const [vendorsRes, accountsRes] = await Promise.all([
         fetch(`/api/orgs/${orgSlug}/vendors?isActive=true`),
-        fetch(`/api/orgs/${orgSlug}/chart-of-accounts`),
+        fetch(`/api/orgs/${orgSlug}/bank-accounts`),
       ]);
 
       if (!vendorsRes.ok || !accountsRes.ok) throw new Error('Failed to fetch data');
@@ -108,12 +112,7 @@ export default function VendorPaymentPage() {
       const accountsData = await accountsRes.json();
 
       setVendors(vendorsData.vendors || vendorsData.data || []);
-      const allAccounts = accountsData.accounts || accountsData.data || [];
-      setBankAccounts(
-        allAccounts.filter(
-          (acc: BankAccount) => acc.code.startsWith('1') && !acc.code.startsWith('12'),
-        ),
-      );
+      setBankAccounts(accountsData.bankAccounts || accountsData.data || []);
     } catch (err) {
       setError('Failed to load data');
       console.error(err);
@@ -334,8 +333,13 @@ export default function VendorPaymentPage() {
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
               >
                 <option value="">Select bank account...</option>
+                {bankAccounts.length === 0 && (
+                  <option disabled value="">No bank accounts configured — add one in Settings</option>
+                )}
                 {bankAccounts.map((acc) => (
-                  <option key={acc.id} value={acc.id}>{acc.code} - {acc.name}</option>
+                  <option key={acc.id} value={acc.id}>
+                    {acc.bankName} | {acc.accountName}{acc.accountNumber ? ` (****${acc.accountNumber.slice(-4)})` : ''}
+                  </option>
                 ))}
               </select>
             </div>

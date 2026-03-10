@@ -33,6 +33,7 @@ export interface InvoiceItemInput {
   taxAgencyRateId?: string; // Link to TaxAgencyRate (legacy multi-country)
   taxLines?: InvoiceTaxLineInput[];
   isInclusive?: boolean; // Whether unitPrice includes tax
+  warehouseId?: string; // Warehouse to deduct stock from
 }
 
 export interface CreateInvoiceInput {
@@ -45,6 +46,7 @@ export interface CreateInvoiceInput {
   exchangeRate?: number;
   taxCalculationMethod?: 'EXCLUSIVE' | 'INCLUSIVE';
   items: InvoiceItemInput[];
+  reference?: string;
   notes?: string;
   terms?: string;
   createdById: string;
@@ -141,6 +143,7 @@ export class InvoiceService {
           dueDate: input.dueDate,
           currency: finalCurrency,
           exchangeRate: finalExchangeRate,
+          baseCurrencyTotal: new Decimal(calculations.total).times(finalExchangeRate).toNumber(),
           taxCalculationMethod,
           subtotal: calculations.subtotal,
           taxAmount: calculations.taxAmount,
@@ -148,6 +151,7 @@ export class InvoiceService {
           total: calculations.total,
           amountDue: calculations.amountDue,
           status: InvoiceStatus.DRAFT,
+          reference: input.reference,
           notes: input.notes,
           terms: input.terms,
           whtApplicable: calculations.withholdingAmount > 0,
@@ -165,6 +169,7 @@ export class InvoiceService {
               taxRate: new Decimal(line.appliedTaxRate).toNumber(),
               taxRateId: line.item.taxRateId, // Link to TaxRate (EFRIS-enabled)
               taxAgencyRateId: line.item.taxAgencyRateId, // Link to TaxAgencyRate (legacy)
+              warehouseId: line.item.warehouseId,
               taxAmount: new Decimal(line.taxAmount).toNumber(),
               subtotal: new Decimal(line.lineSubtotal).toNumber(),
               total: new Decimal(line.total).toNumber(),
@@ -274,10 +279,77 @@ export class InvoiceService {
         },
       });
 
-      // Update inventory if products are tracked
+      // Update inventory and record COGS for products
+      let totalCOGS = new Decimal(0);
       for (const item of input.items) {
         if (item.productId) {
-          await this.updateInventoryOnSale(tx, item.productId, item.quantity);
+          const cogsAmount = await this.updateInventoryOnSale(
+            tx,
+            input.organizationId,
+            item.productId,
+            item.quantity,
+            item.warehouseId,
+            invoice.invoiceNumber
+          );
+          totalCOGS = totalCOGS.plus(cogsAmount);
+        }
+      }
+
+      // Post COGS journal entry if any inventory items were sold
+      // DR: Cost of Goods Sold (5000), CR: Inventory Asset (1300)
+      if (totalCOGS.gt(0)) {
+        const cogsAccount = await tx.chartOfAccount.findFirst({
+          where: {
+            organizationId: input.organizationId,
+            code: { startsWith: '5' },
+            isActive: true,
+            OR: [
+              { accountType: 'COST_OF_SALES' },
+              { accountType: 'EXPENSE', accountSubType: { contains: 'Cost' } },
+            ],
+          },
+          orderBy: { code: 'asc' },
+        });
+
+        const inventoryAccount = await tx.chartOfAccount.findFirst({
+          where: {
+            organizationId: input.organizationId,
+            isActive: true,
+            OR: [
+              { code: '1300' },
+              { code: '1200', name: { contains: 'Inventory' } },
+            ],
+          },
+          orderBy: { code: 'desc' },
+        });
+
+        if (cogsAccount && inventoryAccount) {
+          await DoubleEntryService.createTransaction(
+            {
+              organizationId: input.organizationId,
+              transactionDate: input.invoiceDate,
+              transactionType: TransactionType.INVOICE,
+              description: `COGS - Invoice ${invoice.invoiceNumber}`,
+              referenceType: 'Invoice',
+              referenceId: invoice.id,
+              createdById: input.createdById,
+              entries: [
+                {
+                  accountId: cogsAccount.id,
+                  entryType: EntryType.DEBIT,
+                  amount: totalCOGS.toNumber(),
+                  description: `Cost of Goods Sold - Invoice ${invoice.invoiceNumber}`,
+                },
+                {
+                  accountId: inventoryAccount.id,
+                  entryType: EntryType.CREDIT,
+                  amount: totalCOGS.toNumber(),
+                  description: `Inventory reduction - Invoice ${invoice.invoiceNumber}`,
+                },
+              ],
+            },
+            tx
+          );
         }
       }
 
@@ -510,8 +582,6 @@ export class InvoiceService {
    * In a real system, these would be configured per organization
    */
   private static async getAccountMappings(organizationId: string) {
-    // Get default accounts for posting
-    // You would typically store these in organization settings
     const accounts = await prisma.chartOfAccount.findMany({
       where: {
         organizationId,
@@ -519,9 +589,18 @@ export class InvoiceService {
       },
     });
 
-    const accountsReceivable = accounts.find(a => a.code === '1200' && a.accountType === 'ASSET');
-    const salesRevenue = accounts.find(a => a.code === '4000' && a.accountType === 'REVENUE');
-    const taxPayable = accounts.find(a => a.code === '2100' && a.accountType === 'LIABILITY');
+    // AR: code 1200 (preferred) or any asset with 'Receivable' in name 
+    const accountsReceivable = accounts.find(a => a.code === '1200' && a.accountType === 'ASSET')
+      || accounts.find(a => a.accountType === 'ASSET' && a.name.toLowerCase().includes('receivable'));
+
+    // Sales Revenue: code 4000 (preferred) or any revenue account
+    const salesRevenue = accounts.find(a => a.code === '4000' && a.accountType === 'REVENUE')
+      || accounts.find(a => a.accountType === 'REVENUE');
+
+    // Tax Payable: code 2100 (preferred) or any liability with 'tax' or 'vat'
+    const taxPayable = accounts.find(a => a.code === '2100' && a.accountType === 'LIABILITY')
+      || accounts.find(a => a.accountType === 'LIABILITY' && (a.name.toLowerCase().includes('tax') || a.name.toLowerCase().includes('vat')));
+
     const withholdingReceivable = accounts.find((a) => {
       const lowerName = a.name?.toLowerCase() || '';
       return (
@@ -543,54 +622,114 @@ export class InvoiceService {
   }
 
   /**
-   * Update inventory on sale
+   * Update inventory on sale — warehouse-aware with COGS calculation
+   * Returns the COGS amount (averageCost × quantity) for GL posting
    */
   private static async updateInventoryOnSale(
     tx: any,
+    organizationId: string,
     productId: string,
-    quantity: number
-  ) {
+    quantity: number,
+    warehouseId?: string,
+    invoiceNumber?: string
+  ): Promise<Decimal> {
     const product = await tx.product.findUnique({
       where: { id: productId },
-      include: { inventoryItems: true },
     });
 
     if (!product || !product.trackInventory) {
-      return;
+      return new Decimal(0);
     }
 
-    // Get main warehouse inventory
-    const inventory = product.inventoryItems[0];
-    if (!inventory) {
-      throw new Error(`No inventory found for product ${product.name}`);
+    let averageCost = new Decimal(0);
+    const warehouseLocation = 'Main';
+
+    // Try warehouse-level stock first (WarehouseStockLevel)
+    if (warehouseId) {
+      const warehouseStock = await tx.warehouseStockLevel.findUnique({
+        where: { warehouseId_productId: { warehouseId, productId } },
+      });
+
+      if (warehouseStock) {
+        const available = new Decimal(warehouseStock.quantityAvailable);
+        if (available.lt(quantity)) {
+          throw new Error(
+            `Insufficient stock in warehouse for ${product.name}. Available: ${available.toNumber()}, Requested: ${quantity}`
+          );
+        }
+
+        averageCost = new Decimal(warehouseStock.averageCost);
+        const newQty = new Decimal(warehouseStock.quantityOnHand).minus(quantity);
+        const removedValue = averageCost.times(quantity);
+        const newValue = new Decimal(warehouseStock.totalValue).minus(removedValue);
+
+        await tx.warehouseStockLevel.update({
+          where: { warehouseId_productId: { warehouseId, productId } },
+          data: {
+            quantityOnHand: newQty.toNumber(),
+            quantityAvailable: newQty.minus(new Decimal(warehouseStock.quantityReserved)).toNumber(),
+            totalValue: Decimal.max(newValue, 0).toNumber(),
+            lastMovementDate: new Date(),
+          },
+        });
+      }
     }
 
-    const newQuantity = new Decimal(inventory.quantityOnHand).minus(quantity);
-
-    if (newQuantity.isNegative()) {
-      throw new Error(`Insufficient inventory for product ${product.name}`);
-    }
-
-    // Update inventory
-    await tx.inventoryItem.update({
-      where: { id: inventory.id },
-      data: {
-        quantityOnHand: newQuantity.toNumber(),
-        quantityAvailable: newQuantity.toNumber(),
-      },
+    // Also update the global InventoryItem record
+    const inventory = await tx.inventoryItem.findFirst({
+      where: { productId, warehouseLocation },
     });
 
-    // Create stock movement record
+    if (inventory) {
+      if (averageCost.isZero()) {
+        averageCost = new Decimal(inventory.averageCost);
+      }
+
+      const newQuantity = new Decimal(inventory.quantityOnHand).minus(quantity);
+      if (newQuantity.isNegative() && !warehouseId) {
+        throw new Error(`Insufficient inventory for product ${product.name}`);
+      }
+
+      const removedValue = averageCost.times(quantity);
+      const newValue = new Decimal(inventory.totalValue).minus(removedValue);
+
+      await tx.inventoryItem.update({
+        where: { id: inventory.id },
+        data: {
+          quantityOnHand: newQuantity.toNumber(),
+          quantityAvailable: newQuantity.toNumber(),
+          totalValue: Decimal.max(newValue, 0).toNumber(),
+        },
+      });
+    } else if (!warehouseId) {
+      // No inventory record and no warehouse — skip with zero COGS
+      return new Decimal(0);
+    }
+
+    // Record stock movement
+    const cogsAmount = averageCost.times(quantity);
+    const balanceAfter = inventory
+      ? new Decimal(inventory.quantityOnHand).minus(quantity)
+      : new Decimal(0);
+
     await tx.stockMovement.create({
       data: {
         productId,
         movementType: 'SALE',
         quantity: -quantity,
-        unitCost: inventory.averageCost,
-        totalCost: new Decimal(inventory.averageCost).times(quantity).toNumber(),
+        unitCost: averageCost.toNumber(),
+        totalCost: cogsAmount.toNumber(),
+        balanceAfter: balanceAfter.toNumber(),
+        warehouseLocation: warehouseId ? undefined : 'Main',
+        warehouseId: warehouseId || undefined,
+        referenceType: 'INVOICE',
+        referenceId: invoiceNumber || undefined,
+        referenceNumber: invoiceNumber || undefined,
         movementDate: new Date(),
       },
     });
+
+    return cogsAmount;
   }
 }
 

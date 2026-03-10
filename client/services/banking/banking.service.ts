@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { BankAccountType, Prisma } from '@prisma/client';
+import { autoCreateBankGLAccount } from '@/lib/auto-create-bank-gl';
 
 /* ═══════════ TYPES ═══════════ */
 
@@ -10,7 +11,7 @@ export interface CreateBankAccountInput {
   bankName: string;
   currency: string;
   accountType: BankAccountType;
-  glAccountId: string;
+  glAccountId?: string;  // Optional — auto-created if not provided
   openingBalance?: number;
   routingNumber?: string;
   swiftCode?: string;
@@ -249,9 +250,20 @@ export class BankingService {
    * Create a new bank account with GL validation
    */
   static async createBankAccount(input: CreateBankAccountInput) {
+    let glAccountId = input.glAccountId;
+
+    // Auto-create a GL sub-account if none provided
+    if (!glAccountId) {
+      glAccountId = await autoCreateBankGLAccount(
+        input.organizationId,
+        input.bankName,
+        input.currency,
+      );
+    }
+
     // 1. Validate GL account is ASSET type
     const glAccount = await prisma.chartOfAccount.findUnique({
-      where: { id: input.glAccountId },
+      where: { id: glAccountId },
     });
     if (!glAccount) throw new Error('Chart of Accounts entry not found');
     if (glAccount.organizationId !== input.organizationId) throw new Error('GL account does not belong to this organization');
@@ -261,7 +273,7 @@ export class BankingService {
     const existingGLLink = await prisma.bankAccount.findFirst({
       where: {
         organizationId: input.organizationId,
-        glAccountId: input.glAccountId,
+        glAccountId: glAccountId,
       },
     });
     if (existingGLLink) throw new Error('This GL account is already linked to another bank account. Each bank account must map to a unique GL code.');
@@ -285,7 +297,7 @@ export class BankingService {
         bankName: input.bankName,
         currency: input.currency,
         accountType: input.accountType,
-        glAccountId: input.glAccountId,
+        glAccountId: glAccountId,
         openingBalance: input.openingBalance ?? 0,
         currentBalance: input.openingBalance ?? 0,
         ...(input.routingNumber && { routingNumber: input.routingNumber }),

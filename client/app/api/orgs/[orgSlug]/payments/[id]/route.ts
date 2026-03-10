@@ -45,23 +45,6 @@ export async function GET(
         createdBy: {
           select: { id: true, firstName: true, lastName: true, email: true },
         },
-        transaction: {
-          include: {
-            entries: {
-              include: {
-                account: {
-                  select: {
-                    id: true,
-                    code: true,
-                    name: true,
-                    accountType: true,
-                  },
-                },
-              },
-              orderBy: { debit: 'desc' },
-            },
-          },
-        },
         allocations: {
           include: {
             invoice: {

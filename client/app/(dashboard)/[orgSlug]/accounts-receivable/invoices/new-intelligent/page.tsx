@@ -4,9 +4,11 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { 
   ArrowLeft, Plus, Trash2, Save, AlertCircle, CheckCircle, 
-  Upload, X, Package, DollarSign, CreditCard, TrendingUp 
+  Upload, X, Package, DollarSign, CreditCard, TrendingUp,
+  Eye, FileText, Send
 } from 'lucide-react';
 import { useOrganization } from '@/hooks/useOrganization';
+import { useBranch } from '@/hooks/useBranch';
 import { formatCurrency } from '@/lib/utils';
 import EfrisInvoiceDisplay from '@/components/efris/EfrisInvoiceDisplay';
 import { toast } from 'sonner';
@@ -74,6 +76,7 @@ interface InvoiceLineItem {
   discount: number;
   discountType: 'AMOUNT' | 'PERCENTAGE';
   taxRateId?: string;
+  warehouseId?: string;
   availableStock?: number;
   subtotal: number;
   taxAmount: number;
@@ -105,12 +108,14 @@ export default function IntelligentInvoicePage() {
   const router = useRouter();
   const orgSlug = params.orgSlug as string;
   const { organization, currency: baseCurrency } = useOrganization();
+  const { branchId } = useBranch();
 
   // Data
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [taxRates, setTaxRates] = useState<TaxRate[]>([]);
+  const [resolvedWarehouseId, setResolvedWarehouseId] = useState<string | null>(null);
   
   // Form state
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -119,6 +124,7 @@ export default function IntelligentInvoicePage() {
   const [currency, setCurrency] = useState(baseCurrency);
   const [taxCalculationMethod, setTaxCalculationMethod] = useState<'EXCLUSIVE' | 'INCLUSIVE'>('EXCLUSIVE');
   const [reference, setReference] = useState('');
+
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState<InvoiceLineItem[]>([]);
   const [attachments, setAttachments] = useState<File[]>([]);
@@ -228,6 +234,7 @@ export default function IntelligentInvoicePage() {
     fetchProducts();
     fetchServices();
     fetchTaxRates();
+    resolveDefaultWarehouse();
     checkEfrisConfig();
   }, [orgSlug]);
 
@@ -359,6 +366,41 @@ export default function IntelligentInvoicePage() {
     }
   };
 
+  // Auto-resolve warehouse: find the default warehouse for the user's active branch
+  const resolveDefaultWarehouse = async () => {
+    try {
+      const branchParam = branchId ? `&branchId=${branchId}` : '';
+      const res = await fetch(`/api/orgs/${orgSlug}/warehouses?isDefault=true${branchParam}`);
+      if (res.ok) {
+        const data = await res.json();
+        const list = data.warehouses || data.data || [];
+        // Pick the default warehouse for the branch, or first warehouse
+        const defaultWh = list.find((w: any) => w.isDefault) || list[0];
+        setResolvedWarehouseId(defaultWh?.id || null);
+      }
+    } catch (error) {
+      console.error('Error resolving default warehouse:', error);
+    }
+  };
+
+  // Re-resolve warehouse when branch changes
+  useEffect(() => {
+    if (orgSlug) resolveDefaultWarehouse();
+  }, [branchId]);
+
+  const fetchWarehouseStock = async (warehouseId: string, productId: string): Promise<number> => {
+    try {
+      const res = await fetch(`/api/orgs/${orgSlug}/warehouses/${warehouseId}/stock?productId=${productId}`);
+      if (res.ok) {
+        const data = await res.json();
+        return data.quantityAvailable ?? data.available ?? 0;
+      }
+    } catch (error) {
+      console.error('Error fetching warehouse stock:', error);
+    }
+    return 0;
+  };
+
   const handleCustomerSelect = (customer: Customer) => {
     setSelectedCustomer(customer);
     setShowCustomerSearch(false);
@@ -395,11 +437,11 @@ export default function IntelligentInvoicePage() {
         setShowQuickAddCustomer(false);
       } else {
         const error = await res.json();
-        alert(error.message || 'Failed to create customer');
+        toast.error(error.message || 'Failed to create customer');
       }
     } catch (error) {
       console.error('Error creating customer:', error);
-      alert('Failed to create customer');
+      toast.error('Failed to create customer');
     } finally {
       setLoading(false);
     }
@@ -416,6 +458,7 @@ export default function IntelligentInvoicePage() {
       discount: 0,
       discountType: 'AMOUNT',
       taxRateId: undefined,
+      warehouseId: type === 'product' ? (resolvedWarehouseId || undefined) : undefined,
       subtotal: 0,
       taxAmount: 0,
       total: 0,
@@ -971,10 +1014,11 @@ export default function IntelligentInvoicePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          customerId: selectedCustomer.id,
+          customerId: selectedCustomer!.id,
           invoiceDate,
           dueDate,
           currency,
+          branchId: branchId || undefined,
           taxCalculationMethod,
           reference,
           notes,
@@ -988,16 +1032,14 @@ export default function IntelligentInvoicePage() {
             serviceId: item.serviceId,
             description: item.description,
             quantity: item.quantity,
-            // When INCLUSIVE, send displayRate (user-entered tax-inclusive price)
-            // When EXCLUSIVE, send unitPrice (tax-exclusive price)
-            // Backend will extract tax from displayRate when taxCalculationMethod is INCLUSIVE
             unitPrice: taxCalculationMethod === 'INCLUSIVE' ? item.displayRate : item.unitPrice,
             discount: item.discount,
             discountType: item.discountType,
             taxRateId: item.taxRateId,
+            warehouseId: item.warehouseId || resolvedWarehouseId || undefined,
           })),
           autoCommitInventory: true,
-          autoSubmitToTaxAuthority: false, // Manual for now
+          autoSubmitToTaxAuthority: false,
         }),
       });
 
@@ -1050,15 +1092,14 @@ export default function IntelligentInvoicePage() {
 
             if (!emailRes.ok) {
               const emailError = await emailRes.json();
-              alert(`Invoice created but email sending failed: ${emailError.error}`);
-              // Still navigate to invoice detail
+              toast.error(`Invoice created but email sending failed: ${emailError.error}`);
               router.push(`/${orgSlug}/accounts-receivable/invoices/${invoiceId}`);
               return;
             }
             
-            alert('Invoice created and sent successfully!');
+            toast.success('Invoice created and sent successfully!');
           } catch (emailErr) {
-            alert('Invoice created but email sending failed');
+            toast.error('Invoice created but email sending failed');
             router.push(`/${orgSlug}/accounts-receivable/invoices/${invoiceId}`);
             return;
           }
@@ -1068,11 +1109,11 @@ export default function IntelligentInvoicePage() {
       } else {
         const error = await res.json();
         console.error('Invoice creation failed:', error);
-        alert(`Error creating invoice: ${error.error || error.message || 'Unknown error'}`);
+        toast.error(`Error creating invoice: ${error.error || error.message || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error creating invoice:', error);
-      alert(`Failed to create invoice: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      toast.error(`Failed to create invoice: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -1113,6 +1154,27 @@ export default function IntelligentInvoicePage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowPrintPreview(true)}
+                disabled={items.length === 0}
+                className="px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Preview Invoice"
+              >
+                <Eye className="w-4 h-4 inline mr-1 -mt-0.5" />
+                Preview
+              </button>
+              {createdInvoiceId && (
+                <button
+                  type="button"
+                  onClick={() => window.open(`/api/orgs/${orgSlug}/invoices/${createdInvoiceId}/pdf`, '_blank')}
+                  className="px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  title="Open PDF in new tab"
+                >
+                  <FileText className="w-4 h-4 inline mr-1 -mt-0.5" />
+                  PDF
+                </button>
+              )}
               <button
                 type="button"
                 onClick={validateInvoice}
@@ -1253,6 +1315,23 @@ export default function IntelligentInvoicePage() {
                           ))}
                         </div>
                       )}
+
+                      {showCustomerSearch && customerSearch.length > 0 && filteredCustomers.length === 0 && (
+                        <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl p-4 text-center">
+                          <p className="text-sm text-gray-500 mb-2">No customers found for &ldquo;{customerSearch}&rdquo;</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowCustomerSearch(false);
+                              setQuickCustomerForm({ ...quickCustomerForm, companyName: customerSearch });
+                              setShowQuickAddCustomer(true);
+                            }}
+                            className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                          >
+                            + Create &ldquo;{customerSearch}&rdquo; as a new customer
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <button
                       type="button"
@@ -1330,6 +1409,24 @@ export default function IntelligentInvoicePage() {
                         Inclusive
                       </button>
                     </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Currency Row */}
+              <div className="px-5 pb-5">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                      Currency
+                    </label>
+                    <input
+                      type="text"
+                      value={currency}
+                      onChange={(e) => setCurrency(e.target.value.toUpperCase())}
+                      maxLength={3}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
+                    />
                   </div>
                 </div>
               </div>
@@ -1459,6 +1556,7 @@ export default function IntelligentInvoicePage() {
                           <th className="px-3 py-2.5 text-center text-[10px] font-bold text-gray-400 uppercase tracking-wider" style={{ width: '140px' }}>Disc</th>
                           <th className="px-3 py-2.5 text-right text-[10px] font-bold text-gray-400 uppercase tracking-wider" style={{ width: '170px' }}>Amount</th>
                           <th className="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider" style={{ width: '220px' }}>Tax</th>
+
                           <th className="px-2 py-2.5" style={{ width: '40px' }}></th>
                         </tr>
                       </thead>
@@ -1681,6 +1779,7 @@ export default function IntelligentInvoicePage() {
                                 </div>
                               )}
                             </td>
+
                             <td className="px-2 py-3 text-center" style={{ width: '40px' }}>
                               <button
                                 type="button"

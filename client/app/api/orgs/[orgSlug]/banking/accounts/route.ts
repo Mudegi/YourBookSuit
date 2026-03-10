@@ -57,8 +57,8 @@ export async function POST(
 
     const body = await request.json();
 
-    // Validate required fields
-    const required = ['accountName', 'accountNumber', 'bankName', 'accountType', 'glAccountId'];
+    // Validate required fields (glAccountId is optional — auto-created if omitted)
+    const required = ['accountName', 'accountNumber', 'bankName', 'accountType'];
     for (const field of required) {
       if (!body[field]) {
         return NextResponse.json({ error: `${field} is required` }, { status: 400 });
@@ -72,7 +72,7 @@ export async function POST(
       bankName: body.bankName,
       currency: body.currency || org.baseCurrency || 'USD',
       accountType: body.accountType,
-      glAccountId: body.glAccountId,
+      glAccountId: body.glAccountId || undefined,
       openingBalance: body.openingBalance ? parseFloat(body.openingBalance) : 0,
       routingNumber: body.routingNumber || undefined,
       swiftCode: body.swiftCode || undefined,

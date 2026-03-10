@@ -758,16 +758,16 @@ export default function BankAccountsPage() {
                     className={INPUT_CLS} required />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">GL Account (Chart of Accounts) *</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">GL Account (Chart of Accounts)</label>
                   <select value={form.glAccountId}
                     onChange={e => setForm({ ...form, glAccountId: e.target.value })}
-                    className={INPUT_CLS} required disabled={isEditing}>
-                    <option value="">Select GL Account...</option>
+                    className={INPUT_CLS} disabled={isEditing}>
+                    <option value="">Auto-create (recommended)</option>
                     {availableGLAccounts.map(g => (
                       <option key={g.id} value={g.id}>{g.code} - {g.accountName || g.name}</option>
                     ))}
                   </select>
-                  <p className="text-xs text-gray-400 mt-0.5">Each bank account maps to a unique ASSET GL code</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Leave blank to auto-create a GL sub-account under Cash &amp; Cash Equivalents</p>
                 </div>
               </div>
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
 import { DoubleEntryService } from '@/services/accounting/double-entry.service';
+import { autoCreateBankGLAccount } from '@/lib/auto-create-bank-gl';
 
 export async function POST(request: NextRequest) {
   try {
@@ -74,7 +75,14 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Create bank account
+    // Auto-create a dedicated GL sub-account for this bank (e.g. 1001 - Bank - Stanbic)
+    const bankGlAccountId = await autoCreateBankGLAccount(
+      organizationId,
+      bankName,
+      organization.baseCurrency || 'USD',
+    );
+
+    // Create bank account linked to its GL account
     const bankAccount = await prisma.bankAccount.create({
       data: {
         organizationId,
@@ -82,6 +90,7 @@ export async function POST(request: NextRequest) {
         accountNumber,
         bankName,
         accountType: 'CHECKING',
+        glAccountId: bankGlAccountId,
         currency: organization.baseCurrency || 'USD',
         currentBalance: openingBalance,
         isActive: true,
@@ -114,7 +123,7 @@ export async function POST(request: NextRequest) {
           description: `Opening balance for ${bankName}`,
           entries: [
             {
-              accountId: cashAccount.id,
+              accountId: bankGlAccountId,
               entryType: 'DEBIT',
               amount: openingBalance,
               description: `Opening balance - ${bankName}`,

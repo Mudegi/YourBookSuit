@@ -190,24 +190,51 @@ export async function POST(
       taxRateId: efrisEnabled ? item.taxRateId : undefined,
       taxAgencyRateId: !efrisEnabled ? item.taxRateId : undefined,
       taxLines: item.taxLines || [],
+      warehouseId: item.warehouseId || body.warehouseId || undefined,
     }));
-    
-    console.log('🧾 Mapped items with tax:', mappedItems);
-    console.log('💰 Tax Calculation Method:', body.taxCalculationMethod || 'EXCLUSIVE');
-    console.log('📝 First item details:', {
-      description: mappedItems[0]?.description,
-      quantity: mappedItems[0]?.quantity,
-      unitPrice: mappedItems[0]?.unitPrice,
-      taxRate: mappedItems[0]?.taxRate,
-      method: body.taxCalculationMethod || 'EXCLUSIVE',
-      isInclusive: body.taxCalculationMethod === 'INCLUSIVE',
-    });
+
+    // Validate inventory availability before creating invoice
+    for (const item of mappedItems) {
+      if (!item.productId) continue;
+      const product = await prisma.product.findUnique({
+        where: { id: item.productId },
+        select: { name: true, trackInventory: true },
+      });
+      if (!product || !product.trackInventory) continue;
+
+      if (item.warehouseId) {
+        const stockLevel = await prisma.warehouseStockLevel.findUnique({
+          where: { warehouseId_productId: { warehouseId: item.warehouseId, productId: item.productId } },
+        });
+        const available = stockLevel ? Number(stockLevel.quantityAvailable) : 0;
+        if (available < item.quantity) {
+          return NextResponse.json(
+            { error: `Insufficient stock for "${product.name}" in selected warehouse. Available: ${available}, Requested: ${item.quantity}` },
+            { status: 400 }
+          );
+        }
+      } else {
+        const inventoryItem = await prisma.inventoryItem.findFirst({
+          where: { productId: item.productId },
+        });
+        const available = inventoryItem ? Number(inventoryItem.quantityAvailable) : 0;
+        if (available < item.quantity) {
+          return NextResponse.json(
+            { error: `Insufficient stock for "${product.name}". Available: ${available}, Requested: ${item.quantity}` },
+            { status: 400 }
+          );
+        }
+      }
+    }
     
     const result = await InvoiceService.createInvoice({
       organizationId,
+      branchId: body.branchId || undefined,
       customerId: body.customerId,
       invoiceDate: new Date(body.invoiceDate),
       dueDate: dueDate,
+      currency: body.currency,
+      exchangeRate: body.exchangeRate,
       taxCalculationMethod: body.taxCalculationMethod || 'EXCLUSIVE',
       reference: body.reference,
       notes: body.notes,

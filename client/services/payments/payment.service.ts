@@ -114,11 +114,17 @@ export class PaymentService {
     if (!customer) throw new Error('Customer not found');
     const customerName = getCustomerDisplayName(customer);
 
-    // Validate bank account
-    const bankAccount = await prisma.chartOfAccount.findFirst({
-      where: { id: data.bankAccountId, organizationId, accountType: 'ASSET', isActive: true },
+    // Validate real BankAccount (the user selects from actual bank accounts, not GL accounts)
+    const bankAccount = await prisma.bankAccount.findFirst({
+      where: { id: data.bankAccountId, organizationId, isActive: true },
     });
-    if (!bankAccount) throw new Error('Bank account not found');
+    if (!bankAccount) throw new Error('Bank account not found. Please ensure a bank account is configured in Settings → Bank Accounts.');
+
+    // The GL account for double-entry is the bankAccount's linked ChartOfAccount
+    if (!bankAccount.glAccountId) {
+      throw new Error(`Bank account "${bankAccount.accountName}" has no linked GL account. Please configure it in Settings → Bank Accounts.`);
+    }
+    const bankGlAccountId = bankAccount.glAccountId;
 
     // Find AR account
     const arAccount = await prisma.chartOfAccount.findFirst({
@@ -147,9 +153,9 @@ export class PaymentService {
       }
     }
 
-    // GL entries
+    // GL entries — DR: Bank GL account, CR: Accounts Receivable
     const entries = [
-      { accountId: data.bankAccountId, entryType: 'DEBIT' as const, amount: data.amount, description: `Payment from ${customerName}` },
+      { accountId: bankGlAccountId, entryType: 'DEBIT' as const, amount: data.amount, description: `Payment from ${customerName}` },
       { accountId: arAccount.id, entryType: 'CREDIT' as const, amount: data.amount, description: `Payment from ${customerName}` },
     ];
 
@@ -238,11 +244,11 @@ export class PaymentService {
 
         const invoice = await tx.invoice.findUnique({
           where: { id: allocation.invoiceId },
-          include: { paymentAllocations: true },
+          include: { payments: true },
         });
 
         if (invoice) {
-          const totalPaid = invoice.paymentAllocations.reduce((sum, a) => sum + a.amount, 0);
+          const totalPaid = invoice.payments.reduce((sum, a) => sum + a.amount, 0);
 
           // FX gain/loss
           if (organization && invoice.currency !== organization.baseCurrency) {
@@ -292,7 +298,6 @@ export class PaymentService {
         include: {
           customer: true,
           bankAccount: true,
-          transaction: { include: { entries: { include: { account: true } } } },
           allocations: { include: { invoice: true } },
         },
       });
@@ -314,11 +319,17 @@ export class PaymentService {
     });
     if (!vendor) throw new Error('Vendor not found');
 
-    // Validate bank account
-    const bankAccount = await prisma.chartOfAccount.findFirst({
-      where: { id: data.bankAccountId, organizationId, accountType: 'ASSET', isActive: true },
+    // Validate real BankAccount (the user selects from actual bank accounts, not GL accounts)
+    const bankAccount = await prisma.bankAccount.findFirst({
+      where: { id: data.bankAccountId, organizationId, isActive: true },
     });
-    if (!bankAccount) throw new Error('Bank account not found');
+    if (!bankAccount) throw new Error('Bank account not found. Please ensure a bank account is configured in Settings → Bank Accounts.');
+
+    // The GL account for double-entry is the bankAccount's linked ChartOfAccount
+    if (!bankAccount.glAccountId) {
+      throw new Error(`Bank account "${bankAccount.accountName}" has no linked GL account. Please configure it in Settings → Bank Accounts.`);
+    }
+    const bankGlAccountId = bankAccount.glAccountId;
 
     // Find AP account
     const apAccount = await prisma.chartOfAccount.findFirst({
@@ -347,10 +358,10 @@ export class PaymentService {
       }
     }
 
-    // GL entries
+    // GL entries — DR: Accounts Payable, CR: Bank GL account
     const entries = [
       { accountId: apAccount.id, entryType: 'DEBIT' as const, amount: data.amount, description: `Payment to ${getVendorDisplayName(vendor)}` },
-      { accountId: data.bankAccountId, entryType: 'CREDIT' as const, amount: data.amount, description: `Payment to ${getVendorDisplayName(vendor)}` },
+      { accountId: bankGlAccountId, entryType: 'CREDIT' as const, amount: data.amount, description: `Payment to ${getVendorDisplayName(vendor)}` },
     ];
 
     const result = await prisma.$transaction(async (tx) => {
@@ -438,11 +449,11 @@ export class PaymentService {
 
         const bill = await tx.bill.findUnique({
           where: { id: allocation.billId },
-          include: { paymentAllocations: true },
+          include: { payments: true },
         });
 
         if (bill) {
-          const totalPaid = bill.paymentAllocations.reduce((sum, a) => sum + a.amount, 0);
+          const totalPaid = bill.payments.reduce((sum, a) => sum + a.amount, 0);
 
           // FX gain/loss
           if (organization && bill.currency !== organization.baseCurrency) {
@@ -492,7 +503,6 @@ export class PaymentService {
         include: {
           vendor: true,
           bankAccount: true,
-          transaction: { include: { entries: { include: { account: true } } } },
           allocations: { include: { bill: true } },
         },
       });
@@ -538,13 +548,13 @@ export class PaymentService {
             customerId: payment.customerId,
             status: { in: ['SENT', 'OVERDUE', 'PARTIALLY_PAID'] },
           },
-          include: { paymentAllocations: true },
+          include: { payments: true },
           orderBy: { invoiceDate: 'asc' },
         });
 
         for (const invoice of openInvoices) {
           if (amountToAllocate <= 0.01) break;
-          const invoicePaid = invoice.paymentAllocations.reduce((s, a) => s + Number(a.amount), 0);
+          const invoicePaid = invoice.payments.reduce((s, a) => s + Number(a.amount), 0);
           const invoiceDue = Number(invoice.totalAmount) - invoicePaid;
           if (invoiceDue <= 0) continue;
 
@@ -570,13 +580,13 @@ export class PaymentService {
             vendorId: payment.vendorId,
             status: { in: ['SENT', 'OVERDUE', 'PARTIALLY_PAID', 'RECEIVED'] },
           },
-          include: { paymentAllocations: true },
+          include: { payments: true },
           orderBy: { billDate: 'asc' },
         });
 
         for (const bill of openBills) {
           if (amountToAllocate <= 0.01) break;
-          const billPaid = bill.paymentAllocations.reduce((s, a) => s + Number(a.amount), 0);
+          const billPaid = bill.payments.reduce((s, a) => s + Number(a.amount), 0);
           const billDue = Number(bill.totalAmount) - billPaid;
           if (billDue <= 0) continue;
 

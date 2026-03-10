@@ -1,77 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { autoCreateBankGLAccount } from '@/lib/auto-create-bank-gl';
 
 /**
  * GET /api/orgs/[orgSlug]/bank-accounts
- * List all bank accounts for an organization
+ * Returns real BankAccount records (linked to GL accounts) for payment forms.
+ * Each bank account has a glAccountId pointing to its ChartOfAccount for double-entry.
  */
 export async function GET(
   request: NextRequest,
   { params }: { params: { orgSlug: string } }
 ) {
-  console.log('🏦 === Bank Accounts API Called ===');
-  console.log('OrgSlug:', params.orgSlug);
-  
   try {
-    console.log('Step 1: Getting organization by slug...');
     const org = await prisma.organization.findUnique({
       where: { slug: params.orgSlug },
     });
-    
+
     if (!org) {
-      console.log('Organization not found');
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
     }
-    
-    console.log('Org found:', { id: org.id, slug: org.slug });
 
-    console.log('Step 2: Fetching chart of accounts...');
-    const allAccounts = await prisma.chartOfAccount.findMany({
-      where: {
-        organizationId: org.id,
-        isActive: true,
-      },
+    // Fetch real BankAccount records with their linked GL account
+    const bankAccounts = await prisma.bankAccount.findMany({
+      where: { organizationId: org.id, isActive: true },
       select: {
         id: true,
-        code: true,
-        name: true,
-        accountType: true,
+        accountName: true,
+        accountNumber: true,
+        bankName: true,
         currency: true,
-        balance: true,
+        currentBalance: true,
+        glAccountId: true,
+        accountType: true,
       },
-      orderBy: {
-        code: 'asc',
-      },
-    });
-    
-    console.log('Step 3: Found', allAccounts.length, 'accounts');
-
-    // Filter for ASSET accounts (bank/cash)
-    const glAccounts = allAccounts.filter(a => a.accountType === 'ASSET');
-
-    console.log('🏦 Bank accounts debug:', {
-      organizationId: org.id,
-      organizationSlug: params.orgSlug,
-      totalAccounts: allAccounts.length,
-      assetAccounts: glAccounts.length,
+      orderBy: { accountName: 'asc' },
     });
 
-    // Simple stats from GL accounts
-    const stats = {
-      totalAccounts: allAccounts.length,
-      activeAccounts: glAccounts.length,
-    };
-
-    const response = { 
-      data: glAccounts.length > 0 ? glAccounts : allAccounts,
-      stats,
-    };
-    
-    console.log('Step 4: Returning', (glAccounts.length > 0 ? glAccounts.length : allAccounts.length), 'accounts');
-    return NextResponse.json(response);
+    return NextResponse.json({ data: bankAccounts, bankAccounts });
   } catch (error: any) {
     console.error('❌ Bank accounts error:', error.message);
-    console.error('Stack:', error.stack);
     return NextResponse.json(
       { error: error.message || 'Failed to fetch bank accounts' },
       { status: 500 }
@@ -81,7 +48,7 @@ export async function GET(
 
 /**
  * POST /api/orgs/[orgSlug]/bank-accounts
- * Create a new bank account
+ * Create a new bank account linked to a GL account
  */
 export async function POST(
   request: NextRequest,
@@ -97,38 +64,27 @@ export async function POST(
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
     }
 
-    // Validate required fields
-    if (!body.accountId) {
-      return NextResponse.json(
-        { error: 'Chart of Accounts account ID is required' },
-        { status: 400 }
-      );
-    }
+    if (!body.bankName) return NextResponse.json({ error: 'Bank name is required' }, { status: 400 });
+    if (!body.accountNumber) return NextResponse.json({ error: 'Account number is required' }, { status: 400 });
+    if (!body.accountName) return NextResponse.json({ error: 'Account name is required' }, { status: 400 });
+    if (!body.accountType) return NextResponse.json({ error: 'Account type is required' }, { status: 400 });
 
-    if (!body.bankName) {
-      return NextResponse.json({ error: 'Bank name is required' }, { status: 400 });
-    }
+    // Auto-create a GL sub-account if none provided
+    const glAccountId = body.glAccountId
+      || await autoCreateBankGLAccount(org.id, body.bankName, body.currency || 'UGX');
 
-    if (!body.accountNumber) {
-      return NextResponse.json({ error: 'Account number is required' }, { status: 400 });
-    }
-
-    if (!body.accountType) {
-      return NextResponse.json({ error: 'Account type is required' }, { status: 400 });
-    }
-
-    // Create bank account record
     const bankAccount = await prisma.bankAccount.create({
       data: {
         organizationId: org.id,
-        accountId: body.accountId,
+        accountName: body.accountName,
         bankName: body.bankName,
         accountNumber: body.accountNumber,
         accountType: body.accountType,
-        routingNumber: body.routingNumber,
+        glAccountId,
+        routingNumber: body.routingNumber || null,
         currency: body.currency || 'UGX',
         isActive: body.isActive ?? true,
-        currentBalance: 0,
+        currentBalance: body.openingBalance || 0,
       },
     });
 

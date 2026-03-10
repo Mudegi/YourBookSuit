@@ -18,18 +18,28 @@ export async function GET(
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
     }
 
+    const url = new URL(request.url);
+    const branchIdParam = url.searchParams.get('branchId');
+    const isDefaultParam = url.searchParams.get('isDefault');
+
     // Fetch warehouses for the organization
+    const whereClause: any = {
+      organizationId: org.id,
+      isActive: true,
+    };
+    if (branchIdParam) whereClause.branchId = branchIdParam;
+    if (isDefaultParam === 'true') whereClause.isDefault = true;
+
     const warehouses = await prisma.inventoryWarehouse.findMany({
-      where: {
-        organizationId: org.id,
-        isActive: true,
-      },
+      where: whereClause,
       select: {
         id: true,
         name: true,
         code: true,
         type: true,
         isActive: true,
+        isDefault: true,
+        branchId: true,
       },
       orderBy: {
         name: 'asc',
