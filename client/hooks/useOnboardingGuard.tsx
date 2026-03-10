@@ -91,17 +91,8 @@ export function useOnboardingGuard(options?: {
             error: null,
           });
 
-          // Redirect if onboarding not completed and redirect is enabled
-          if (redirect && (!completed || !hasChartOfAccounts || !hasCompanyProfile)) {
-            setIsRedirecting(true);
-            
-            // Small delay to prevent immediate re-execution
-            setTimeout(() => {
-              router.push(redirectUrl);
-            }, 100);
-          } else {
-            // Onboarding complete
-          }
+          // Note: Redirect to onboarding is handled by the dashboard layout.
+          // This hook only reports status — no redirect to avoid flash/double-redirect.
         }
       } catch (error) {
         console.error('Error checking onboarding:', error);

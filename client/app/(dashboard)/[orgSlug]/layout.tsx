@@ -243,20 +243,22 @@ export default function DashboardLayout({
         setUser(data.data.user);
         setOrganization(data.data.organization);
         
-        // Check if onboarding is completed
+        // If onboarding not completed, redirect and keep loading state
+        // so the dashboard UI never flashes
         if (data.data.organization && !data.data.organization.onboardingCompleted) {
           router.push('/onboarding');
-          return;
+          return; // Don't setLoading(false) — keep showing spinner until navigation completes
         }
       } else {
         router.push('/login');
+        return;
       }
     } catch (error) {
       console.error('Session fetch error:', error);
       router.push('/login');
-    } finally {
-      setLoading(false);
+      return;
     }
+    setLoading(false);
   };
 
   const handleLogout = async () => {
