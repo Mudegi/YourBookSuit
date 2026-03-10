@@ -36,41 +36,31 @@ async function seedUnitsForOrganization(organizationId) {
   // Combine official EFRIS codes with comprehensive 528+ units from seed-efris-units.js
   const allUnits = [...officialEfrisUnits, ...efrisUnits];
 
+  // Batch insert in chunks of 50 using createMany for performance
+  const BATCH_SIZE = 50;
   let created = 0;
-  let skipped = 0;
 
-  for (const unit of allUnits) {
+  for (let i = 0; i < allUnits.length; i += BATCH_SIZE) {
+    const batch = allUnits.slice(i, i + BATCH_SIZE);
     try {
-      const existing = await prisma.unitOfMeasure.findFirst({
-        where: {
+      const result = await prisma.unitOfMeasure.createMany({
+        data: batch.map(u => ({
           organizationId,
-          code: unit.code,
-        },
+          code: u.code,
+          name: u.name,
+          abbreviation: u.abbreviation,
+          category: u.category,
+          isActive: true,
+        })),
+        skipDuplicates: true,
       });
-
-      if (!existing) {
-        await prisma.unitOfMeasure.create({
-          data: {
-            organizationId,
-            code: unit.code,
-            name: unit.name,
-            abbreviation: unit.abbreviation,
-            category: unit.category,
-            isActive: true,
-          },
-        });
-        created++;
-      } else {
-        skipped++;
-      }
+      created += result.count;
     } catch (error) {
-      console.error(`  ⚠️  Error seeding unit ${unit.code}:`, error.message);
+      console.error(`  ⚠️  Batch error at offset ${i}:`, error.message);
     }
   }
 
-  console.log(`  ✅ Created: ${created} units`);
-  console.log(`  ⏭️  Skipped: ${skipped} units (already exist)`);
-  console.log(`  📊 Total: ${created + skipped} units available`);
+  console.log(`  ✅ Seeded: ${created} new units (${allUnits.length} total available)`);
 }
 
 // Export for use in other scripts
