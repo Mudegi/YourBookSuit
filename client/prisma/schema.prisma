@@ -706,7 +706,7 @@ model Invoice {
   reference   String? // Customer PO/LPO number
   notes       String? @db.Text
   terms       String? @db.Text
-  attachments Json
+  attachments Json    @default("[]")
 
   // Branch & Location
   branchId    String?
@@ -911,7 +911,7 @@ model Estimate {
   reference   String?   // Customer RFQ number
   notes       String? @db.Text
   terms       String?   @db.Text // e.g. "50% deposit required before work begins"
-  attachments Json  // URLs to Scope of Work PDFs, brochures, etc.
+  attachments Json    @default("[]")  // URLs to Scope of Work PDFs, brochures, etc.
 
   // Delivery
   deliveryAddress Json?  // If shipping differs from billing
@@ -1291,7 +1291,7 @@ model Bill {
   amountDue           Decimal              @db.Decimal(19, 4)
   status              BillStatus           @default(DRAFT)
   notes               String? @db.Text
-  attachments         Json
+  attachments         Json    @default("[]")
   transactionId       String?
   transaction         Transaction?         @relation(fields: [transactionId], references: [id])
   whtApplicable       Boolean              @default(false)
@@ -1377,7 +1377,7 @@ model Payment {
   customerId          String?
   vendorId            String?
   notes               String? @db.Text
-  attachments         Json
+  attachments         Json    @default("[]")
   transactionId       String?
   isReconciled        Boolean              @default(false)
   reconciledDate      DateTime?
@@ -2288,7 +2288,7 @@ model TaxReturn {
   paymentAmount    Decimal?        @db.Decimal(15, 2)
   paymentReference String?
   returnData       Json?
-  attachments      Json
+  attachments      Json    @default("[]")
   notes            String? @db.Text
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
@@ -2562,7 +2562,7 @@ model Asset {
   disposalNotes           String? @db.Text
   tags                    Json
   customFields            Json?
-  attachments             Json
+  attachments             Json    @default("[]")
   notes                   String? @db.Text
   createdAt               DateTime               @default(now())
   updatedAt               DateTime               @updatedAt
@@ -2634,7 +2634,7 @@ model AssetDisposal {
   approvedBy          String?
   approvedDate        DateTime?
   notes               String? @db.Text
-  attachments         Json
+  attachments         Json    @default("[]")
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
   asset               Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
@@ -2662,7 +2662,7 @@ model AssetMaintenance {
   performedBy          String?
   billId               String?
   notes                String? @db.Text
-  attachments          Json
+  attachments          Json    @default("[]")
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
   asset                Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
@@ -2698,7 +2698,7 @@ model CreditNote {
   isPosted         Boolean                 @default(false)
   postedAt         DateTime?
   transactionId    String?
-  attachments      Json
+  attachments      Json    @default("[]")
   
   // E-Invoicing & Fiscalization (Uganda EFRIS)
   efrisFDN          String?            // Fiscal Document Number
@@ -2791,7 +2791,7 @@ model DebitNote {
   isPosted        Boolean         @default(false)
   postedAt        DateTime?
   transactionId   String?
-  attachments     Json
+  attachments     Json    @default("[]")
   createdBy       String
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
@@ -5262,7 +5262,7 @@ model AssemblyTransaction {
   approvedBy             String?
   approvedAt             DateTime?
   notes                  String? @db.Text
-  attachments            Json
+  attachments            Json    @default("[]")
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @updatedAt
   lines                  AssemblyLine[]
