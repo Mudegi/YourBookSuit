@@ -13,6 +13,7 @@ import {
   initializeCompliancePackForCountry 
 } from '@/lib/tax/compliance-pack-selector';
 import prisma from '@/lib/prisma';
+import { seedUnitsForOrganization } from '@/lib/seed-units';
 
 export async function POST(request: NextRequest) {
   try {
@@ -63,6 +64,11 @@ export async function POST(request: NextRequest) {
         isActive: true,
       },
     });
+
+    // Seed standard units of measure (non-blocking)
+    seedUnitsForOrganization(organization.id).catch(err =>
+      console.error('[onboarding] Failed to seed units:', err)
+    );
 
     // Initialize compliance pack (creates tax rates, WHT rules, etc.)
     let complianceResult = null;

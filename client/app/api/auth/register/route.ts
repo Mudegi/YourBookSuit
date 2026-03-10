@@ -8,6 +8,7 @@ import prisma from '@/lib/prisma';
 import { hashPassword, createToken } from '@/lib/auth';
 import { registerSchema } from '@/lib/validation';
 import { UserRole } from '@prisma/client';
+import { seedUnitsForOrganization } from '@/lib/seed-units';
 
 export async function POST(request: NextRequest) {
   try {
@@ -82,6 +83,11 @@ export async function POST(request: NextRequest) {
         isActive: true,
       },
     });
+
+    // Seed standard units of measure (non-blocking)
+    seedUnitsForOrganization(organization.id).catch(err =>
+      console.error('[register] Failed to seed units:', err)
+    );
 
     // Create session token
     const token = await createToken({
