@@ -399,11 +399,13 @@ async function updateInventoryFromBill(
     const quantity = Number(item.quantity);
     const unitCost = Number(item.unitPrice); // Purchase cost
 
-    // Find or create inventory item
-    const existingInventory = await prisma.inventoryItem.findFirst({
+    // Find or create inventory item (keyed by productId + warehouseLocation)
+    const existingInventory = await prisma.inventoryItem.findUnique({
       where: {
-        productId: product.id,
-        organizationId,
+        productId_warehouseLocation: {
+          productId: product.id,
+          warehouseLocation: 'Main',
+        },
       },
     });
 
@@ -421,10 +423,10 @@ async function updateInventoryFromBill(
       await prisma.inventoryItem.update({
         where: { id: existingInventory.id },
         data: {
-          quantityOnHand: newQty.toString(),
-          quantityAvailable: (Number(existingInventory.quantityAvailable) + quantity).toString(),
-          averageCost: newAvgCost.toString(),
-          totalValue: newTotalValue.toString(),
+          quantityOnHand: newQty,
+          quantityAvailable: Number(existingInventory.quantityAvailable) + quantity,
+          averageCost: newAvgCost,
+          totalValue: newTotalValue,
         },
       });
     } else {
@@ -432,14 +434,11 @@ async function updateInventoryFromBill(
       await prisma.inventoryItem.create({
         data: {
           productId: product.id,
-          organizationId,
-          quantityOnHand: quantity.toString(),
-          quantityAvailable: quantity.toString(),
-          quantityAllocated: '0',
-          quantityOnOrder: '0',
-          reorderLevel: '0',
-          averageCost: unitCost.toString(),
-          totalValue: (quantity * unitCost).toString(),
+          warehouseLocation: 'Main',
+          quantityOnHand: quantity,
+          quantityAvailable: quantity,
+          averageCost: unitCost,
+          totalValue: quantity * unitCost,
         },
       });
     }
@@ -449,11 +448,13 @@ async function updateInventoryFromBill(
       data: {
         productId: product.id,
         movementType: 'PURCHASE',
-        quantity: quantity.toString(),
-        unitCost: unitCost.toString(),
-        totalCost: (quantity * unitCost).toString(),
+        quantity: quantity,
+        unitCost: unitCost,
+        totalCost: quantity * unitCost,
+        balanceAfter: (existingInventory ? Number(existingInventory.quantityOnHand) : 0) + quantity,
         referenceType: 'BILL',
         referenceId: bill.id,
+        referenceNumber: bill.billNumber,
         notes: `Purchase from ${bill.vendor.companyName} - Bill ${bill.billNumber}`,
         movementDate: bill.billDate,
       },
