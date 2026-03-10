@@ -66,6 +66,27 @@ export default function UsersPage() {
     }
   };
 
+  const activateOrg = async (userId: string, orgId: string) => {
+    setActionLoading(userId);
+    try {
+      const res = await fetchWithAuth('/api/system-admin/organizations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: orgId, action: 'APPROVE' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchUsers();
+      } else {
+        alert(data.error || 'Activation failed');
+      }
+    } catch {
+      alert('Network error');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const deleteUser = async (userId: string) => {
     setActionLoading(userId);
     try {
@@ -183,8 +204,16 @@ export default function UsersPage() {
                     </td>
                     <td className="px-5 py-3 text-right">
                       <div className="flex items-center justify-end gap-1 flex-wrap">
-                        {/* Toggle active */}
-                        {u.isActive ? (
+                        {/* Activate org (for TRIAL/PENDING) or toggle user active */}
+                        {u.organizations.length > 0 && ['TRIAL', 'TRIAL_EXPIRED', 'PENDING_APPROVAL'].includes(u.organizations[0].organization.subscriptionStatus) ? (
+                          <button
+                            onClick={() => activateOrg(u.id, u.organizations[0].organization.id)}
+                            disabled={actionLoading === u.id}
+                            className="px-2.5 py-1 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 transition disabled:opacity-50"
+                          >
+                            Activate
+                          </button>
+                        ) : u.isActive ? (
                           <button
                             onClick={() => performAction(u.id, 'DEACTIVATE')}
                             disabled={actionLoading === u.id}
