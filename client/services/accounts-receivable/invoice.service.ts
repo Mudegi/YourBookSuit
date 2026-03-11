@@ -251,7 +251,7 @@ export class InvoiceService {
         });
       }
 
-      // Create GL transaction
+      // Create GL transaction — pass tx so it runs inside this transaction (no nested transaction)
       const glTransaction = await DoubleEntryService.createTransaction({
         organizationId: input.organizationId,
         transactionDate: input.invoiceDate,
@@ -261,7 +261,7 @@ export class InvoiceService {
         referenceId: invoice.id,
         createdById: input.createdById,
         entries: glEntries,
-      });
+      }, tx);
 
       // Update invoice with transaction ID and mark as SENT
       const updatedInvoice = await tx.invoice.update({
@@ -271,94 +271,94 @@ export class InvoiceService {
           status: InvoiceStatus.SENT,
         },
         include: {
-          items: {
-            include: {
-              taxLines: true,
-            },
-          },
+          items: { include: { taxLines: true } },
           customer: true,
         },
       });
 
-      // Update inventory and record COGS for products
-      let totalCOGS = new Decimal(0);
-      for (const item of input.items) {
-        if (item.productId) {
-          const cogsAmount = await this.updateInventoryOnSale(
-            tx,
-            input.organizationId,
-            item.productId,
-            item.quantity,
-            item.warehouseId,
-            invoice.invoiceNumber
-          );
-          totalCOGS = totalCOGS.plus(cogsAmount);
-        }
-      }
-
-      // Post COGS journal entry if any inventory items were sold
-      // DR: Cost of Goods Sold (5000), CR: Inventory Asset (1300)
-      if (totalCOGS.gt(0)) {
-        const cogsAccount = await tx.chartOfAccount.findFirst({
-          where: {
-            organizationId: input.organizationId,
-            code: { startsWith: '5' },
-            isActive: true,
-            OR: [
-              { accountType: 'COST_OF_SALES' },
-              { accountType: 'EXPENSE', accountSubType: { contains: 'Cost' } },
-            ],
-          },
-          orderBy: { code: 'asc' },
-        });
-
-        const inventoryAccount = await tx.chartOfAccount.findFirst({
-          where: {
-            organizationId: input.organizationId,
-            isActive: true,
-            OR: [
-              { code: '1300' },
-              { code: '1200', name: { contains: 'Inventory' } },
-            ],
-          },
-          orderBy: { code: 'desc' },
-        });
-
-        if (cogsAccount && inventoryAccount) {
-          await DoubleEntryService.createTransaction(
-            {
-              organizationId: input.organizationId,
-              transactionDate: input.invoiceDate,
-              transactionType: TransactionType.INVOICE,
-              description: `COGS - Invoice ${invoice.invoiceNumber}`,
-              referenceType: 'Invoice',
-              referenceId: invoice.id,
-              createdById: input.createdById,
-              entries: [
-                {
-                  accountId: cogsAccount.id,
-                  entryType: EntryType.DEBIT,
-                  amount: totalCOGS.toNumber(),
-                  description: `Cost of Goods Sold - Invoice ${invoice.invoiceNumber}`,
-                },
-                {
-                  accountId: inventoryAccount.id,
-                  entryType: EntryType.CREDIT,
-                  amount: totalCOGS.toNumber(),
-                  description: `Inventory reduction - Invoice ${invoice.invoiceNumber}`,
-                },
-              ],
-            },
-            tx
-          );
-        }
-      }
-
-      return {
-        invoice: updatedInvoice,
-        glTransaction,
-      };
+      return { invoice: updatedInvoice, glTransaction };
     });
+
+    // Post COGS outside the main transaction — inventory updates + separate GL transaction
+    // This keeps the main transaction focused on invoice + AR/Revenue GL entries only.
+    const invoiceItems = input.items;
+    if (invoiceItems.some(item => item.productId)) {
+      try {
+        let totalCOGS = new Decimal(0);
+        await prisma.$transaction(async (cogsTx) => {
+          for (const item of invoiceItems) {
+            if (item.productId) {
+              const cogsAmount = await this.updateInventoryOnSale(
+                cogsTx,
+                input.organizationId,
+                item.productId,
+                item.quantity,
+                item.warehouseId,
+                result.invoice.invoiceNumber
+              );
+              totalCOGS = totalCOGS.plus(cogsAmount);
+            }
+          }
+
+          if (totalCOGS.gt(0)) {
+            const [cogsAccount, inventoryAccount] = await Promise.all([
+              cogsTx.chartOfAccount.findFirst({
+                where: {
+                  organizationId: input.organizationId,
+                  code: { startsWith: '5' },
+                  isActive: true,
+                  OR: [
+                    { accountType: 'COST_OF_SALES' },
+                    { accountType: 'EXPENSE', accountSubType: { contains: 'Cost' } },
+                  ],
+                },
+                orderBy: { code: 'asc' },
+              }),
+              cogsTx.chartOfAccount.findFirst({
+                where: {
+                  organizationId: input.organizationId,
+                  isActive: true,
+                  OR: [
+                    { code: '1300' },
+                    { code: '1200', name: { contains: 'Inventory' } },
+                  ],
+                },
+                orderBy: { code: 'desc' },
+              }),
+            ]);
+
+            if (cogsAccount && inventoryAccount) {
+              await DoubleEntryService.createTransaction({
+                organizationId: input.organizationId,
+                transactionDate: input.invoiceDate,
+                transactionType: TransactionType.INVOICE,
+                description: `COGS - Invoice ${result.invoice.invoiceNumber}`,
+                referenceType: 'Invoice',
+                referenceId: result.invoice.id,
+                createdById: input.createdById,
+                entries: [
+                  {
+                    accountId: cogsAccount.id,
+                    entryType: EntryType.DEBIT,
+                    amount: totalCOGS.toNumber(),
+                    description: `Cost of Goods Sold - Invoice ${result.invoice.invoiceNumber}`,
+                  },
+                  {
+                    accountId: inventoryAccount.id,
+                    entryType: EntryType.CREDIT,
+                    amount: totalCOGS.toNumber(),
+                    description: `Inventory reduction - Invoice ${result.invoice.invoiceNumber}`,
+                  },
+                ],
+              }, cogsTx);
+            }
+          }
+        });
+      } catch (cogsError) {
+        // Log COGS error but don't fail the invoice — invoice + AR/Revenue GL is already committed
+        console.error(`[Invoice] COGS posting failed for invoice ${result.invoice.invoiceNumber}:`, cogsError);
+      }
+    }
 
     return result;
   }

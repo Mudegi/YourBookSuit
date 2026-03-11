@@ -182,53 +182,41 @@ export class DoubleEntryService {
       },
     });
 
-    // Update account balances
+    // Update account balances — batch fetch then parallel atomic updates
+    // 1. ONE query to get all account types needed
+    const accountIds = [...new Set(input.entries.map(e => e.accountId))];
+    const accounts = await client.chartOfAccount.findMany({
+      where: { id: { in: accountIds } },
+      select: { id: true, accountType: true },
+    });
+    const accountTypeMap = new Map(accounts.map((a: any) => [a.id, a.accountType]));
+
+    // 2. Compute signed delta for each account (sum all entries against same account)
+    const balanceDeltas = new Map<string, Decimal>();
     for (const entry of input.entries) {
+      const accountType = accountTypeMap.get(entry.accountId);
+      if (!accountType) throw new Error(`Account ${entry.accountId} not found`);
+
       const amount = new Decimal(entry.amount);
-      const account = await client.chartOfAccount.findUnique({
-        where: { id: entry.accountId },
-      });
+      // Natural balance rules:
+      // ASSET/EXPENSE/COST_OF_SALES: DEBIT increases (+), CREDIT decreases (-)
+      // LIABILITY/EQUITY/REVENUE:    CREDIT increases (+), DEBIT decreases (-)
+      const isNormalDebit = accountType === 'ASSET' || accountType === 'EXPENSE' || accountType === 'COST_OF_SALES';
+      const delta = (isNormalDebit ? 1 : -1) * (entry.entryType === EntryType.DEBIT ? 1 : -1);
+      const signed = amount.times(delta);
 
-      if (!account) {
-        throw new Error(`Account ${entry.accountId} not found`);
-      }
-
-      // Calculate new balance based on account type and entry type
-      let newBalance = new Decimal(account.balance);
-
-      // Assets and Expenses increase with Debits, decrease with Credits
-      // Liabilities, Equity, and Revenue increase with Credits, decrease with Debits
-      if (
-        (account.accountType === 'ASSET' || 
-         account.accountType === 'EXPENSE' ||
-         account.accountType === 'COST_OF_SALES') &&
-        entry.entryType === EntryType.DEBIT
-      ) {
-        newBalance = newBalance.plus(amount);
-      } else if (
-        (account.accountType === 'ASSET' || 
-         account.accountType === 'EXPENSE' ||
-         account.accountType === 'COST_OF_SALES') &&
-        entry.entryType === EntryType.CREDIT
-      ) {
-        newBalance = newBalance.minus(amount);
-      } else if (
-        (account.accountType === 'LIABILITY' || 
-         account.accountType === 'EQUITY' ||
-         account.accountType === 'REVENUE') &&
-        entry.entryType === EntryType.CREDIT
-      ) {
-        newBalance = newBalance.plus(amount);
-      } else {
-        newBalance = newBalance.minus(amount);
-      }
-
-      // Update account balance
-      await client.chartOfAccount.update({
-        where: { id: entry.accountId },
-        data: { balance: newBalance.toNumber() },
-      });
+      balanceDeltas.set(entry.accountId, (balanceDeltas.get(entry.accountId) || new Decimal(0)).plus(signed));
     }
+
+    // 3. Run all balance updates in parallel using atomic increment
+    await Promise.all(
+      Array.from(balanceDeltas.entries()).map(([accountId, delta]) =>
+        client.chartOfAccount.update({
+          where: { id: accountId },
+          data: { balance: { increment: delta.toNumber() } },
+        })
+      )
+    );
 
     return newTransaction;
   }
