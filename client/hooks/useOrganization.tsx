@@ -24,8 +24,17 @@ export function useOrganization() {
   const orgSlug = params.orgSlug as string;
   
   const [organization, setOrganization] = useState<Organization | null>(null);
+  const [cachedCurrency, setCachedCurrency] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Hydrate cached currency from localStorage after mount (avoids SSR mismatch)
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('orgCurrency');
+      if (stored) setCachedCurrency(stored);
+    } catch {}
+  }, []);
 
   useEffect(() => {
     async function fetchOrganization() {
@@ -60,7 +69,7 @@ export function useOrganization() {
 
   return {
     organization,
-    currency: organization?.baseCurrency || (typeof window !== 'undefined' ? localStorage.getItem('orgCurrency') : null) || '',
+    currency: organization?.baseCurrency || cachedCurrency,
     loading,
     error,
   };
