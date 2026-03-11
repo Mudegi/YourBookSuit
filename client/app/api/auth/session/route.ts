@@ -59,8 +59,23 @@ export async function GET(request: NextRequest) {
         },
       });
     } catch (error: any) {
-      console.error('Prisma error:', error.message);
-      throw error;
+      // Fallback: if preferences column doesn't exist yet, retry without it
+      if (error.message?.includes('preferences')) {
+        user = await prisma.user.findUnique({
+          where: { id: payload.userId as string },
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            avatar: true,
+            isSystemAdmin: true,
+          },
+        }) as any;
+      } else {
+        console.error('Prisma error:', error.message);
+        throw error;
+      }
     }
 
     if (!user) {

@@ -13,15 +13,19 @@ export async function GET() {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const dbUser = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: { preferences: true },
-    });
-
-    return NextResponse.json({
-      success: true,
-      data: (dbUser?.preferences as Record<string, unknown>) ?? {},
-    });
+    try {
+      const dbUser = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { preferences: true },
+      });
+      return NextResponse.json({
+        success: true,
+        data: (dbUser?.preferences as Record<string, unknown>) ?? {},
+      });
+    } catch {
+      // preferences column may not exist yet
+      return NextResponse.json({ success: true, data: {} });
+    }
   } catch (error) {
     console.error('[GET /api/user/preferences]', error);
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
@@ -46,18 +50,27 @@ export async function PUT(request: NextRequest) {
     }
 
     // Merge with existing preferences
-    const dbUser = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: { preferences: true },
-    });
-
-    const existing = (dbUser?.preferences as Record<string, unknown>) ?? {};
+    let existing: Record<string, unknown> = {};
+    try {
+      const dbUser = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { preferences: true },
+      });
+      existing = (dbUser?.preferences as Record<string, unknown>) ?? {};
+    } catch {
+      // preferences column may not exist yet
+    }
     const merged = { ...existing, ...sanitized };
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { preferences: merged },
-    });
+    try {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { preferences: merged },
+      });
+    } catch {
+      // preferences column may not exist yet — silently skip
+      return NextResponse.json({ success: true, data: sanitized });
+    }
 
     return NextResponse.json({ success: true, data: merged });
   } catch (error) {

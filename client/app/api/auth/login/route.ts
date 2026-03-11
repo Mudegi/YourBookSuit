@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
           lastName: user.lastName,
           avatar: user.avatar,
           isSystemAdmin: user.isSystemAdmin || false,
-          preferences: user.preferences ?? {},
+          preferences: (user as any).preferences ?? {},
         },
         organization: {
           id: defaultOrg.organization.id,
