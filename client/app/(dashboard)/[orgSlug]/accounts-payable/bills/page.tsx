@@ -187,7 +187,7 @@ export default function BillsPage() {
                 {formatCurrency(stats.outstandingAmount, currency)}
               </p>
               <p className="text-xs text-gray-500">
-                {stats.outstanding} bill{stats.outstanding !== 1 ? 's' : ''}
+                {stats.outstanding} approved bill{stats.outstanding !== 1 ? 's' : ''}
               </p>
             </CardContent>
           </Card>
@@ -195,13 +195,15 @@ export default function BillsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-sm font-medium text-gray-600">
-                Total Bills
+                Pending Approval
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className={`${getAmountFontSize(formatCurrency(stats.totalAmount, currency))} font-bold break-words`}>{formatCurrency(stats.totalAmount, currency)}</p>
+              <p className={`${getAmountFontSize(formatCurrency((stats as any).draftAmount ?? 0, currency))} font-bold text-yellow-600 break-words`}>
+                {formatCurrency((stats as any).draftAmount ?? 0, currency)}
+              </p>
               <p className="text-xs text-gray-500">
-                {stats.total} bill{stats.total !== 1 ? 's' : ''}
+                {(stats as any).draft ?? 0} draft bill{((stats as any).draft ?? 0) !== 1 ? 's' : ''}
               </p>
             </CardContent>
           </Card>

@@ -172,13 +172,17 @@ export async function GET(
     }));
 
     // Calculate summary statistics based on normalized bills
+    // Outstanding = approved/submitted obligations that are not yet paid (DRAFT excluded — no GL posting yet)
+    const unpaidStatuses = [String(BillStatus.SUBMITTED), String(BillStatus.APPROVED), String(BillStatus.OVERDUE), 'PARTIALLY_PAID', 'SENT'];
     const stats = {
       total: normalizedBills.length,
-      outstanding: normalizedBills.filter(
-        (b) => ![String(BillStatus.PAID), String(BillStatus.CANCELLED), String(BillStatus.VOIDED)].includes(b.status)
-      ).length,
+      draft: normalizedBills.filter((b) => b.status === String(BillStatus.DRAFT)).length,
+      draftAmount: normalizedBills
+        .filter((b) => b.status === String(BillStatus.DRAFT))
+        .reduce((sum, b) => sum + b.totalAmount, 0),
+      outstanding: normalizedBills.filter((b) => unpaidStatuses.includes(b.status)).length,
       outstandingAmount: normalizedBills
-        .filter((b) => ![String(BillStatus.PAID), String(BillStatus.CANCELLED), String(BillStatus.VOIDED)].includes(b.status))
+        .filter((b) => unpaidStatuses.includes(b.status))
         .reduce((sum, b) => sum + b.totalAmount, 0),
       totalAmount: normalizedBills.reduce((sum, b) => sum + b.totalAmount, 0),
       paid: normalizedBills.filter((b) => b.status === String(BillStatus.PAID)).length,

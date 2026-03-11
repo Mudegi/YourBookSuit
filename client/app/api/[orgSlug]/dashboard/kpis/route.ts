@@ -49,9 +49,9 @@ export async function GET(req: Request, { params }: { params: { orgSlug: string 
         _count: true,
       }).catch(() => ({ _sum: { total: null }, _count: 0 })),
 
-      // Bills (payables) — include DRAFT since they represent outstanding obligations
+      // Bills (payables) — only bills posted to GL (DRAFT excluded: no GL entry exists yet)
       prisma.bill.aggregate({
-        where: { organizationId: orgId, status: { notIn: ['PAID', 'VOIDED', 'CANCELLED'] } },
+        where: { organizationId: orgId, status: { notIn: ['DRAFT', 'VOIDED', 'CANCELLED'] } },
         _sum: { total: true, amountDue: true },
         _count: true,
       }).catch(() => ({ _sum: { total: null, amountDue: null }, _count: 0 })),
