@@ -14,6 +14,10 @@ export const prisma =
   global.prisma ||
   new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+    transactionOptions: {
+      maxWait: 10000,  // max time to wait to acquire a connection (ms)
+      timeout: 30000,  // max time for the transaction to complete (ms) — default 5000 is too low for invoice+GL+COGS
+    },
   });
 
 if (process.env.NODE_ENV !== 'production') {
