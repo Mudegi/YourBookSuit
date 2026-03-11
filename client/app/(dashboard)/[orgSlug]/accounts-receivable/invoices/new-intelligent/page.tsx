@@ -10,7 +10,6 @@ import {
 import { useOrganization } from '@/hooks/useOrganization';
 import { useBranch } from '@/hooks/useBranch';
 import { formatCurrency } from '@/lib/utils';
-import EfrisInvoiceDisplay from '@/components/efris/EfrisInvoiceDisplay';
 import { toast } from 'sonner';
 
 interface Customer {
@@ -35,12 +34,6 @@ interface Product {
   unitPrice: number;
   quantityOnHand?: number;
   description?: string;
-  exciseDutyCode?: string | null;
-  exciseRate?: number | null;
-  exciseRule?: string | null;
-  exciseUnit?: string | null;
-  pack?: number | null;
-  stick?: number | null;
   goodsCategoryId?: string | null;
 }
 
@@ -82,11 +75,6 @@ interface InvoiceLineItem {
   subtotal: number;
   taxAmount: number;
   total: number;
-  // EFRIS excise duty fields
-  exciseDutyCode?: string | null;
-  exciseRate?: number | null;
-  exciseUnit?: string | null;
-  goodsCategoryId?: string | null;
 }
 
 interface ValidationResult {
@@ -134,10 +122,8 @@ export default function IntelligentInvoicePage() {
   const [items, setItems] = useState<InvoiceLineItem[]>([]);
   const [attachments, setAttachments] = useState<File[]>([]);
   
-  // EFRIS fields
-  const [buyerType, setBuyerType] = useState<string>('1'); // Default to B2C
+  // Payment method
   const [paymentMethod, setPaymentMethod] = useState<string>('102'); // Default to Cash
-  const [customerTin, setCustomerTin] = useState<string>(''); // For capturing TIN if needed
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -147,16 +133,12 @@ export default function IntelligentInvoicePage() {
   const [customerSearch, setCustomerSearch] = useState('');
   const [showProductSearch, setShowProductSearch] = useState<string | null>(null);
   const [productSearch, setProductSearch] = useState('');
-  const [fiscalizeWithEfris, setFiscalizeWithEfris] = useState(false);
-  const [efrisEnabled, setEfrisEnabled] = useState(false);
   
   // Modal states
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [showRecurringSetup, setShowRecurringSetup] = useState(false);
   const [showCustomisation, setShowCustomisation] = useState(false);
   const [showQuickAddCustomer, setShowQuickAddCustomer] = useState(false);
-  const [showEfrisFiscalInvoice, setShowEfrisFiscalInvoice] = useState(false);
-  const [efrisFiscalData, setEfrisFiscalData] = useState<any>(null);
   const [createdInvoiceId, setCreatedInvoiceId] = useState<string | null>(null);
   
   // Quick add customer form
@@ -195,45 +177,6 @@ export default function IntelligentInvoicePage() {
   const totalTax = items.reduce((sum, item) => sum + item.taxAmount, 0);
   const total = subtotal - totalDiscount + totalTax;
 
-  // EFRIS tax breakdown for ALL items — shows how the invoice total is composed
-  const efrisBreakdown = items.map(item => {
-    const selectedTaxRate = item.taxRateId ? taxRates.find(tr => tr.id === item.taxRateId) : null;
-    const vatRate = selectedTaxRate?.calculationType === 'PERCENTAGE' ? selectedTaxRate.rate / 100 : 0;
-    const grossPerUnit = item.displayRate || 0;
-    const qty = item.quantity;
-    const hasExcise = !!(item.exciseDutyCode && item.exciseRate);
-    const excisePerUnit = hasExcise ? (item.exciseRate || 0) : 0;
-
-    // Tax-inclusive: sellingPrice = (netBase + excise) × (1 + VAT)
-    // So: netBase = sellingPrice / (1 + VAT) - excise
-    // VAT is on the full pre-VAT base (net + excise), NOT just net
-    const beforeVATPerUnit = vatRate > 0 ? grossPerUnit / (1 + vatRate) : grossPerUnit;
-    const netPerUnit = beforeVATPerUnit - excisePerUnit;
-    const vatPerUnit = beforeVATPerUnit * vatRate; // VAT on (net + excise)
-
-    return {
-      itemId: item.id,
-      description: item.description,
-      hasExcise,
-      exciseDutyCode: item.exciseDutyCode || null,
-      exciseUnit: item.exciseUnit || null,
-      qty,
-      grossPerUnit,
-      netPerUnit,
-      excisePerUnit,
-      vatPerUnit: vatPerUnit,
-      netTotal: netPerUnit * qty,
-      exciseTotal: excisePerUnit * qty,
-      vatTotal: vatPerUnit * qty,
-      lineTotal: grossPerUnit * qty,
-    };
-  });
-  const grandNet = efrisBreakdown.reduce((s, b) => s + b.netTotal, 0);
-  const grandExcise = efrisBreakdown.reduce((s, b) => s + b.exciseTotal, 0);
-  const grandVAT = efrisBreakdown.reduce((s, b) => s + b.vatTotal, 0);
-  const grandTotal = grandNet + grandExcise + grandVAT;
-  const hasAnyExcise = efrisBreakdown.some(b => b.hasExcise);
-
   useEffect(() => {
     fetchCustomers();
     fetchProducts();
@@ -242,7 +185,6 @@ export default function IntelligentInvoicePage() {
     fetchCurrencies();
     fetchRevenueAccounts();
     resolveDefaultWarehouse();
-    checkEfrisConfig();
   }, [orgSlug]);
 
   const fetchCurrencies = async () => {
@@ -325,18 +267,6 @@ export default function IntelligentInvoicePage() {
     }
   };
 
-  const checkEfrisConfig = async () => {
-    try {
-      const res = await fetch(`/api/orgs/${orgSlug}/settings/efris`);
-      if (res.ok) {
-        const data = await res.json();
-        setEfrisEnabled(data.config?.isActive === true);
-      }
-    } catch (err) {
-      console.error('Error checking EFRIS config:', err);
-    }
-  };
-
   useEffect(() => {
     // Auto-calculate due date when customer or invoice date changes
     if (selectedCustomer && invoiceDate) {
@@ -403,12 +333,6 @@ export default function IntelligentInvoicePage() {
           unitPrice: p.sellingPrice || p.unitPrice || 0,
           quantityOnHand: p.quantityOnHand || p.quantityAvailable || 0,
           description: p.description || '',
-          exciseDutyCode: p.exciseDutyCode || null,
-          exciseRate: p.exciseRate ? Number(p.exciseRate) : null,
-          exciseRule: p.exciseRule || null,
-          exciseUnit: p.exciseUnit || null,
-          pack: p.pack ? Number(p.pack) : null,
-          stick: p.stick ? Number(p.stick) : null,
           goodsCategoryId: p.goodsCategoryId || null,
         }));
         console.log('Products loaded:', formatted.length, formatted);
@@ -817,10 +741,6 @@ export default function IntelligentInvoicePage() {
       displayRate,
       listPrice: product.unitPrice,
       availableStock,
-      exciseDutyCode: product.exciseDutyCode,
-      exciseRate: product.exciseRate,
-      exciseUnit: product.exciseUnit,
-      goodsCategoryId: product.goodsCategoryId,
     });
 
     setShowProductSearch(null);
@@ -1116,10 +1036,6 @@ export default function IntelligentInvoicePage() {
           reference,
           notes,
           attachments: attachmentUrls,
-          // EFRIS fields
-          buyerType: efrisEnabled ? buyerType : undefined,
-          paymentMethod: efrisEnabled ? paymentMethod : undefined,
-          customerTin: efrisEnabled ? (customerTin || selectedCustomer?.taxIdNumber) : undefined,
           items: items.map(item => ({
             productId: item.productId,
             serviceId: item.serviceId,
@@ -1140,39 +1056,11 @@ export default function IntelligentInvoicePage() {
         const invoice = await res.json();
         const invoiceId = invoice.id;
 
-        // Fiscalize with EFRIS if requested
+        // Fiscalize if requested
         if (shouldFiscalizeWithEfris) {
-          const efrisToastId = toast.loading('Submitting invoice to EFRIS...');
-          try {
-            const efrisRes = await fetch(`/api/orgs/${orgSlug}/invoices/${invoiceId}/efris`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-            });
-
-            if (!efrisRes.ok) {
-              const efrisError = await efrisRes.json();
-              toast.error(`Invoice created but EFRIS fiscalization failed: ${efrisError.error}`, { id: efrisToastId, duration: 10000 });
-              // Still navigate to invoice detail
-              router.push(`/${orgSlug}/accounts-receivable/invoices/${invoiceId}`);
-              return;
-            }
-            
-            // Get the fiscal invoice data from response
-            const efrisData = await efrisRes.json();
-            console.log('[Invoice Creation] EFRIS fiscal data received:', efrisData);
-            toast.success('Invoice fiscalized successfully!', { id: efrisToastId });
-            
-            // Show the EFRIS fiscal invoice immediately using the full response data
-            setEfrisFiscalData(efrisData.fullEfrisResponse || efrisData);
-            setCreatedInvoiceId(invoiceId);
-            setShowEfrisFiscalInvoice(true);
-            setLoading(false);
-            return; // Don't navigate yet, show the fiscal receipt first
-          } catch (efrisErr: any) {
-            toast.error(efrisErr?.name === 'AbortError' ? 'EFRIS request timed out' : 'Invoice created but EFRIS fiscalization failed', { id: efrisToastId });
-            router.push(`/${orgSlug}/accounts-receivable/invoices/${invoiceId}`);
-            return;
-          }
+          toast.info('Invoice created successfully.');
+          router.push(`/${orgSlug}/accounts-receivable/invoices/${invoiceId}`);
+          return;
         }
 
         // Send email if requested
@@ -1293,16 +1181,6 @@ export default function IntelligentInvoicePage() {
               >
                 {loading ? 'Saving...' : 'Save & Send'}
               </button>
-              {efrisEnabled && (
-                <button
-                  type="button"
-                  onClick={() => handleSubmit(true)}
-                  disabled={loading || !selectedCustomer || items.length === 0}
-                  className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {loading ? 'Saving...' : 'Fiscalize'}
-                </button>
-              )}
             </div>
           </div>
         </div>
@@ -1580,84 +1458,6 @@ export default function IntelligentInvoicePage() {
               </div>
             </div>
 
-            {/* Card: EFRIS Tax Compliance */}
-            {efrisEnabled && selectedCustomer && (
-              <div className="bg-white rounded-xl border border-blue-200 shadow-sm overflow-hidden">
-                <div className="px-5 py-3 bg-blue-50/80 border-b border-blue-100">
-                  <h3 className="text-[11px] font-bold text-blue-700 uppercase tracking-wider">EFRIS Tax Compliance</h3>
-                </div>
-                <div className="p-5">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
-                        Buyer Type <span className="text-red-400">*</span>
-                      </label>
-                      <select
-                        value={buyerType}
-                        onChange={(e) => {
-                          setBuyerType(e.target.value);
-                          if (e.target.value === '1') setCustomerTin('');
-                        }}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="1">B2C (Business to Consumer)</option>
-                        <option value="0">B2B (Business to Business)</option>
-                        <option value="3">B2G (Business to Government)</option>
-                        <option value="2">Foreigner (Non-resident)</option>
-                      </select>
-                      <p className="mt-1 text-[10px] text-gray-500">
-                        {buyerType === '0' && 'TIN is mandatory for business customers'}
-                        {buyerType === '1' && 'Retail/walk-in customer'}
-                        {buyerType === '2' && 'Non-resident customer'}
-                        {buyerType === '3' && 'TIN is mandatory for government entities'}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
-                        Payment Method <span className="text-red-400">*</span>
-                      </label>
-                      <select
-                        value={paymentMethod}
-                        onChange={(e) => setPaymentMethod(e.target.value)}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="102">Cash</option>
-                        <option value="101">Credit (Invoice)</option>
-                        <option value="105">Mobile Money</option>
-                        <option value="106">Visa/Master Card</option>
-                        <option value="108">POS</option>
-                        <option value="107">EFT (Bank Transfer)</option>
-                        <option value="103">Cheque</option>
-                        <option value="104">Demand Draft</option>
-                        <option value="109">RTGS</option>
-                        <option value="110">Swift Transfer</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* TIN field - required for B2B and B2G */}
-                  {(buyerType === '0' || buyerType === '3') && (
-                    <div className="mt-4">
-                      <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
-                        Customer TIN <span className="text-red-400">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={customerTin || (selectedCustomer as any)?.taxIdNumber || ''}
-                        onChange={(e) => setCustomerTin(e.target.value)}
-                        placeholder="Enter customer TIN number"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        required
-                      />
-                      <p className="mt-1 text-[10px] text-red-500">
-                        Required for {buyerType === '0' ? 'business' : 'government'} customers per EFRIS regulations
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
             {/* Card: Line Items */}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm" style={{ overflow: 'visible' }}>
               <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
@@ -1751,12 +1551,7 @@ export default function IntelligentInvoicePage() {
                                             </div>
                                             <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5">
                                               <span>SKU: {product.sku}</span>
-                                              {product.exciseDutyCode && (
-                                                <span className="px-1 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-semibold">
-                                                  EXCISE {product.exciseDutyCode}
-                                                </span>
-                                              )}
-                                            </div>
+                                          </div>
                                           </button>
                                         ))
                                       ) : (
@@ -1793,28 +1588,6 @@ export default function IntelligentInvoicePage() {
                                   Stock: {item.availableStock} available
                                 </div>
                               )}
-                              {/* Excise Duty Badge & Breakdown */}
-                              {(() => {
-                                const eb = efrisBreakdown.find(b => b.itemId === item.id);
-                                if (!eb?.hasExcise) return null;
-                                return (
-                                  <div className="mt-1.5 p-1.5 bg-amber-50 border border-amber-200 rounded text-xs">
-                                    <div className="flex items-center gap-1 mb-1">
-                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300">
-                                        EXCISE {eb.exciseDutyCode}
-                                      </span>
-                                      <span className="text-amber-700 font-medium">
-                                        {formatCurrency(eb.excisePerUnit, currency)}/{eb.exciseUnit || 'unit'}
-                                      </span>
-                                    </div>
-                                    <div className="text-[10px] text-amber-700 space-y-0.5">
-                                      <div>Net: {formatCurrency(eb.netPerUnit, currency)} &times; {item.quantity} = {formatCurrency(eb.netTotal || 0, currency)}</div>
-                                      <div>Excise: {formatCurrency(eb.excisePerUnit, currency)} &times; {item.quantity} = {formatCurrency(eb.exciseTotal, currency)}</div>
-                                      <div>VAT: {formatCurrency(eb.vatPerUnit, currency)} &times; {item.quantity} = {formatCurrency(eb.vatTotal || 0, currency)}</div>
-                                    </div>
-                                  </div>
-                                );
-                              })()}
                             </td>
                             <td className="px-3 py-3" style={{ width: '100px' }}>
                               <input
@@ -1985,96 +1758,7 @@ export default function IntelligentInvoicePage() {
               </div>
             </div>
 
-            {/* EFRIS Tax Breakdown */}
-            {hasAnyExcise && (
-              <div className="bg-white rounded-xl border border-amber-200 shadow-sm overflow-hidden">
-                <div className="px-5 py-3 bg-amber-50 border-b border-amber-100">
-                  <h3 className="text-[11px] font-bold text-amber-700 uppercase tracking-wider flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>
-                    EFRIS Tax Breakdown
-                  </h3>
-                </div>
-                <div className="p-5">
-                  <div className="overflow-x-auto mb-4">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="border-b border-amber-200 text-amber-600">
-                          <th className="text-left py-1.5 pr-2">Item</th>
-                          <th className="text-right py-1.5 px-2">Price/Unit</th>
-                          <th className="text-center py-1.5 px-2">Qty</th>
-                          <th className="text-right py-1.5 px-2">Net Amount</th>
-                          <th className="text-right py-1.5 px-2">Excise</th>
-                          <th className="text-right py-1.5 px-2">VAT (18%)</th>
-                          <th className="text-right py-1.5 pl-2">Line Total</th>
-                        </tr>
-                      </thead>
-                      <tbody className="text-amber-900">
-                        {efrisBreakdown.map((b, idx) => (
-                          <tr key={idx} className="border-b border-amber-100">
-                            <td className="py-1.5 pr-2">
-                              <span>{b.description || 'Item'}</span>
-                              {b.hasExcise && (
-                                <span className="ml-1 px-1 py-0.5 rounded bg-amber-200 text-amber-800 text-[9px] font-bold">
-                                  {b.exciseDutyCode}
-                                </span>
-                              )}
-                            </td>
-                            <td className="text-right py-1.5 px-2 tabular-nums">{formatCurrency(b.grossPerUnit, currency)}</td>
-                            <td className="text-center py-1.5 px-2">{b.qty}</td>
-                            <td className="text-right py-1.5 px-2 tabular-nums">{formatCurrency(b.netTotal, currency)}</td>
-                            <td className="text-right py-1.5 px-2 tabular-nums">
-                              {b.hasExcise ? (
-                                <span className="text-amber-700 font-medium">{formatCurrency(b.exciseTotal, currency)}</span>
-                              ) : (
-                                <span className="text-gray-400">&mdash;</span>
-                              )}
-                            </td>
-                            <td className="text-right py-1.5 px-2 tabular-nums">{formatCurrency(b.vatTotal, currency)}</td>
-                            <td className="text-right py-1.5 pl-2 font-medium tabular-nums">{formatCurrency(b.lineTotal, currency)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr className="border-t-2 border-amber-300 font-semibold text-amber-900">
-                          <td className="py-2 pr-2" colSpan={3}>Totals</td>
-                          <td className="text-right py-2 px-2 tabular-nums">{formatCurrency(grandNet, currency)}</td>
-                          <td className="text-right py-2 px-2 tabular-nums text-amber-700">{formatCurrency(grandExcise, currency)}</td>
-                          <td className="text-right py-2 px-2 tabular-nums">{formatCurrency(grandVAT, currency)}</td>
-                          <td className="text-right py-2 pl-2 tabular-nums">{formatCurrency(grandTotal, currency)}</td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-
-                  {/* Formula row */}
-                  <div className="bg-amber-50 rounded-lg p-3 border border-amber-100">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                      <div className="flex flex-col items-center">
-                        <span className="text-[10px] text-amber-600">Net Amount</span>
-                        <span className="font-semibold text-amber-900 tabular-nums">{formatCurrency(grandNet, currency)}</span>
-                      </div>
-                      <span className="text-amber-400 font-bold text-lg">+</span>
-                      <div className="flex flex-col items-center">
-                        <span className="text-[10px] text-amber-600">Excise Duty</span>
-                        <span className="font-semibold text-amber-700 tabular-nums">{formatCurrency(grandExcise, currency)}</span>
-                      </div>
-                      <span className="text-amber-400 font-bold text-lg">+</span>
-                      <div className="flex flex-col items-center">
-                        <span className="text-[10px] text-amber-600">VAT (18%)</span>
-                        <span className="font-semibold text-amber-900 tabular-nums">{formatCurrency(grandVAT, currency)}</span>
-                      </div>
-                      <span className="text-amber-400 font-bold text-lg">=</span>
-                      <div className="flex flex-col items-center">
-                        <span className="text-[10px] text-blue-600 font-bold">INVOICE TOTAL</span>
-                        <span className="font-bold text-gray-900 text-base tabular-nums">{formatCurrency(grandTotal, currency)}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Card: Notes / Terms */}
+            {/* Card: Notes / Terms */}}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="px-5 py-3 border-b border-gray-100">
                 <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Notes / Terms</label>
@@ -2555,50 +2239,6 @@ export default function IntelligentInvoicePage() {
         </div>
       )}
 
-      {/* EFRIS Fiscal Invoice Modal */}
-      {showEfrisFiscalInvoice && efrisFiscalData && (
-        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
-            {/* Header */}
-            <div className="bg-white border-b px-6 py-4 flex justify-between items-center">
-              <h2 className="text-xl font-semibold text-gray-900">EFRIS Fiscalized Invoice</h2>
-              <button 
-                onClick={() => {
-                  setShowEfrisFiscalInvoice(false);
-                  // Navigate to the invoice detail page
-                  if (createdInvoiceId) {
-                    router.push(`/${orgSlug}/accounts-receivable/invoices/${createdInvoiceId}`);
-                  }
-                }}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            
-            {/* EFRIS Invoice Display */}
-            <div className="overflow-y-auto max-h-[calc(90vh-80px)] p-6">
-              <EfrisInvoiceDisplay data={efrisFiscalData} />
-            </div>
-            
-            {/* Footer */}
-            <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3 border-t">
-              <button
-                onClick={() => {
-                  setShowEfrisFiscalInvoice(false);
-                  // Navigate to the invoice detail page
-                  if (createdInvoiceId) {
-                    router.push(`/${orgSlug}/accounts-receivable/invoices/${createdInvoiceId}`);
-                  }
-                }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                Continue to Invoice Details
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

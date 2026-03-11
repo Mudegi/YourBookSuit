@@ -65,11 +65,11 @@ async function main() {
 
   // Input Tax Credit Check
   console.log('1.5 Input Tax Credit Eligibility');
-  const itcValid = canClaimInputTaxCredit('EFRIS-202512-1234', 'VAT_STANDARD_18');
-  console.log(`   With EFRIS Receipt: ${itcValid.canClaim ? '✅ Can Claim' : '❌ Cannot Claim'}`);
+  const itcValid = canClaimInputTaxCredit('RCV-202512-1234', 'VAT_STANDARD_18');
+  console.log(`   With valid receipt: ${itcValid.canClaim ? '✅ Can Claim' : '❌ Cannot Claim'}`);
   
   const itcInvalid = canClaimInputTaxCredit(null, 'VAT_STANDARD_18');
-  console.log(`   Without EFRIS Receipt: ${itcInvalid.canClaim ? '✅ Can Claim' : '❌ Cannot Claim'}`);
+  console.log(`   Without receipt: ${itcInvalid.canClaim ? '✅ Can Claim' : '❌ Cannot Claim'}`);
   console.log(`   Reason: ${itcInvalid.reason}\n`);
 
   // Test 2: Database Operations
@@ -239,7 +239,7 @@ async function main() {
       console.log('');
       console.log('   Input VAT (Purchases):');
       console.log(`     Claimable Input VAT: UGX ${vatReturn.claimableInputVAT.toLocaleString()}`);
-      console.log(`     Non-claimable (no EFRIS): UGX ${vatReturn.nonClaimableInputVAT.toLocaleString()}`);
+      console.log(`     Non-claimable (no receipt): UGX ${vatReturn.nonClaimableInputVAT.toLocaleString()}`);
       console.log(`     Total Input VAT: UGX ${vatReturn.totalInputVAT.toLocaleString()}`);
       console.log('');
       console.log(`   Net VAT Position: UGX ${vatReturn.netVAT.toLocaleString()}`);
@@ -308,7 +308,7 @@ async function main() {
   console.log('1. Create more test invoices and bills');
   console.log('2. Test month-end VAT return generation');
   console.log('3. Build frontend UI for tax management');
-  console.log('4. Test EFRIS integration');
+  console.log('4. Test e-invoicing integration');
 }
 
 main()

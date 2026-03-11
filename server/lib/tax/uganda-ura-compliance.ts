@@ -5,7 +5,7 @@
  * - VAT: 18% standard, 0% zero-rated, exempt
  * - WHT: 6% professional services, various rates for other categories
  * - PAYE: Tiered income tax (0%, 10%, 20%, 30%, 40%)
- * - Input Tax Credit restrictions (requires EFRIS e-receipt)
+ * - Input Tax Credit restrictions
  */
 
 import { PrismaClient, Prisma } from '@prisma/client';
@@ -80,7 +80,6 @@ export async function initializeUgandaURAPack(organizationId: string) {
           description: 'Uganda Standard VAT Rate - 18%',
           taxCode: 'T-18',
           claimable: true,
-          requiresEFRIS: true, // Input tax credit requires EFRIS e-receipt
         },
       }),
 
@@ -98,7 +97,6 @@ export async function initializeUgandaURAPack(organizationId: string) {
           description: 'Zero-rated supplies: exports, basic food items, medical supplies',
           taxCode: 'T-0',
           claimable: true,
-          requiresEFRIS: true,
         },
       }),
 
@@ -116,7 +114,6 @@ export async function initializeUgandaURAPack(organizationId: string) {
           description: 'Exempt supplies: financial services, education, residential rent',
           taxCode: 'EXEMPT',
           claimable: false, // Cannot claim input tax on exempt supplies
-          requiresEFRIS: false,
         },
       }),
     ]);
@@ -310,35 +307,6 @@ export function calculateUgandaPAYE(monthlyGross: number): {
     paye: totalTax,
     netSalary: monthlyGross - totalTax,
     breakdown,
-  };
-}
-
-/**
- * Check if invoice qualifies for Input Tax Credit
- * Uganda: Requires valid EFRIS e-receipt
- */
-export function canClaimInputTaxCredit(
-  efrisReceiptNo: string | null | undefined,
-  taxCategory: string
-): { canClaim: boolean; reason?: string } {
-  // Exempt supplies cannot claim input tax
-  if (taxCategory === 'VAT_EXEMPT') {
-    return {
-      canClaim: false,
-      reason: 'Exempt supplies cannot claim input tax credit',
-    };
-  }
-
-  // Standard and Zero-rated require EFRIS receipt
-  if (!efrisReceiptNo || efrisReceiptNo.trim() === '') {
-    return {
-      canClaim: false,
-      reason: 'EFRIS e-receipt required to claim input tax credit in Uganda',
-    };
-  }
-
-  return {
-    canClaim: true,
   };
 }
 

@@ -16,7 +16,7 @@ export const localizationDummyData = {
     taxIdLabel: 'URA TIN',
     apiEndpoints: {
       taxAuthority: 'https://ursb.go.ug',
-      eInvoicing: 'https://efris.ursb.go.ug',
+      eInvoicing: 'https://ursb.go.ug/einvoicing',
       taxReturns: 'https://ursb.go.ug/tax-returns',
       compliance: 'https://ursb.go.ug/compliance',
     },
@@ -43,12 +43,9 @@ export const localizationDummyData = {
       'invoice.tax': 'Tax Amount',
       'invoice.total': 'Total Amount',
       'ura.tin': 'URA TIN',
-      'efris.fdn': 'EFRIS FDN',
-      'efris.qr': 'EFRIS QR Code',
       'compliance.status': 'Compliance Status',
     },
     complianceDrivers: {
-      efrisIntegration: true,
       realTimeInvoicing: true,
       qrCodeGeneration: true,
       digitalSignatures: true,
@@ -69,7 +66,6 @@ export const localizationDummyData = {
         contact: '+256 414 301 000',
         website: 'https://ursb.go.ug',
         requirements: [
-          'EFRIS e-Invoicing mandatory',
           'Digital signatures required',
           'QR codes on all invoices',
           'Real-time tax reporting',

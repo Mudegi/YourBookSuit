@@ -34,14 +34,6 @@ export interface TaxReturnSummary {
     box4_netTaxPayable: Decimal; // positive = pay, negative = refund
   };
   
-  // EFRIS/Fiscal Compliance
-  efrisCompliance: {
-    totalTransactions: number;
-    fiscalizedTransactions: number;
-    nonFiscalizedTransactions: number;
-    complianceRate: number; // percentage
-  };
-  
   // Detailed breakdown
   breakdown: {
     byTaxRate: Array<{
@@ -80,8 +72,6 @@ export interface TaxTransactionDetail {
   taxRuleName: string;
   accountCode: string;
   accountName: string;
-  efrisFiscalNumber?: string;
-  isFiscalized: boolean;
 }
 
 export class TaxReturnService {
@@ -132,13 +122,6 @@ export class TaxReturnService {
     // Calculate net tax payable
     const netTaxPayable = outputVATData.totalOutputVAT.minus(inputVATData.totalInputVAT);
 
-    // Get EFRIS compliance stats
-    const efrisStats = await this.getEFRISComplianceStats(
-      organizationId,
-      periodStart,
-      periodEnd
-    );
-
     // Get detailed breakdown
     const breakdown = await this.getDetailedBreakdown(
       organizationId,
@@ -170,7 +153,6 @@ export class TaxReturnService {
         },
         box4_netTaxPayable: netTaxPayable,
       },
-      efrisCompliance: efrisStats,
       breakdown,
       isLocked: !!periodLock,
       lockedAt: periodLock?.lockedAt,
@@ -195,13 +177,6 @@ export class TaxReturnService {
   }> {
     const dateField = basis === 'CASH' ? 'paymentDate' : 'invoiceDate';
 
-    // Check if organization is in Uganda (EFRIS applies)
-    const org = await prisma.organization.findUnique({
-      where: { id: organizationId },
-      select: { homeCountry: true },
-    });
-    const isUganda = org?.homeCountry === 'UG' || org?.homeCountry === 'UGANDA';
-
     // Get all sales invoices for the period
     const invoices = await prisma.invoice.findMany({
       where: {
@@ -211,8 +186,6 @@ export class TaxReturnService {
           lte: periodEnd,
         },
         status: { notIn: ['DRAFT', 'CANCELLED'] },
-        // Only apply EFRIS filter for Uganda
-        ...(isUganda ? { efrisFDN: { not: null } } : {}),
       },
       include: {
         items: {
@@ -272,13 +245,6 @@ export class TaxReturnService {
   }> {
     const dateField = basis === 'CASH' ? 'paymentDate' : 'billDate';
 
-    // Check if organization is in Uganda (EFRIS applies)
-    const org = await prisma.organization.findUnique({
-      where: { id: organizationId },
-      select: { homeCountry: true },
-    });
-    const isUganda = org?.homeCountry === 'UG' || org?.homeCountry === 'UGANDA';
-
     // Get all bills for the period
     const bills = await prisma.bill.findMany({
       where: {
@@ -288,8 +254,6 @@ export class TaxReturnService {
           lte: periodEnd,
         },
         status: { notIn: ['DRAFT', 'CANCELLED'] },
-        // Only apply EFRIS filter for Uganda
-        ...(isUganda ? { efrisReceiptNo: { not: null } } : {}),
       },
       include: {
         items: {
@@ -319,55 +283,6 @@ export class TaxReturnService {
       totalPurchases,
       totalInputVAT,
       transactionCount,
-    };
-  }
-
-  /**
-   * Get EFRIS/Fiscal compliance statistics
-   */
-  private static async getEFRISComplianceStats(
-    organizationId: string,
-    periodStart: Date,
-    periodEnd: Date
-  ): Promise<{
-    totalTransactions: number;
-    fiscalizedTransactions: number;
-    nonFiscalizedTransactions: number;
-    complianceRate: number;
-  }> {
-    // Count total invoices
-    const totalInvoices = await prisma.invoice.count({
-      where: {
-        organizationId,
-        invoiceDate: {
-          gte: periodStart,
-          lte: periodEnd,
-        },
-        status: { notIn: ['DRAFT', 'CANCELLED'] },
-      },
-    });
-
-    // Count fiscalized invoices (those with EFRIS reference)
-    const fiscalizedInvoices = await prisma.invoice.count({
-      where: {
-        organizationId,
-        invoiceDate: {
-          gte: periodStart,
-          lte: periodEnd,
-        },
-        status: { notIn: ['DRAFT', 'CANCELLED'] },
-        efrisFDN: { not: null },
-      },
-    });
-
-    const nonFiscalized = totalInvoices - fiscalizedInvoices;
-    const complianceRate = totalInvoices > 0 ? (fiscalizedInvoices / totalInvoices) * 100 : 100;
-
-    return {
-      totalTransactions: totalInvoices,
-      fiscalizedTransactions: fiscalizedInvoices,
-      nonFiscalizedTransactions: nonFiscalized,
-      complianceRate,
     };
   }
 
@@ -476,13 +391,6 @@ export class TaxReturnService {
     periodEnd: Date,
     taxRuleId?: string
   ): Promise<TaxTransactionDetail[]> {
-    // Check if organization is in Uganda (EFRIS applies)
-    const org = await prisma.organization.findUnique({
-      where: { id: organizationId },
-      select: { homeCountry: true },
-    });
-    const isUganda = org?.homeCountry === 'UG' || org?.homeCountry === 'UGANDA';
-
     const invoices = await prisma.invoice.findMany({
       where: {
         organizationId,
@@ -491,8 +399,6 @@ export class TaxReturnService {
           lte: periodEnd,
         },
         status: { notIn: ['DRAFT', 'CANCELLED'] },
-        // Only apply EFRIS filter for Uganda
-        ...(isUganda ? { efrisFDN: { not: null } } : {}),
       },
       include: {
         customer: true,
@@ -528,8 +434,6 @@ export class TaxReturnService {
           taxRuleName: item.taxRateConfig?.name || 'No Tax',
           accountCode: '',
           accountName: 'Revenue',
-          efrisFiscalNumber: invoice.efrisFDN || undefined,
-          isFiscalized: !!invoice.efrisFDN,
         });
       }
     }
@@ -554,8 +458,6 @@ export class TaxReturnService {
           lte: periodEnd,
         },
         status: { notIn: ['DRAFT', 'CANCELLED'] },
-        efrisReceiptNo: { not: null }, // Only bills with vendor EFRIS FDN
-        efrisReceiptNo: { not: null }, // Only bills with vendor EFRIS FDN
       },
       include: {
         vendor: true,
@@ -590,8 +492,6 @@ export class TaxReturnService {
           taxRuleName: item.taxRateConfig?.name || 'No Tax',
           accountCode: item.account?.code || '',
           accountName: item.account?.name || 'Expense',
-          efrisFiscalNumber: bill.efrisReceiptNo || undefined,
-          isFiscalized: !!bill.efrisReceiptNo,
         });
       }
     }

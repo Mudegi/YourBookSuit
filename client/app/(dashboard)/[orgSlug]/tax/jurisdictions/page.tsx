@@ -56,9 +56,8 @@ const SAMPLE_JURISDICTIONS: TaxJurisdiction[] = [
     country: 'Uganda',
     countryCode: 'UG',
     taxAuthority: 'URA',
-    eInvoiceFormat: 'EFRIS',
-    requiresEInvoicing: true,
-    metadata: { efrisEnabled: true },
+    eInvoiceFormat: 'NONE',
+    requiresEInvoicing: false,
     isActive: true,
   },
   {

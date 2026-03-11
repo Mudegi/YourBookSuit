@@ -41,7 +41,6 @@ interface TaxExemptionFormData {
   validTo: string;
   documentUrl: string;
   documentPath: string;
-  efrisReason: string;
   reason: string;
   exemptionRate: number;
   isActive: boolean;
@@ -59,17 +58,6 @@ const EXEMPTION_TYPES = [
 const ENTITY_TYPES = [
   { value: 'CUSTOMER', label: 'Customer' },
   { value: 'VENDOR', label: 'Vendor' },
-];
-
-const EFRIS_REASONS = [
-  { value: 'NONE', label: 'None' },
-  { value: 'MEDICAL', label: 'Medical Supplies/Services' },
-  { value: 'EDUCATION', label: 'Education' },
-  { value: 'AGRICULTURE', label: 'Agriculture' },
-  { value: 'MANUFACTURING', label: 'Manufacturing' },
-  { value: 'EXPORT', label: 'Export' },
-  { value: 'ZERO_RATED', label: 'Zero Rated' },
-  { value: 'EXEMPT', label: 'Exempt' },
 ];
 
 export default function NewTaxExemptionPage() {
@@ -95,7 +83,6 @@ export default function NewTaxExemptionPage() {
     validTo: '',
     documentUrl: '',
     documentPath: '',
-    efrisReason: 'NONE',
     reason: '',
     exemptionRate: 0,
     isActive: true,
@@ -322,7 +309,6 @@ export default function NewTaxExemptionPage() {
         validTo: formData.validTo || undefined,
         documentUrl: formData.documentUrl || undefined,
         documentPath: formData.documentPath || undefined,
-        efrisReason: formData.efrisReason || undefined,
         reason: formData.reason || undefined,
         exemptionRate: formData.exemptionRate || undefined,
         isActive: formData.isActive,
@@ -516,20 +502,6 @@ export default function NewTaxExemptionPage() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="efrisReason">EFRIS Reason</Label>
-                <Select
-                  id="efrisReason"
-                  value={formData.efrisReason}
-                  onChange={(e) => handleInputChange('efrisReason', e.target.value)}
-                >
-                  {EFRIS_REASONS.map((reason) => (
-                    <option key={reason.value} value={reason.value}>
-                      {reason.label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
             </div>
 
             <div className="space-y-2">

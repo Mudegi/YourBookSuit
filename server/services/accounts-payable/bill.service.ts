@@ -28,7 +28,6 @@ interface CreateBillData {
   whtApplicable?: boolean;
   whtRate?: number;
   whtAmount?: number;
-  efrisReceiptNo?: string;
 }
 
 /**
@@ -216,7 +215,6 @@ export class BillService {
           whtApplicable: data.whtApplicable || false,
           whtRate: data.whtRate || 0,
           whtAmount: whtAmount > 0 ? whtAmount.toString() : '0',
-          efrisReceiptNo: data.efrisReceiptNo || null,
           transactionId: transaction.id,
           items: {
             create: data.items.map((item, index) => ({

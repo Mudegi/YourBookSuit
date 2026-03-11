@@ -462,13 +462,6 @@ CREATE TABLE `Invoice` (
     `whtAmount` DECIMAL(19, 4) NOT NULL DEFAULT 0,
     `whtRate` DECIMAL(5, 2) NOT NULL DEFAULT 0,
     `transactionId` VARCHAR(191) NULL,
-    `efrisFDN` VARCHAR(191) NULL,
-    `efrisVerificationCode` VARCHAR(191) NULL,
-    `efrisQRCode` VARCHAR(191) NULL,
-    `eInvoiceStatus` VARCHAR(191) NULL,
-    `eInvoiceSubmittedAt` DATETIME(3) NULL,
-    `eInvoiceResponse` JSON NULL,
-    `digitalSignature` VARCHAR(191) NULL,
     `buyerType` VARCHAR(191) NULL,
     `paymentMethod` VARCHAR(191) NULL,
     `inventoryCommitted` BOOLEAN NOT NULL DEFAULT false,
@@ -486,11 +479,9 @@ CREATE TABLE `Invoice` (
 
     INDEX `Invoice_organizationId_status_idx`(`organizationId`, `status`),
     INDEX `Invoice_customerId_idx`(`customerId`),
-    INDEX `Invoice_efrisFDN_idx`(`efrisFDN`),
     INDEX `Invoice_branchId_idx`(`branchId`),
     INDEX `Invoice_createdById_idx`(`createdById`),
     INDEX `Invoice_salespersonId_idx`(`salespersonId`),
-    INDEX `Invoice_eInvoiceStatus_idx`(`eInvoiceStatus`),
     UNIQUE INDEX `Invoice_organizationId_invoiceNumber_key`(`organizationId`, `invoiceNumber`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -515,17 +506,10 @@ CREATE TABLE `InvoiceItem` (
     `taxAgencyRateId` VARCHAR(191) NULL,
     `taxExempt` BOOLEAN NOT NULL DEFAULT false,
     `taxExemptReason` TEXT NULL,
-    `goodsCategoryId` VARCHAR(191) NULL,
     `discountFlag` VARCHAR(191) NOT NULL DEFAULT '2',
     `deemedFlag` VARCHAR(191) NOT NULL DEFAULT '2',
     `exciseFlag` VARCHAR(191) NOT NULL DEFAULT '2',
-    `exciseDutyCode` VARCHAR(191) NULL,
-    `exciseRate` DECIMAL(21, 8) NULL,
-    `exciseRule` VARCHAR(191) NULL,
     `exciseTax` DECIMAL(19, 4) NULL,
-    `pack` DECIMAL(12, 8) NULL,
-    `stick` DECIMAL(12, 8) NULL,
-    `exciseUnit` VARCHAR(191) NULL,
     `exciseCurrency` VARCHAR(191) NULL,
     `exciseRateName` TEXT NULL,
     `subtotal` DECIMAL(19, 4) NOT NULL DEFAULT 0,
@@ -666,12 +650,6 @@ CREATE TABLE `SalesReceipt` (
     `reference` VARCHAR(191) NULL,
     `notes` TEXT NULL,
     `transactionId` VARCHAR(191) NULL,
-    `efrisFDN` VARCHAR(191) NULL,
-    `efrisVerificationCode` VARCHAR(191) NULL,
-    `efrisQRCode` VARCHAR(191) NULL,
-    `eInvoiceStatus` VARCHAR(191) NULL,
-    `eInvoiceSubmittedAt` DATETIME(3) NULL,
-    `eInvoiceResponse` JSON NULL,
     `inventoryDeducted` BOOLEAN NOT NULL DEFAULT false,
     `inventoryDeductedAt` DATETIME(3) NULL,
     `salespersonId` VARCHAR(191) NULL,
@@ -684,7 +662,6 @@ CREATE TABLE `SalesReceipt` (
     INDEX `SalesReceipt_organizationId_status_idx`(`organizationId`, `status`),
     INDEX `SalesReceipt_customerId_idx`(`customerId`),
     INDEX `SalesReceipt_depositToAccountId_idx`(`depositToAccountId`),
-    INDEX `SalesReceipt_efrisFDN_idx`(`efrisFDN`),
     INDEX `SalesReceipt_branchId_idx`(`branchId`),
     INDEX `SalesReceipt_createdById_idx`(`createdById`),
     INDEX `SalesReceipt_paymentMethod_idx`(`paymentMethod`),
@@ -831,9 +808,6 @@ CREATE TABLE `GoodsReceipt` (
     `landedCostMethod` ENUM('BY_VALUE', 'BY_WEIGHT', 'BY_VOLUME', 'BY_QUANTITY', 'MANUAL') NULL,
     `glTransactionId` VARCHAR(191) NULL,
     `apBillId` VARCHAR(191) NULL,
-    `efrisSubmitted` BOOLEAN NOT NULL DEFAULT false,
-    `efrisStatus` VARCHAR(191) NULL,
-    `efrisReference` VARCHAR(191) NULL,
     `createdById` VARCHAR(191) NOT NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
@@ -893,18 +867,13 @@ CREATE TABLE `Bill` (
     `whtAmount` DECIMAL(19, 4) NOT NULL DEFAULT 0,
     `whtRate` DECIMAL(5, 2) NOT NULL DEFAULT 0,
     `whtCertificateNo` VARCHAR(191) NULL,
-    `efrisReceiptNo` VARCHAR(191) NULL,
     `stockInType` VARCHAR(191) NULL,
-    `efrisSubmitted` BOOLEAN NOT NULL DEFAULT false,
-    `efrisStatus` VARCHAR(191) NULL,
-    `efrisReference` VARCHAR(191) NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
     `branchId` VARCHAR(191) NULL,
 
     INDEX `Bill_organizationId_status_idx`(`organizationId`, `status`),
     INDEX `Bill_vendorId_idx`(`vendorId`),
-    INDEX `Bill_efrisReceiptNo_idx`(`efrisReceiptNo`),
     UNIQUE INDEX `Bill_organizationId_billNumber_key`(`organizationId`, `billNumber`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -1118,16 +1087,6 @@ CREATE TABLE `Product` (
     `reorderQuantity` DECIMAL(12, 4) NULL,
     `taxable` BOOLEAN NOT NULL DEFAULT true,
     `defaultTaxRate` DECIMAL(5, 2) NOT NULL DEFAULT 0,
-    `exciseDutyCode` VARCHAR(191) NULL,
-    `exciseRate` DECIMAL(21, 8) NULL,
-    `exciseRule` VARCHAR(191) NULL,
-    `pack` DECIMAL(12, 8) NULL,
-    `stick` DECIMAL(12, 8) NULL,
-    `exciseUnit` VARCHAR(191) NULL,
-    `efrisItemCode` VARCHAR(191) NULL,
-    `efrisProductCode` VARCHAR(191) NULL,
-    `efrisRegisteredAt` DATETIME(3) NULL,
-    `goodsCategoryId` VARCHAR(191) NULL,
     `taxGroupId` VARCHAR(191) NULL,
     `incomeAccountId` VARCHAR(191) NULL,
     `expenseAccountId` VARCHAR(191) NULL,
@@ -1658,9 +1617,6 @@ CREATE TABLE `TaxRate` (
     `description` TEXT NULL,
     `taxCode` VARCHAR(191) NULL,
     `claimable` BOOLEAN NOT NULL DEFAULT true,
-    `requiresEFRIS` BOOLEAN NOT NULL DEFAULT false,
-    `efrisTaxCategoryCode` VARCHAR(191) NULL,
-    `efrisGoodsCategoryId` VARCHAR(191) NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
 
@@ -2091,12 +2047,6 @@ CREATE TABLE `CreditNote` (
     `postedAt` DATETIME(3) NULL,
     `transactionId` VARCHAR(191) NULL,
     `attachments` JSON NOT NULL,
-    `efrisFDN` VARCHAR(191) NULL,
-    `efrisVerificationCode` VARCHAR(191) NULL,
-    `efrisQRCode` VARCHAR(191) NULL,
-    `eInvoiceStatus` VARCHAR(191) NULL,
-    `eInvoiceSubmittedAt` DATETIME(3) NULL,
-    `eInvoiceResponse` JSON NULL,
     `createdBy` VARCHAR(191) NOT NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
@@ -2105,7 +2055,6 @@ CREATE TABLE `CreditNote` (
     INDEX `CreditNote_invoiceId_idx`(`invoiceId`),
     INDEX `CreditNote_status_idx`(`status`),
     INDEX `CreditNote_creditDate_idx`(`creditDate`),
-    INDEX `CreditNote_efrisFDN_idx`(`efrisFDN`),
     UNIQUE INDEX `CreditNote_organizationId_creditNoteNumber_key`(`organizationId`, `creditNoteNumber`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -3599,25 +3548,6 @@ CREATE TABLE `EventLog` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE `EInvoiceConfig` (
-    `id` VARCHAR(191) NOT NULL,
-    `organizationId` VARCHAR(191) NOT NULL,
-    `country` VARCHAR(191) NOT NULL,
-    `provider` VARCHAR(191) NOT NULL,
-    `apiEndpoint` VARCHAR(191) NOT NULL,
-    `credentials` JSON NOT NULL,
-    `certificatePath` VARCHAR(191) NULL,
-    `isActive` BOOLEAN NOT NULL DEFAULT true,
-    `lastSyncAt` DATETIME(3) NULL,
-    `testMode` BOOLEAN NOT NULL DEFAULT false,
-    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-    `updatedAt` DATETIME(3) NOT NULL,
-
-    UNIQUE INDEX `EInvoiceConfig_organizationId_key`(`organizationId`),
-    PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- CreateTable
 CREATE TABLE `RowLevelSecurityRule` (
     `id` VARCHAR(191) NOT NULL,
     `organizationId` VARCHAR(191) NOT NULL,
@@ -4409,7 +4339,6 @@ CREATE TABLE `TaxExemption` (
     `validTo` DATETIME(3) NULL,
     `documentUrl` VARCHAR(191) NULL,
     `documentPath` VARCHAR(191) NULL,
-    `efrisReason` VARCHAR(191) NULL,
     `reason` TEXT NULL,
     `isActive` BOOLEAN NOT NULL DEFAULT true,
     `notes` TEXT NULL,
@@ -4558,10 +4487,6 @@ CREATE TABLE `UGExcisableDuty` (
     `inputVATOnMaterials` DECIMAL(19, 4) NOT NULL,
     `outputVATOnFinished` DECIMAL(19, 4) NOT NULL,
     `netVATPosition` DECIMAL(19, 4) NOT NULL,
-    `efrisReportingStatus` ENUM('PENDING', 'TRANSMITTED', 'ACCEPTED', 'REJECTED', 'AMENDED') NOT NULL DEFAULT 'PENDING',
-    `efrisTransmissionNo` VARCHAR(191) NULL,
-    `efrisReportedAt` DATETIME(3) NULL,
-    `whtApplies` BOOLEAN NOT NULL DEFAULT false,
     `whtRate` DECIMAL(5, 2) NOT NULL DEFAULT 0,
     `whtAmount` DECIMAL(19, 4) NOT NULL DEFAULT 0,
     `exciseDutyAccountId` VARCHAR(191) NULL,
@@ -4571,7 +4496,6 @@ CREATE TABLE `UGExcisableDuty` (
 
     UNIQUE INDEX `UGExcisableDuty_assemblyTransactionId_key`(`assemblyTransactionId`),
     INDEX `UGExcisableDuty_assemblyTransactionId_idx`(`assemblyTransactionId`),
-    INDEX `UGExcisableDuty_efrisReportingStatus_idx`(`efrisReportingStatus`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -4608,55 +4532,6 @@ CREATE TABLE `ManufacturingOverhead` (
 
     INDEX `ManufacturingOverhead_organizationId_idx`(`organizationId`),
     INDEX `ManufacturingOverhead_allocationMethod_idx`(`allocationMethod`),
-    PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- CreateTable
-CREATE TABLE `EFRISExcisableList` (
-    `id` VARCHAR(191) NOT NULL,
-    `organizationId` VARCHAR(191) NOT NULL,
-    `categoryCode` VARCHAR(191) NOT NULL,
-    `categoryName` VARCHAR(191) NOT NULL,
-    `description` TEXT NULL,
-    `exciseRate` DECIMAL(21, 8) NOT NULL,
-    `exciseUnit` VARCHAR(191) NULL,
-    `exciseRule` VARCHAR(191) NULL,
-    `currency` VARCHAR(191) NULL,
-    `rateText` VARCHAR(191) NULL,
-    `lastSyncedAt` DATETIME(3) NULL,
-    `effectiveFrom` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-    `effectiveTo` DATETIME(3) NULL,
-    `isActive` BOOLEAN NOT NULL DEFAULT true,
-    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-    `updatedAt` DATETIME(3) NOT NULL,
-
-    INDEX `EFRISExcisableList_organizationId_isActive_idx`(`organizationId`, `isActive`),
-    UNIQUE INDEX `EFRISExcisableList_organizationId_categoryCode_key`(`organizationId`, `categoryCode`),
-    PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- CreateTable
-CREATE TABLE `EFRISCommodityCategory` (
-    `id` VARCHAR(191) NOT NULL,
-    `organizationId` VARCHAR(191) NOT NULL,
-    `commodityCategoryCode` VARCHAR(191) NOT NULL,
-    `commodityCategoryName` VARCHAR(191) NOT NULL,
-    `parentCode` VARCHAR(191) NULL,
-    `commodityCategoryLevel` VARCHAR(191) NULL,
-    `rate` VARCHAR(191) NULL,
-    `isLeafNode` VARCHAR(191) NULL,
-    `serviceMark` VARCHAR(191) NULL,
-    `isZeroRate` VARCHAR(191) NULL,
-    `isExempt` VARCHAR(191) NULL,
-    `excisable` VARCHAR(191) NULL,
-    `lastSyncedAt` DATETIME(3) NULL,
-    `isActive` BOOLEAN NOT NULL DEFAULT true,
-    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-    `updatedAt` DATETIME(3) NOT NULL,
-
-    INDEX `EFRISCommodityCategory_organizationId_isActive_idx`(`organizationId`, `isActive`),
-    INDEX `EFRISCommodityCategory_organizationId_isLeafNode_idx`(`organizationId`, `isLeafNode`),
-    UNIQUE INDEX `EFRISCommodityCategory_organizationId_commodityCategoryCode_key`(`organizationId`, `commodityCategoryCode`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -5929,9 +5804,6 @@ ALTER TABLE `EventLog` ADD CONSTRAINT `EventLog_integrationId_fkey` FOREIGN KEY 
 ALTER TABLE `EventLog` ADD CONSTRAINT `EventLog_organizationId_fkey` FOREIGN KEY (`organizationId`) REFERENCES `Organization`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE `EInvoiceConfig` ADD CONSTRAINT `EInvoiceConfig_organizationId_fkey` FOREIGN KEY (`organizationId`) REFERENCES `Organization`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE `RowLevelSecurityRule` ADD CONSTRAINT `RowLevelSecurityRule_organizationId_fkey` FOREIGN KEY (`organizationId`) REFERENCES `Organization`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -6257,12 +6129,6 @@ ALTER TABLE `ManufacturingLaborCost` ADD CONSTRAINT `ManufacturingLaborCost_orga
 
 -- AddForeignKey
 ALTER TABLE `ManufacturingOverhead` ADD CONSTRAINT `ManufacturingOverhead_organizationId_fkey` FOREIGN KEY (`organizationId`) REFERENCES `Organization`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE `EFRISExcisableList` ADD CONSTRAINT `EFRISExcisableList_organizationId_fkey` FOREIGN KEY (`organizationId`) REFERENCES `Organization`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE `EFRISCommodityCategory` ADD CONSTRAINT `EFRISCommodityCategory_organizationId_fkey` FOREIGN KEY (`organizationId`) REFERENCES `Organization`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `InterBranchTransfer` ADD CONSTRAINT `InterBranchTransfer_organizationId_fkey` FOREIGN KEY (`organizationId`) REFERENCES `Organization`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;

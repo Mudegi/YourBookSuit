@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { validateApiKey, apiKeyHasPermission } from '@/lib/api-auth';
 
-// GET /api/public/v1/invoices - Get invoices (for external systems like EFRIS)
+// GET /api/public/v1/invoices - Get invoices
 export async function GET(request: NextRequest) {
   try {
     // Validate API key

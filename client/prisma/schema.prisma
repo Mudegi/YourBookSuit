@@ -84,9 +84,6 @@ model Organization {
   discounts               Discount[]
   documents               Document[]
   documentSequences       DocumentSequence[]
-  efrisExcisableList      EFRISExcisableList[]
-  efrisCommodityCategories EFRISCommodityCategory[]
-  eInvoiceConfig          EInvoiceConfig?
   employees               Employee[]
   expenseClaims           ExpenseClaim[]
   expensePolicies         ExpensePolicy[]
@@ -645,7 +642,6 @@ model Customer {
   taxCategory             String?
   taxExempt               Boolean                @default(false) // New: Tax exemption status
   taxExemptionReason      String? @db.Text // New: Reason for tax exemption
-  buyerType               String                 @default("1") // EFRIS: 0=B2B, 1=B2C, 2=Foreigner, 3=B2G
   defaultRevenueAccountId String?
   createdAt               DateTime               @default(now())
   updatedAt               DateTime               @updatedAt
@@ -720,19 +716,11 @@ model Invoice {
   whtAmount     Decimal @default(0) @db.Decimal(19, 4)
   whtRate       Decimal @default(0) @db.Decimal(5, 2)
 
-  // E-Invoicing & Fiscalization
-  transactionId          String? // GL Transaction reference
-  efrisFDN               String? // Fiscal Document Number
-  efrisVerificationCode  String? // EFRIS Verification Code
-  efrisQRCode            String? // QR Code from tax authority
-  eInvoiceStatus         String? // PENDING, SUBMITTED, ACCEPTED, REJECTED
-  eInvoiceSubmittedAt    DateTime?
-  eInvoiceResponse       Json? // Full response from tax authority API
-  digitalSignature       String? // Digital signature if required
-  
-  // EFRIS Transaction Details (for T109 payload)
-  buyerType              String? // EFRIS: 0=B2B, 1=B2C, 2=Foreigner, 3=B2G (overrides customer default)
-  paymentMethod          String? // 101=Credit, 102=Cash, 103=Cheque, 105=Mobile money, etc.
+  // GL Transaction reference
+  transactionId          String?
+
+  // Payment details
+  paymentMethod          String?
 
   // Inventory Commitment
   inventoryCommitted   Boolean   @default(false)
@@ -772,11 +760,9 @@ model Invoice {
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId, status])
   @@index([customerId])
-  @@index([efrisFDN])
   @@index([branchId])
   @@index([createdById])
   @@index([salespersonId])
-  @@index([eInvoiceStatus])
 }
 
 model InvoiceItem {
@@ -803,20 +789,7 @@ model InvoiceItem {
   taxExempt       Boolean @default(false)
   taxExemptReason String? @db.Text
   
-  // EFRIS T109 Tax Classification Fields
-  goodsCategoryId  String? // VAT commodity category from T124 (e.g., "10111301")
   discountFlag     String  @default("2") // 0=discount line, 1=discounted item, 2=no discount
-  deemedFlag       String  @default("2") // 1=deemed, 2=not deemed
-  exciseFlag       String  @default("2") // 1=has excise, 2=no excise
-  exciseDutyCode   String? // Excise duty code from T125 (e.g., "LED010100")
-  exciseRate       Decimal? @db.Decimal(21, 8) // Excise rate (% or amount)
-  exciseRule       String? // 1=by percentage, 2=by quantity
-  exciseTax        Decimal? @db.Decimal(19, 4) // Total excise tax for this line
-  pack             Decimal? @db.Decimal(12, 8) // Package value for excise calculation
-  stick            Decimal? @db.Decimal(12, 8) // Piece value for excise calculation
-  exciseUnit       String? // 101=per stick, 102=per litre, 103=per kg, etc.
-  exciseCurrency   String? // Currency for excise (usually same as invoice)
-  exciseRateName   String? @db.Text // Display name (e.g., "18%" or "UGX650 per litre")
 
   // Totals
   subtotal Decimal @default(0) @db.Decimal(19, 4) // quantity * unitPrice
@@ -1023,15 +996,9 @@ model SalesReceipt {
   reference         String?
   notes             String? @db.Text
   
-  // E-Invoicing & Fiscalization (Uganda EFRIS)
-  transactionId     String?            // GL Transaction reference
-  efrisFDN          String?            // Fiscal Document Number
-  efrisVerificationCode String?
-  efrisQRCode       String?
-  eInvoiceStatus    String?            // PENDING, SUBMITTED, ACCEPTED
-  eInvoiceSubmittedAt DateTime?
-  eInvoiceResponse  Json?
-  
+  // GL Transaction reference
+  transactionId     String?
+
   // Inventory Deduction (Immediate - not committed, deducted)
   inventoryDeducted Boolean            @default(false)
   inventoryDeductedAt DateTime?
@@ -1059,7 +1026,6 @@ model SalesReceipt {
   @@index([organizationId, status])
   @@index([customerId])
   @@index([depositToAccountId])
-  @@index([efrisFDN])
   @@index([branchId])
   @@index([createdById])
   @@index([paymentMethod])
@@ -1230,9 +1196,6 @@ model GoodsReceipt {
   landedCostMethod  LandedCostAllocation?
   glTransactionId   String?
   apBillId          String?
-  efrisSubmitted    Boolean             @default(false)
-  efrisStatus       String?
-  efrisReference    String?
   createdById       String
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
@@ -1298,11 +1261,6 @@ model Bill {
   whtAmount           Decimal              @default(0) @db.Decimal(19, 4)
   whtRate             Decimal              @default(0) @db.Decimal(5, 2)
   whtCertificateNo    String?
-  efrisReceiptNo      String?
-  stockInType         String?              // EFRIS: 101=Import, 102=Local, 103=Manufacture, 104=Opening
-  efrisSubmitted      Boolean              @default(false)
-  efrisStatus         String?              // DRAFT, SUBMITTED, FAILED, ACKNOWLEDGED
-  efrisReference      String?              // Reference number from EFRIS
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   branchId            String?
@@ -1318,8 +1276,8 @@ model Bill {
   @@unique([organizationId, billNumber])
   @@index([organizationId, status])
   @@index([vendorId])
-  @@index([efrisReceiptNo])
-}
+  }
+
 
 model BillItem {
   id              String          @id @default(cuid())
@@ -1549,16 +1507,6 @@ model Product {
   reorderQuantity        Decimal?                   @db.Decimal(12, 4)
   taxable                Boolean                    @default(true)
   defaultTaxRate         Decimal                    @default(0) @db.Decimal(5, 2)
-  exciseDutyCode         String?                    // EFRIS excise duty code for URA compliance
-  exciseRate             Decimal?                   @db.Decimal(21, 8) // Excise rate (% or amount per unit)
-  exciseRule             String?                    // 1=by percentage, 2=by quantity
-  pack                   Decimal?                   @db.Decimal(12, 8) // Package value for excise calculation
-  stick                  Decimal?                   @db.Decimal(12, 8) // Piece value for excise calculation
-  exciseUnit             String?                    // 101=per stick, 102=per litre, 103=per kg
-  efrisItemCode          String?                    // EFRIS item code used for registration (description or name)
-  efrisProductCode       String?                    // EFRIS registered product code
-  efrisRegisteredAt      DateTime?                  // When product was registered with EFRIS
-  goodsCategoryId        String?                    // EFRIS VAT commodity category from T124 (e.g., "10111301")
   taxGroupId             String? // Tax Group assignment
   incomeAccountId        String?
   expenseAccountId       String?
@@ -2193,12 +2141,6 @@ model TaxRate {
   description     String? @db.Text
   taxCode         String?
   claimable       Boolean          @default(true)
-  requiresEFRIS   Boolean          @default(false)
-  
-  // EFRIS T109 Mapping Fields
-  efrisTaxCategoryCode String? // 01=Standard, 02=Zero, 03=Exempt, 04=Deemed, 05=Excise, etc.
-  efrisGoodsCategoryId String? // VAT commodity category from T124 (optional default)
-  
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   billItems       BillItem[]
@@ -2349,7 +2291,7 @@ model TaxAgency {
   // E-Filing Integration
   apiEndpoint      String?
   apiCredentials   Json? // Encrypted API keys/credentials
-  externalSystemId String? // ID in external system (EFRIS, etc.)
+  externalSystemId String? // ID in external system
 
   // Status
   isActive Boolean @default(true)
@@ -2392,7 +2334,7 @@ model TaxAgencyRate {
   effectiveTo   DateTime?
 
   // Tax Authority Integration
-  externalTaxCode   String? // Code used by tax authority API (EFRIS, eTIMS)
+  externalTaxCode   String? // Code used by tax authority API
   reportingCategory String? // Category for tax return reporting
 
   // Exemption Support
@@ -2489,7 +2431,7 @@ model TaxExemptionReason {
   country        String? // Country-specific reasons
 
   // External Reporting
-  externalCode          String? // Code for tax authority (EFRIS, etc.)
+  externalCode          String? // Code for tax authority
   requiresDocumentation Boolean @default(false)
 
   isActive  Boolean  @default(true)
@@ -2700,14 +2642,6 @@ model CreditNote {
   transactionId    String?
   attachments      Json    @default("[]")
   
-  // E-Invoicing & Fiscalization (Uganda EFRIS)
-  efrisFDN          String?            // Fiscal Document Number
-  efrisVerificationCode String?
-  efrisQRCode       String?
-  eInvoiceStatus    String?            // PENDING, SUBMITTED, ACCEPTED, REJECTED
-  eInvoiceSubmittedAt DateTime?
-  eInvoiceResponse  Json?
-  
   createdBy        String
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @updatedAt
@@ -2724,7 +2658,6 @@ model CreditNote {
   @@index([invoiceId])
   @@index([status])
   @@index([creditDate])
-  @@index([efrisFDN])
 }
 
 model CreditNoteItem {
@@ -4320,22 +4253,6 @@ model EventLog {
   @@index([createdAt])
 }
 
-model EInvoiceConfig {
-  id              String       @id @default(cuid())
-  organizationId  String       @unique
-  country         String
-  provider        String       // EFRIS, eTIMS, etc.
-  apiEndpoint     String
-  credentials     Json         // Stores API key, secret, etc.
-  certificatePath String?
-  isActive        Boolean      @default(true)
-  lastSyncAt      DateTime?
-  testMode        Boolean      @default(false) // Test vs Production mode
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-}
-
 model RowLevelSecurityRule {
   id             String       @id @default(cuid())
   organizationId String
@@ -5109,9 +5026,8 @@ model TaxJurisdiction {
   jurisdictionType      JurisdictionType
   taxAuthority          String?
   taxLiabilityAccountId String? // GL account for tax liability
-  eInvoiceFormat        String? // EFRIS, eTIMS, etc.
   requiresEInvoicing    Boolean           @default(false)
-  metadata              Json? // Store EFRIS/eTIMS config, API keys, etc.
+  metadata              Json?
   isActive              Boolean           @default(true)
   notes                 String? @db.Text
   parentJurisdictionId  String?
@@ -5185,8 +5101,7 @@ model TaxExemption {
   validTo           DateTime? // Made optional
   documentUrl       String? // New: URL to uploaded PDF certificate
   documentPath      String? // New: File system path
-  efrisReason       String? // New: EFRIS exemption reason code
-  reason            String? @db.Text // Human readable reason
+  reason            String? @db.Text
   isActive          Boolean      @default(true)
   notes             String? @db.Text
   createdAt         DateTime     @default(now())
@@ -5219,7 +5134,7 @@ model LocalizationConfig {
   customFields          Json?
 
   // Enhanced localization metadata for global design with localized configuration
-  apiEndpoints         Json? // API endpoints for tax authorities (EFRIS, URA, HMRC, etc.)
+  apiEndpoints         Json? // API endpoints for tax authorities
   taxReturnTemplates   Json? // Tax return form templates and requirements
   digitalFiscalization Json? // Digital fiscalization settings (e-invoicing, QR codes, etc.)
   translationKeys      Json? // Translation keys for tax labels and messages
@@ -5338,10 +5253,6 @@ model UGExcisableDuty {
   inputVATOnMaterials   Decimal              @db.Decimal(19, 4)
   outputVATOnFinished   Decimal              @db.Decimal(19, 4)
   netVATPosition        Decimal              @db.Decimal(19, 4)
-  efrisReportingStatus  EFRISReportingStatus @default(PENDING)
-  efrisTransmissionNo   String?
-  efrisReportedAt       DateTime?
-  whtApplies            Boolean              @default(false)
   whtRate               Decimal              @default(0) @db.Decimal(5, 2)
   whtAmount             Decimal              @default(0) @db.Decimal(19, 4)
   exciseDutyAccountId   String?
@@ -5351,8 +5262,8 @@ model UGExcisableDuty {
   assemblyTransaction   AssemblyTransaction  @relation(fields: [assemblyTransactionId], references: [id], onDelete: Cascade)
 
   @@index([assemblyTransactionId])
-  @@index([efrisReportingStatus])
 }
+
 
 model ManufacturingLaborCost {
   id             String        @id @default(cuid())
@@ -5386,54 +5297,6 @@ model ManufacturingOverhead {
 
   @@index([organizationId])
   @@index([allocationMethod])
-}
-
-model EFRISExcisableList {
-  id             String       @id @default(cuid())
-  organizationId String
-  categoryCode   String       // EFRIS excise duty code (e.g., "LED110000")
-  categoryName   String       // Description (e.g., "Beer, Stout, Porter & other fermented beverages")
-  description    String? @db.Text
-  exciseRate     Decimal      @db.Decimal(21, 8) // Rate value (e.g., 0.60 for 60%, or 1500 for UGX1500)
-  exciseUnit     String?      // EFRIS unit code: 101=%, 102=per Litre, 103=per Kg, etc.
-  exciseRule     String?      // 1=by rate/percentage, 2=by quantity/fixed amount
-  currency       String?      // Currency for fixed rates (e.g. "UGX")
-  rateText       String?      // Human-readable rate text (e.g. "60%" or "UGX1500 per Litre")
-  lastSyncedAt   DateTime?
-  effectiveFrom  DateTime     @default(now())
-  effectiveTo    DateTime?
-  isActive       Boolean      @default(true)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@unique([organizationId, categoryCode])
-  @@index([organizationId, isActive])
-}
-
-// Cache for EFRIS commodity categories (T124 VAT categories)
-model EFRISCommodityCategory {
-  id                     String       @id @default(cuid())
-  organizationId         String
-  commodityCategoryCode  String       // e.g. "27112008"
-  commodityCategoryName  String       // e.g. "Garden Tool"
-  parentCode             String?
-  commodityCategoryLevel String?
-  rate                   String?      // VAT rate
-  isLeafNode             String?      // "101"=Yes, "102"=No
-  serviceMark            String?      // "101"=Service, "102"=Goods
-  isZeroRate             String?      // "101"=Yes, "102"=No
-  isExempt               String?      // "101"=Yes, "102"=No
-  excisable              String?      // "101"=Yes, "102"=No
-  lastSyncedAt           DateTime?
-  isActive               Boolean      @default(true)
-  createdAt              DateTime     @default(now())
-  updatedAt              DateTime     @updatedAt
-  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@unique([organizationId, commodityCategoryCode])
-  @@index([organizationId, isActive])
-  @@index([organizationId, isLeafNode])
 }
 
 enum BranchType {
@@ -5840,7 +5703,7 @@ enum TaxType {
   IMPORT_DUTY
   WITHHOLDING
   PAYROLL
-  DEEMED // Special VAT treatment for Uganda EFRIS
+  DEEMED
 }
 
 enum TaxRuleType {
@@ -6566,14 +6429,6 @@ enum AssemblyStatus {
   APPROVED
   POSTED
   REVERSED
-}
-
-enum EFRISReportingStatus {
-  PENDING
-  TRANSMITTED
-  ACCEPTED
-  REJECTED
-  AMENDED
 }
 
 enum LaborCostType {

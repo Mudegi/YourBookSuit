@@ -94,11 +94,8 @@ export default function NewBillPage() {
   });
   const [vendorFormError, setVendorFormError] = useState<string | null>(null);
   const [vendorFormLoading, setVendorFormLoading] = useState(false);
-  const [submittingEfris, setSubmittingEfris] = useState(false);
-  const [efrisEnabled, setEfrisEnabled] = useState(false);
   const { currency, organization } = useOrganization();
   const { user } = useAuth();
-  const isUganda = organization?.homeCountry?.toUpperCase() === 'UG' || organization?.homeCountry?.toUpperCase() === 'UGANDA';
 
   const [formData, setFormData] = useState({
     vendorId: preselectedVendorId || '',
@@ -106,8 +103,6 @@ export default function NewBillPage() {
     dueDate: '',
     billNumber: '',
     referenceNumber: '',
-    efrisReceiptNo: '',
-    stockInType: '102', // Default: Local Purchase
     notes: '',
   });
 
@@ -194,23 +189,6 @@ export default function NewBillPage() {
   useEffect(() => {
     fetchData();
   }, [orgSlug]);
-
-  // Check EFRIS configuration
-  useEffect(() => {
-    const checkEfris = async () => {
-      if (!organization || !isUganda) return;
-      try {
-        const res = await fetch(`/api/orgs/${orgSlug}/settings/efris`);
-        if (res.ok) {
-          const data = await res.json();
-          setEfrisEnabled(data.config?.isActive === true);
-        }
-      } catch (err) {
-        console.error('[EFRIS] Error checking config:', err);
-      }
-    };
-    checkEfris();
-  }, [orgSlug, organization, isUganda]);
 
   useEffect(() => {
     // Auto-calculate due date when vendor or bill date changes
@@ -506,24 +484,6 @@ export default function NewBillPage() {
     };
   }, [accountSearch, orgSlug]);
 
-  // Auto-select Opening Balance Equity (3900) for opening stock items
-  useEffect(() => {
-    if (formData.stockInType === '104' && allAccounts.length > 0) {
-      const openingBalanceAccount = allAccounts.find(acc => acc.code === '3900');
-      if (openingBalanceAccount) {
-        setItems((prev) =>
-          prev.map((item) => {
-            // Auto-select for inventory items without an account
-            if (item.productId && !item.accountId) {
-              return { ...item, accountId: openingBalanceAccount.id };
-            }
-            return item;
-          })
-        );
-      }
-    }
-  }, [formData.stockInType, allAccounts]);
-
   function updateItem(id: string, field: keyof BillItem, value: any) {
     setItems((prev) =>
       prev.map((item) => {
@@ -537,14 +497,6 @@ export default function NewBillPage() {
           const quantity = field === 'quantity' ? value : item.quantity;
           const unitPrice = field === 'unitPrice' ? value : item.unitPrice;
           updated.taxAmount = quantity * unitPrice * (taxRate / 100);
-        }
-        
-        // Auto-select Opening Balance Equity for opening stock items
-        if (field === 'productId' && value && formData.stockInType === '104') {
-          const openingBalanceAccount = allAccounts.find(acc => acc.code === '3900');
-          if (openingBalanceAccount) {
-            updated.accountId = openingBalanceAccount.id;
-          }
         }
         
         return updated;
@@ -583,13 +535,9 @@ export default function NewBillPage() {
     setFormErrors((prev) => ({ ...prev, [field]: error }));
   };
 
-  async function handleSubmit(e: React.FormEvent, submitToEfris = false) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (submitToEfris) {
-      setSubmittingEfris(true);
-    } else {
-      setSubmitting(true);
-    }
+    setSubmitting(true);
     setError(null);
 
     try {
@@ -622,10 +570,7 @@ export default function NewBillPage() {
         dueDate: formData.dueDate,
         billNumber: formData.billNumber || undefined,
         referenceNumber: formData.referenceNumber || undefined,
-        efrisReceiptNo: formData.efrisReceiptNo || undefined,
-        stockInType: formData.stockInType || undefined,
         notes: formData.notes || undefined,
-        submitToEfris: submitToEfris,
         items: items.map((item) => ({
           description: item.name,
           productId: item.productId || undefined,
@@ -658,7 +603,6 @@ export default function NewBillPage() {
       setError(err.message);
     } finally {
       setSubmitting(false);
-      setSubmittingEfris(false);
     }
   }
 
@@ -830,52 +774,6 @@ export default function NewBillPage() {
                   />
                 </div>
 
-                {isUganda && efrisEnabled && (
-                  <>
-                    <div className="md:col-span-2">
-                      <Label htmlFor="efrisReceiptNo" className="text-sm font-semibold">
-                        Vendor EFRIS Receipt No
-                        <span className="ml-2 text-xs font-normal text-muted-foreground">(Optional - for VAT credit)</span>
-                      </Label>
-                      <Input
-                        id="efrisReceiptNo"
-                        value={formData.efrisReceiptNo || ''}
-                        onChange={(e) => handleChange('efrisReceiptNo', e.target.value)}
-                        placeholder="Vendor's EFRIS Fiscal Document Number"
-                        className="h-10"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Enter the vendor's EFRIS FDN to claim Input VAT credit on this bill
-                      </p>
-                    </div>
-                    
-                    <div className="md:col-span-2">
-                      <Label htmlFor="stockInType" className="text-sm font-semibold">
-                        Stock Source Type *
-                        <span className="ml-2 text-xs font-normal text-muted-foreground">(Required for EFRIS submission)</span>
-                      </Label>
-                      <select
-                        id="stockInType"
-                        value={formData.stockInType}
-                        onChange={(e) => handleChange('stockInType', e.target.value)}
-                        className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      >
-                        <option value="101">Import - Goods from outside Uganda (customs cleared)</option>
-                        <option value="102">Local Purchase - Bought from local supplier (default)</option>
-                        <option value="103">Manufacture/Assembly - Produced in-house</option>
-                        <option value="104">Opening Stock - Initial inventory when starting EFRIS</option>
-                      </select>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Required by URA to track where goods came from and verify tax was paid correctly. Most purchases use "Local Purchase".
-                        {formData.stockInType === '104' && (
-                          <span className="block mt-1 text-amber-600 font-medium">
-                            ⓘ Opening Stock: Select account 3900 (Opening Balance Equity) for inventory items. Stock won't be doubled - just reported to EFRIS.
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                  </>
-                )}
               </div>
               </div>
             </div>
@@ -896,8 +794,8 @@ export default function NewBillPage() {
                         <tr className="bg-gray-50 border-b border-gray-300">
                         <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase">Product *</th>
                         <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase">
-                          Account {formData.stockInType === '104' ? '(Opening Stock)' : '(Services only)'}
-                        </th>
+                  Account (Services only)
+                </th>
                         <th className="px-2 py-3 text-right text-xs font-semibold text-gray-700 uppercase" style={{ width: '70px' }}>Quantity *</th>
                         <th className="px-2 py-3 text-right text-xs font-semibold text-gray-700 uppercase" style={{ width: '140px' }}>Unit Price *</th>
                         <th className="px-2 py-3 text-left text-xs font-semibold text-gray-700 uppercase" style={{ width: '160px' }}>Tax Rate</th>
@@ -974,14 +872,6 @@ export default function NewBillPage() {
                               className="w-full px-2 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                             >
                               <option value="">Select...</option>
-                              {/* Show Opening Balance Equity for opening stock */}
-                              {formData.stockInType === '104' && allAccounts
-                                .filter(acc => acc.code === '3900')
-                                .map((account) => (
-                                  <option key={account.id} value={account.id}>
-                                    {account.code} - {account.name} (Opening Stock)
-                                  </option>
-                                ))}
                               {/* Show expense accounts for non-inventory items */}
                               {!item.productId && expenseAccounts.slice(0, 50).map((account) => (
                                 <option key={account.id} value={account.id}>
@@ -989,15 +879,12 @@ export default function NewBillPage() {
                                 </option>
                               ))}
                               {/* Note for inventory items */}
-                              {item.productId && formData.stockInType !== '104' && (
+                              {item.productId && (
                                 <option value="" disabled>
                                   (Inventory items use account 1300 automatically)
                                 </option>
                               )}
                             </select>
-                            {item.productId && formData.stockInType === '104' && !item.accountId && (
-                              <p className="text-xs text-amber-600 mt-1">⚠️ Select Opening Balance Equity (3900)</p>
-                            )}
                           </td>
 
                           {/* Quantity */}
@@ -1096,8 +983,8 @@ export default function NewBillPage() {
               <div className="flex flex-wrap gap-3 mt-6">
                 <Button 
                   type="button"
-                  onClick={(e) => handleSubmit(e, false)}
-                  disabled={submitting || submittingEfris} 
+                  onClick={(e) => handleSubmit(e)}
+                  disabled={submitting} 
                   className="px-6 py-2"
                 >
                   {submitting ? (
@@ -1109,23 +996,6 @@ export default function NewBillPage() {
                     'Save'
                   )}
                 </Button>
-                {isUganda && efrisEnabled && (
-                  <Button 
-                    type="button"
-                    onClick={(e) => handleSubmit(e, true)}
-                    disabled={submitting || submittingEfris}
-                    className="px-6 py-2 bg-green-600 hover:bg-green-700"
-                  >
-                    {submittingEfris ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Submitting to EFRIS...
-                      </>
-                    ) : (
-                      'Save and add stock to EFRIS'
-                    )}
-                  </Button>
-                )}
                 <Link href={`/${orgSlug}/accounts-payable/bills`}>
                   <Button type="button" variant="outline" className="px-6 py-2">
                     Cancel

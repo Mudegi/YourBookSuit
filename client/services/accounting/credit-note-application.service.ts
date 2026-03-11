@@ -8,7 +8,6 @@
  * - Update customer balances
  * - Generate GL entries
  * - Handle inventory restocking
- * - EFRIS/URA compliance
  */
 
 import prisma from '@/lib/prisma';

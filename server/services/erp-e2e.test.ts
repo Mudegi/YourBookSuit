@@ -892,29 +892,6 @@ describe('ERP System - Module 5: Tax & Compliance (Uganda URA)', () => {
     });
   });
 
-  describe('EFRIS Integration (Uganda)', () => {
-    test('should track EFRIS e-receipt numbers', async () => {
-      const bill = {
-        billNumber: 'BILL-001',
-        efrisReceiptNo: 'UG/2025/00000001/IN', // EFRIS format
-        status: 'EFRIS_TRANSMITTED',
-      };
-
-      expect(bill.efrisReceiptNo).toMatch(/^UG/);
-    });
-
-    test('should prepare excisable product data for EFRIS', async () => {
-      const excisableData = {
-        productName: 'Beer - Lager',
-        efrisCategory: '1001', // Beverages
-        exciseRate: new Decimal('20'),
-        quantityProduced: new Decimal('10000'),
-        dateReported: new Date('2025-12-19'),
-      };
-
-      expect(excisableData.efrisCategory).toBe('1001');
-    });
-  });
 });
 
 // ============================================================================

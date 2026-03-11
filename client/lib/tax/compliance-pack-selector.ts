@@ -25,7 +25,6 @@ export const SUPPORTED_COUNTRIES: Record<string, CompliancePackInfo> = {
       'VAT (18% standard, 0% zero-rated, exempt)',
       'WHT (6-15% on various services)',
       'PAYE (Progressive income tax)',
-      'EFRIS e-Invoicing integration',
       'Input Tax Credit validation',
       'One-click monthly tax returns',
     ],
@@ -185,7 +184,6 @@ export function getAvailableTaxFeatures(homeCountry: string): {
   hasVAT: boolean;
   hasWHT: boolean;
   hasPAYE: boolean;
-  hasEFRIS: boolean;
   hasInputTaxCredit: boolean;
   hasTaxReturns: boolean;
 } {
@@ -195,7 +193,6 @@ export function getAvailableTaxFeatures(homeCountry: string): {
         hasVAT: true,
         hasWHT: true,
         hasPAYE: true,
-        hasEFRIS: true,
         hasInputTaxCredit: true,
         hasTaxReturns: true,
       };
@@ -207,7 +204,6 @@ export function getAvailableTaxFeatures(homeCountry: string): {
         hasVAT: false, // Not yet implemented
         hasWHT: false,
         hasPAYE: false,
-        hasEFRIS: false,
         hasInputTaxCredit: false,
         hasTaxReturns: false,
       };
@@ -217,7 +213,6 @@ export function getAvailableTaxFeatures(homeCountry: string): {
         hasVAT: false,
         hasWHT: false,
         hasPAYE: false,
-        hasEFRIS: false,
         hasInputTaxCredit: false,
         hasTaxReturns: false,
       };
@@ -227,7 +222,6 @@ export function getAvailableTaxFeatures(homeCountry: string): {
         hasVAT: false,
         hasWHT: false,
         hasPAYE: false,
-        hasEFRIS: false,
         hasInputTaxCredit: false,
         hasTaxReturns: false,
       };

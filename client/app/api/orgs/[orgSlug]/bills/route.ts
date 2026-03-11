@@ -37,9 +37,6 @@ const createBillSchema = z.object({
   whtApplicable: z.boolean().optional(),
   whtRate: z.number().min(0).max(100).optional(),
   whtAmount: z.number().min(0).optional(),
-  efrisReceiptNo: z.string().optional(),
-  submitToEfris: z.boolean().optional(),
-  stockInType: z.enum(['101', '102', '103', '104']).optional(), // 101=Import, 102=Local, 103=Manufacture, 104=Opening
 });
 
 /**
@@ -79,7 +76,6 @@ export async function GET(
     const vendorId = searchParams.get('vendorId');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
-    const efrisStatus = searchParams.get('efrisStatus');
     const branchId = searchParams.get('branchId') || undefined;
 
     // Build where clause
@@ -112,13 +108,6 @@ export async function GET(
 
     if (vendorId) {
       where.vendorId = vendorId;
-    }
-
-    // Filter by EFRIS submission status
-    if (efrisStatus === 'submitted') {
-      where.efrisSubmitted = true;
-    } else if (efrisStatus === 'not-submitted') {
-      where.efrisSubmitted = false;
     }
 
     if (startDate) {
@@ -167,8 +156,6 @@ export async function GET(
       status: mapStatusToUi(b.status),
       vendor: { id: b.vendor.id, name: b.vendor.companyName },
       _count: b._count,
-      efrisSubmitted: b.efrisSubmitted,
-      efrisStatus: b.efrisStatus,
     }));
 
     // Calculate summary statistics based on normalized bills
@@ -244,130 +231,14 @@ export async function POST(
         whtApplicable: validatedData.whtApplicable,
         whtRate: validatedData.whtRate,
         whtAmount: validatedData.whtAmount,
-        efrisReceiptNo: validatedData.efrisReceiptNo,
-        stockInType: validatedData.stockInType,
         items: validatedData.items,
       },
       organizationId,
       userId
     );
 
-    // Submit to EFRIS if requested
-    let efrisResponse = null;
-    if (validatedData.submitToEfris) {
-      try {
-        const { EfrisApiService } = await import('@/lib/services/efris/efris-api.service');
-        
-        const efrisConfig = await prisma.eInvoiceConfig.findUnique({
-          where: { organizationId },
-        });
-
-        if (!efrisConfig || !efrisConfig.isActive) {
-          return NextResponse.json(
-            {
-              ...getResponseData(bill),
-              warning: 'Bill created but EFRIS integration is not configured or not active',
-            },
-            { status: 201 }
-          );
-        }
-
-        const credentials = efrisConfig.credentials as any;
-        const efrisApiKey = credentials?.efrisApiKey || credentials?.apiKey;
-
-        if (!efrisApiKey || !efrisConfig.apiEndpoint) {
-          return NextResponse.json(
-            {
-              ...getResponseData(bill),
-              warning: 'Bill created but EFRIS API credentials not configured',
-            },
-            { status: 201 }
-          );
-        }
-
-        const efrisService = new EfrisApiService({
-          apiBaseUrl: efrisConfig.apiEndpoint,
-          apiKey: efrisApiKey,
-          enabled: efrisConfig.isActive,
-        });
-
-        // Prepare items for EFRIS stock increase (goods receipt)
-        // Must fetch products to get their stored EFRIS item codes
-        const billItemsWithProducts = await Promise.all(
-          bill.items.map(async (item: any) => {
-            let efrisItemCode = item.description || 'UNKNOWN';
-            
-            if (item.productId) {
-              const product = await prisma.product.findUnique({
-                where: { id: item.productId },
-                select: { efrisItemCode: true, sku: true, name: true, description: true },
-              });
-              
-              if (product?.efrisItemCode) {
-                // Use the stored EFRIS item code from product registration
-                efrisItemCode = product.efrisItemCode;
-              } else if (product) {
-                // Fallback: use product description or name (same logic as registration)
-                efrisItemCode = (product.description && product.description.trim())
-                  ? product.description.trim()
-                  : product.name || 'UNKNOWN';
-              }
-            }
-            
-            return {
-              item_code: efrisItemCode,
-              quantity: Number(item.quantity),
-              unit_price: Number(item.unitPrice),
-              remarks: item.description || 'Purchase from supplier',
-            };
-          })
-        );
-
-        const efrisPayload = {
-          stock_movement_date: bill.billDate.toISOString().split('T')[0],
-          supplier_name: bill.vendor.companyName,
-          supplier_tin: bill.vendor.taxId || '',
-          stock_in_type: validatedData.stockInType || '102', // Default: Local Purchase
-          items: billItemsWithProducts,
-          remarks: `Bill ${bill.billNumber} - Purchase from ${bill.vendor.companyName}`,
-        };
-
-        efrisResponse = await efrisService.stockIncrease(efrisPayload);
-
-        // Update bill with EFRIS info
-        await prisma.bill.update({
-          where: { id: bill.id },
-          data: {
-            efrisSubmitted: true,
-            efrisStatus: 'SUBMITTED',
-            efrisReference: efrisResponse.message || 'Submitted',
-          },
-        });
-
-        // Update local inventory after successful EFRIS submission
-        // Skip inventory update for Opening Stock (104) - it's just reporting existing stock to EFRIS
-        const stockInType = validatedData.stockInType || '102';
-        if (stockInType !== '104') {
-          await updateInventoryFromBill(bill, organizationId);
-        }
-      } catch (efrisError: any) {
-        console.error('EFRIS submission error:', efrisError);
-        return NextResponse.json(
-          {
-            ...getResponseData(bill),
-            warning: `Bill created but EFRIS submission failed: ${efrisError.message}`,
-          },
-          { status: 201 }
-        );
-      }
-    } else {
-      // For non-EFRIS bills, update inventory immediately
-      // But skip for Opening Stock (104) if somehow used without EFRIS
-      const stockInType = validatedData.stockInType || '102';
-      if (stockInType !== '104') {
-        await updateInventoryFromBill(bill, organizationId);
-      }
-    }
+    // Update inventory from bill items
+    await updateInventoryFromBill(bill, organizationId);
 
     return NextResponse.json(getResponseData(bill), { status: 201 });
   } catch (error) {

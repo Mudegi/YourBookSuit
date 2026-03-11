@@ -337,29 +337,6 @@ export async function buildProduct(
     let exciseDutyRate = 0;
     let inputVATRecovered = new Decimal(0);
 
-    // Query EFRISExcisableList to see if product is excisable
-    const excisableCategory = await tx.efrISExcisableList.findFirst({
-      where: {
-        organizationId,
-        isActive: true,
-      },
-    });
-
-    if (excisableCategory) {
-      // For this example, check if product name contains keywords like "beverage", "plastic"
-      const excisableKeywords = ['beverage', 'drink', 'plastic', 'bag', 'cigarette', 'spirit'];
-      isExcisableProduct = excisableKeywords.some((kw) =>
-        finishedProduct.name.toLowerCase().includes(kw)
-      );
-
-      if (isExcisableProduct) {
-        exciseDutyRate = parseFloat(excisableCategory.exciseRate.toString());
-        exciseDutyAmount = totalManufacturingCost
-          .times(new Decimal(exciseDutyRate))
-          .dividedBy(100);
-      }
-    }
-
     // ========================================================================
     // STEP 7: CREATE BALANCED JOURNAL ENTRIES
     // ========================================================================
@@ -593,7 +570,6 @@ export async function buildProduct(
           inputVATOnMaterials: new Decimal(0), // Should be calculated from RM invoices
           outputVATOnFinished: new Decimal(0), // Will be calculated on sale
           netVATPosition: new Decimal(0),
-          efrisReportingStatus: 'PENDING',
           exciseDutyAccountId,
         },
       });

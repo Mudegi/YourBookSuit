@@ -308,7 +308,6 @@ export class IntelligentInvoiceService {
         requiresApproval,
         approvalReason,
         approvalStatus: requiresApproval ? 'PENDING' : null,
-        eInvoiceStatus: 'PENDING',
         items: {
           create: itemsWithTaxes.map((item, index) => ({
             productId: item.productId,
@@ -764,7 +763,7 @@ export class IntelligentInvoiceService {
    */
   private async submitToTaxAuthority(invoiceId: string, organization: any) {
     // This hooks into the e-invoicing service
-    // Implementation depends on country (EFRIS for Uganda, eTIMS for Kenya, etc.)
+    // Implementation depends on country-specific tax authority requirements
 
     try {
       const invoice = await prisma.invoice.findUniqueOrThrow({
@@ -775,26 +774,11 @@ export class IntelligentInvoiceService {
         },
       });
 
-      // Example: Submit to EFRIS
+      // TODO: Implement country-specific e-invoicing submission
       // const eInvoicingService = this.localizationProvider.getEInvoicingService(organization.homeCountry);
       // const result = await eInvoicingService.submitInvoice(invoice);
-
-      // For now, mark as submitted
-      await prisma.invoice.update({
-        where: { id: invoiceId },
-        data: {
-          eInvoiceStatus: 'SUBMITTED',
-          eInvoiceSubmittedAt: new Date(),
-        },
-      });
     } catch (error) {
       console.error('E-invoicing submission failed:', error);
-      await prisma.invoice.update({
-        where: { id: invoiceId },
-        data: {
-          eInvoiceStatus: 'FAILED',
-        },
-      });
     }
   }
 }

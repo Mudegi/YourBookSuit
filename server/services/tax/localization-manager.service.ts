@@ -376,7 +376,7 @@ export class LocalizationManager {
   }
 
   /**
-   * Get EFRIS/e-invoicing information for a country
+   * Get e-invoicing information for a country
    */
   static getEInvoicingInfo(countryCode: string): {
     supported: boolean;
@@ -384,10 +384,6 @@ export class LocalizationManager {
     apiEndpoint?: string;
   } {
     const eInvoicingSystems: Record<string, { system: string; apiEndpoint: string }> = {
-      UG: {
-        system: 'EFRIS',
-        apiEndpoint: 'https://efris.ura.go.ug/api',
-      },
       KE: {
         system: 'eTIMS',
         apiEndpoint: 'https://etims.kra.go.ke/api',
@@ -403,11 +399,11 @@ export class LocalizationManager {
 
   /**
    * Get external tax categories for statutory mapping
-   * Returns EFRIS, eTIMS, MTD category codes based on country
+   * Returns eTIMS, MTD category codes based on country
    */
   getExternalTaxCategories(countryCode: string): ExternalTaxCategory[] {
     const categories: Record<string, ExternalTaxCategory[]> = {
-      // UGANDA - EFRIS Tax Categories
+      // UGANDA - URA Tax Categories
       UG: [
         { code: '01', name: 'Standard Rated', description: 'Standard VAT at 18%', applicableTo: ['GOODS', 'SERVICES'] },
         { code: '02', name: 'Zero Rated', description: 'Zero-rated supplies (0%)', applicableTo: ['GOODS', 'SERVICES'] },

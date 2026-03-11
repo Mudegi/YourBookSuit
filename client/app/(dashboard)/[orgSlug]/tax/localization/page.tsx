@@ -267,7 +267,7 @@ export default function LocalizationPage() {
               className="w-full border rounded-lg p-2 text-sm min-h-[120px]"
               value={config.apiEndpoints ? JSON.stringify(config.apiEndpoints, null, 2) : ''}
               onChange={(e) => setConfig({ ...config, apiEndpoints: e.target.value })}
-              placeholder='{ "taxAuthority": "https://ursb.go.ug", "eInvoicing": "https://efris.ursb.go.ug" }'
+              placeholder='{ "taxAuthority": "https://example.com/tax-authority" }'
             />
           </div>
         </Card>

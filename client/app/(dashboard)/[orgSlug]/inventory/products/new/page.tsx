@@ -3,11 +3,8 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { useOrganization } from '@/hooks/useOrganization';
-import ExciseDutySelector from '@/components/efris/ExciseDutySelector';
-import CommodityCategorySelector from '@/components/efris/CommodityCategorySelector';
 import SearchableUnitSelect from '@/components/SearchableUnitSelect';
 import Link from 'next/link';
-import { ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface UnitOfMeasure {
@@ -37,15 +34,6 @@ export default function NewProductPage() {
     reorderQuantity: '',
     taxable: true,
     defaultTaxRate: '0',
-    exciseDutyCode: '',
-    exciseDutyLabel: '',
-    exciseRate: '',
-    exciseRule: '1',
-    exciseUnit: '102',
-    pack: '',
-    stick: '',
-    goodsCategoryId: '',
-    goodsCategoryLabel: '',
     initialQuantity: '',
   });
 
@@ -57,43 +45,7 @@ export default function NewProductPage() {
   const [newUnit, setNewUnit] = useState({ code: '', name: '', abbreviation: '', category: 'other' });
   const [addingUnit, setAddingUnit] = useState(false);
   const [unitError, setUnitError] = useState<string | null>(null);
-  const [efrisEnabled, setEfrisEnabled] = useState(false);
-  const [efrisLoading, setEfrisLoading] = useState(true);
   const { organization } = useOrganization();
-  const isUganda = organization?.homeCountry?.toUpperCase() === 'UG' || 
-                    organization?.homeCountry?.toUpperCase() === 'UGANDA';
-
-  // Check EFRIS configuration (only for Uganda)
-  useEffect(() => {
-    const checkEfris = async () => {
-      if (!organization) {
-        // Wait for organization to load
-        return;
-      }
-      
-      if (!isUganda) {
-        setEfrisLoading(false);
-        return;
-      }
-      
-      try {
-        const res = await fetch(`/api/orgs/${orgSlug}/settings/efris`);
-        if (res.ok) {
-          const data = await res.json();
-          const isActive = data.config?.isActive === true;
-          setEfrisEnabled(isActive);
-          console.log('[EFRIS] Configuration loaded:', { isActive, config: data.config });
-        } else {
-          console.log('[EFRIS] Configuration not found or error');
-        }
-      } catch (err) {
-        console.error('[EFRIS] Error checking config:', err);
-      } finally {
-        setEfrisLoading(false);
-      }
-    };
-    checkEfris();
-  }, [orgSlug, organization, isUganda]);
 
   // Fetch units of measure on mount
   useEffect(() => {
@@ -181,7 +133,7 @@ export default function NewProductPage() {
     }));
   };
 
-  const handleSubmit = async (e: React.FormEvent, shouldRegisterToEfris = false) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
@@ -198,13 +150,6 @@ export default function NewProductPage() {
           reorderQuantity: form.reorderQuantity ? Number(form.reorderQuantity) : undefined,
           initialQuantity: form.initialQuantity ? Number(form.initialQuantity) : 0,
           defaultTaxRate: Number(form.defaultTaxRate || 0),
-          exciseDutyCode: form.exciseDutyCode || undefined,
-          exciseRate: form.exciseRate ? Number(form.exciseRate) : undefined,
-          exciseRule: form.exciseRule || undefined,
-          exciseUnit: form.exciseUnit || undefined,
-          pack: form.pack ? Number(form.pack) : undefined,
-          stick: form.stick ? Number(form.stick) : undefined,
-          goodsCategoryId: form.goodsCategoryId || undefined,
           // Only include unitOfMeasureId if it's set
           ...(form.unitOfMeasureId && { unitOfMeasureId: form.unitOfMeasureId }),
         }),
@@ -216,29 +161,6 @@ export default function NewProductPage() {
       }
 
       const product = await res.json();
-
-      // Register to EFRIS if requested
-      if (shouldRegisterToEfris) {
-        const efrisToastId = toast.loading('Registering product with EFRIS...');
-        try {
-          const efrisRes = await fetch(`/api/orgs/${orgSlug}/products/${product.data?.id || product.id}/efris`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-          });
-
-          if (!efrisRes.ok) {
-            const efrisError = await efrisRes.json();
-            toast.error(`Product created but EFRIS registration failed: ${efrisError.error}`, { id: efrisToastId, duration: 10000 });
-            setTimeout(() => router.replace(`/${orgSlug}/inventory/products`), 2000);
-            return;
-          }
-          toast.success('Product registered with EFRIS!', { id: efrisToastId });
-        } catch (efrisErr: any) {
-          toast.error(efrisErr?.name === 'AbortError' ? 'EFRIS request timed out' : 'Product created but EFRIS registration failed', { id: efrisToastId });
-          setTimeout(() => router.replace(`/${orgSlug}/inventory/products`), 2000);
-          return;
-        }
-      }
 
       // Use replace instead of push to prevent back button loop
       router.replace(`/${orgSlug}/inventory/products`);
@@ -273,17 +195,6 @@ export default function NewProductPage() {
             >
               {submitting ? 'Saving…' : 'Save Product'}
             </button>
-            {isUganda && efrisEnabled && (
-              <button
-                type="button"
-                form="new-product-form"
-                onClick={(e) => handleSubmit(e, true)}
-                disabled={submitting}
-                className="px-4 py-2 rounded-md bg-green-600 text-white shadow hover:bg-green-700 disabled:opacity-60"
-              >
-                {submitting ? 'Saving…' : 'Save and register with EFRIS'}
-              </button>
-            )}
           </div>
         </div>
 
@@ -293,7 +204,7 @@ export default function NewProductPage() {
           </div>
         )}
 
-        <form id="new-product-form" onSubmit={(e) => handleSubmit(e, false)} className="space-y-6">
+        <form id="new-product-form" onSubmit={handleSubmit} className="space-y-6">
           <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
             <div className="border-b border-gray-200 px-5 py-4">
               <h2 className="text-sm font-semibold text-gray-900">Basic Information</h2>
@@ -445,181 +356,6 @@ export default function NewProductPage() {
             </div>
           </div>
 
-          {/* EFRIS Tax Classification - Only for Uganda + EFRIS */}
-          {isUganda && efrisEnabled && (
-            <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
-              <div className="border-b border-gray-200 px-5 py-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-sm font-semibold text-gray-900">EFRIS Tax Classification</h2>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Configure VAT category and excise duty codes for tax compliance
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className="px-5 py-5 space-y-5">
-                {/* VAT Commodity Category */}
-                <div>
-                  <CommodityCategorySelector
-                    orgSlug={orgSlug}
-                    value={form.goodsCategoryId}
-                    onChange={(code: string, label: string) => {
-                      setForm((prev) => ({
-                        ...prev,
-                        goodsCategoryId: code,
-                        goodsCategoryLabel: label,
-                      }));
-                    }}
-                  />
-                  <p className="mt-1.5 text-xs text-gray-500">
-                    Select the VAT commodity category that best describes this product
-                  </p>
-                </div>
-
-                {/* Excise Duty Code */}
-                <div>
-                  <ExciseDutySelector
-                    orgSlug={orgSlug}
-                    value={form.exciseDutyCode}
-                    onChange={(code: string, label: string, exciseData?: any) => {
-                      setForm((prev) => ({
-                        ...prev,
-                        exciseDutyCode: code,
-                        exciseDutyLabel: label,
-                        // Auto-populate excise fields from EFRIS data
-                        exciseRate: exciseData?.rate || '',
-                        exciseRule: exciseData?.excise_rule || '1',
-                        exciseUnit: exciseData?.unit || '102',
-                      }));
-                    }}
-                  />
-                  <p className="mt-1.5 text-xs text-gray-500">
-                    Only select if this product is subject to excise tax (alcohol, tobacco, fuel, etc.)
-                  </p>
-                </div>
-
-                {/* Excise Duty Configuration - Show when excise code is selected */}
-                {form.exciseDutyCode && (
-                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-4">
-                    <div className="flex items-start justify-between">
-                      <h3 className="text-sm font-semibold text-purple-900">Excise Duty Configuration</h3>
-                      <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Auto-populated from EFRIS</span>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Excise Rate <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="number"
-                          step="0.00000001"
-                          value={form.exciseRate}
-                          onChange={(e) => setForm({ ...form, exciseRate: e.target.value })}
-                          placeholder="e.g., 0.1 for 10%"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                          required={!!form.exciseDutyCode}
-                        />
-                        <p className="mt-1 text-xs text-gray-500">
-                          For {form.exciseRule === '1' ? 'percentage: 0.1 = 10%, 0.35 = 35%' : 'quantity: amount per unit (e.g., 650 per litre)'}
-                        </p>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Excise Rule <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                          value={form.exciseRule}
-                          onChange={(e) => setForm({ ...form, exciseRule: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                          required={!!form.exciseDutyCode}
-                        >
-                          <option value="1">By Percentage</option>
-                          <option value="2">By Quantity</option>
-                        </select>
-                        <p className="mt-1 text-xs text-gray-500">
-                          How excise duty is calculated
-                        </p>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Excise Unit <span className="text-red-500">*</span>
-                        </label>
-                        <select
-                          value={form.exciseUnit}
-                          onChange={(e) => setForm({ ...form, exciseUnit: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                          required={!!form.exciseDutyCode}
-                        >
-                          <option value="101">101 - Stick/Pieces</option>
-                          <option value="102">102 - Litre</option>
-                          <option value="103">103 - Kilogram</option>
-                          <option value="104">104 - User per day</option>
-                          <option value="105">105 - Minute</option>
-                          <option value="106">106 - Per 1,000 sticks</option>
-                          <option value="107">107 - Per 50kgs</option>
-                          <option value="109">109 - Per 1 gram</option>
-                        </select>
-                        <p className="mt-1 text-xs text-gray-500">
-                          Unit of measure for excise calculation
-                        </p>
-                      </div>
-
-                      {form.exciseRule === '2' && (
-                        <>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Pack Value
-                            </label>
-                            <input
-                              type="number"
-                              step="0.00000001"
-                              value={form.pack}
-                              onChange={(e) => setForm({ ...form, pack: e.target.value })}
-                              placeholder="e.g., 1"
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                            />
-                            <p className="mt-1 text-xs text-gray-500">
-                              Package scaling factor (usually 1)
-                            </p>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Stick Value
-                            </label>
-                            <input
-                              type="number"
-                              step="0.00000001"
-                              value={form.stick}
-                              onChange={(e) => setForm({ ...form, stick: e.target.value })}
-                              placeholder="e.g., 1"
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                            />
-                            <p className="mt-1 text-xs text-gray-500">
-                              Piece scaling factor (usually 1)
-                            </p>
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    <div className="bg-purple-100 border border-purple-300 rounded p-3">
-                      <p className="text-xs text-purple-800">
-                        <strong>✓ Auto-populated:</strong> These values were automatically filled from the EFRIS excise code you selected. You can adjust them if needed.
-                        {form.exciseRule === '1' && ' For percentage-based: rate 0.1 = 10% excise duty.'}
-                        {form.exciseRule === '2' && ' For quantity-based: rate is the amount per unit (e.g., UGX 650 per litre).'}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
           <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
             <div className="border-b border-gray-200 px-5 py-4">
               <h2 className="text-sm font-semibold text-gray-900">Inventory & Reordering</h2>
@@ -699,16 +435,6 @@ export default function NewProductPage() {
             >
               {submitting ? 'Saving…' : 'Save Product'}
             </button>
-            {isUganda && efrisEnabled && (
-              <button
-                type="button"
-                onClick={(e) => handleSubmit(e, true)}
-                disabled={submitting}
-                className="w-full px-4 py-2 rounded-md bg-green-600 text-white shadow hover:bg-green-700 disabled:opacity-60"
-              >
-                {submitting ? 'Saving…' : 'Save and register with EFRIS'}
-              </button>
-            )}
             <button
               type="button"
               onClick={() => router.push(`/${orgSlug}/inventory/products`)}

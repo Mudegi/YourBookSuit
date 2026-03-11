@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Package, CheckCircle, Clock, XCircle, ArrowLeft } from 'lucide-react';
+import { Plus, Package, Clock, XCircle, ArrowLeft } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
@@ -17,8 +17,6 @@ interface GoodsReceipt {
   vendorName: string;
   totalAmount: number;
   status: 'DRAFT' | 'RECEIVED' | 'QC_PENDING' | 'QC_PASSED' | 'QC_FAILED' | 'POSTED' | 'CANCELLED';
-  efrisSubmitted: boolean;
-  efrisStatus?: string;
   createdAt: string;
 }
 
@@ -89,7 +87,7 @@ export default function GoodsReceiptsPage() {
                 <Package className="w-10 h-10 text-blue-600" />
                 Goods Receipts / Stock Purchases
               </h1>
-              <p className="text-gray-600 mt-2">Receive stock from vendors and register with EFRIS</p>
+              <p className="text-gray-600 mt-2">Receive stock from vendors</p>
             </div>
             <Link href={`/${orgSlug}/inventory/goods-receipts/new`}>
               <Button className="h-11 px-6">
@@ -109,7 +107,7 @@ export default function GoodsReceiptsPage() {
               <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-gray-700 mb-2">No goods receipts yet</h3>
               <p className="text-gray-500 mb-6">
-                Create your first goods receipt to record stock purchases and register with EFRIS
+                Create your first goods receipt to record stock purchases
               </p>
               <Link href={`/${orgSlug}/inventory/goods-receipts/new`}>
                 <Button>
@@ -133,12 +131,6 @@ export default function GoodsReceiptsPage() {
                       <div className="flex items-center gap-3 mb-2">
                         <h3 className="text-lg font-semibold text-gray-900">{receipt.receiptNumber}</h3>
                         {getStatusBadge(receipt.status)}
-                        {receipt.efrisSubmitted && (
-                          <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700 flex items-center gap-1">
-                            <CheckCircle className="w-3 h-3" />
-                            EFRIS Registered
-                          </span>
-                        )}
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                         <div>

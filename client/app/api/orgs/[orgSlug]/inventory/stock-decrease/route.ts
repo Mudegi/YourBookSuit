@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/api-auth';
 import { prisma } from '@/lib/prisma';
-import { EfrisApiService } from '@/lib/services/efris/efris-api.service';
 
 /**
  * POST /api/orgs/[orgSlug]/inventory/stock-decrease
- * Create stock decrease adjustment with optional EFRIS submission
+ * Create stock decrease adjustment
  */
 export async function POST(
   request: NextRequest,
@@ -15,7 +14,7 @@ export async function POST(
     const { organizationId } = await requireAuth(params.orgSlug);
     const body = await request.json();
 
-    const { adjustType, stockInDate, remarks, items, submitToEfris = false } = body;
+    const { adjustType, remarks, items } = body;
 
     // Validate required fields
     if (!adjustType) {
@@ -40,77 +39,6 @@ export async function POST(
       );
     }
 
-    let efrisResponse = null;
-
-    // Submit to EFRIS if requested
-    if (submitToEfris) {
-      // Get EFRIS configuration
-      const efrisConfig = await prisma.eInvoiceConfig.findUnique({
-        where: { organizationId },
-      });
-
-      if (!efrisConfig || !efrisConfig.isActive) {
-        return NextResponse.json(
-          { error: 'EFRIS integration is not configured or not active' },
-          { status: 400 }
-        );
-      }
-
-      if (efrisConfig.provider !== 'EFRIS') {
-        return NextResponse.json(
-          { error: 'E-invoice provider is not EFRIS' },
-          { status: 400 }
-        );
-      }
-
-      // Extract EFRIS credentials
-      const credentials = efrisConfig.credentials as any;
-      const efrisApiKey = credentials?.efrisApiKey || credentials?.apiKey;
-
-      if (!efrisApiKey || !efrisConfig.apiEndpoint) {
-        return NextResponse.json(
-          { error: 'EFRIS API credentials not configured' },
-          { status: 400 }
-        );
-      }
-
-      // Initialize EFRIS service
-      const efrisService = new EfrisApiService({
-        apiBaseUrl: efrisConfig.apiEndpoint,
-        apiKey: efrisApiKey,
-        enabled: efrisConfig.isActive,
-      });
-
-      // Prepare EFRIS payload
-      const efrisPayload = {
-        operationType: '102', // Always 102 for decrease
-        adjustType: adjustType,
-        stockInDate: stockInDate || new Date().toISOString().split('T')[0],
-        remarks: remarks || undefined,
-        goodsStockInItem: items.map((item: any) => ({
-          goodsCode: item.goodsCode || item.sku,
-          measureUnit: item.measureUnit || '101',
-          quantity: parseFloat(item.quantity),
-          unitPrice: parseFloat(item.unitPrice),
-          remarks: item.remarks || undefined,
-        })),
-      };
-
-      // Submit to EFRIS
-      efrisResponse = await efrisService.submitStockDecrease(efrisPayload);
-
-      // Check if submission was successful
-      if (efrisResponse.returnStateInfo.returnCode !== '00') {
-        return NextResponse.json(
-          {
-            success: false,
-            error: efrisResponse.returnStateInfo.returnMessage || 'EFRIS submission failed',
-          },
-          { status: 400 }
-        );
-      }
-    }
-
     // Create stock adjustment records in database for each item
     // This updates inventory and creates audit trail
     for (const item of items) {
@@ -131,10 +59,10 @@ export async function POST(
             productId: product.id,
             movementType: 'ADJUSTMENT',
             quantity: -Math.abs(parseFloat(item.quantity)), // Negative for decrease
-            referenceType: submitToEfris ? 'EFRIS_STOCK_DECREASE' : 'STOCK_DECREASE',
-            referenceId: efrisResponse?.data?.referenceNumber || new Date().toISOString(),
+            referenceType: 'STOCK_DECREASE',
+            referenceId: new Date().toISOString(),
             notes: `Stock Decrease - Type: ${getAdjustTypeLabel(adjustType)} - ${remarks || item.remarks || ''}`,
-            movementDate: new Date(stockInDate || new Date()),
+            movementDate: new Date(),
           },
         });
 
@@ -160,9 +88,7 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      message: submitToEfris ? 'Stock decrease submitted to EFRIS successfully' : 'Stock decrease created successfully',
-      efrisResponse: efrisResponse?.returnStateInfo,
-      data: efrisResponse?.data,
+      message: 'Stock decrease created successfully',
     });
   } catch (error: any) {
     console.error('Error submitting stock decrease:', error);

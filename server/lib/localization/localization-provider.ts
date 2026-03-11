@@ -812,7 +812,6 @@ export class LocalizationProvider {
           required: true,
           rateValidation: true,
           uraCompliance: true,
-          efrisIntegration: metadata.digitalFiscalization?.eInvoicing || false,
         };
         flags.witholdingTax = {
           tracking: true,

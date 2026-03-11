@@ -340,8 +340,8 @@ export async function buildProduct(
     let exciseDutyRate = 0;
     let inputVATRecovered = new Decimal(0);
 
-    // Query EFRISExcisableList to see if product is excisable
-    const excisableCategory = await tx.efrISExcisableList.findFirst({
+    // Query excisable list to see if product is excisable
+    const excisableCategory = await tx.excisableList.findFirst({
       where: {
         organizationId,
         isActive: true,
@@ -596,7 +596,6 @@ export async function buildProduct(
           inputVATOnMaterials: new Decimal(0), // Should be calculated from RM invoices
           outputVATOnFinished: new Decimal(0), // Will be calculated on sale
           netVATPosition: new Decimal(0),
-          efrisReportingStatus: 'PENDING',
           exciseDutyAccountId,
         },
       });

@@ -24,7 +24,7 @@ export interface VATReturnData {
   standardRatePurchases: number;
   standardRateInputVAT: number;
   claimableInputVAT: number;
-  nonClaimableInputVAT: number; // No EFRIS receipt
+  nonClaimableInputVAT: number;
   totalInputVAT: number;
   
   // Net Position
@@ -50,7 +50,6 @@ export interface VATReturnData {
     vendor: string;
     amount: number;
     vatAmount: number;
-    efrisReceipt?: string;
     claimable: boolean;
   }>;
 }
@@ -201,7 +200,7 @@ export async function generateUgandaVATReturn(
       const itemTotal = Number(item.total);
       const itemVAT = Number(item.taxAmount);
       const taxCategory = item.taxCategory || 'STANDARD';
-      const canClaim = item.claimInputTax && !!bill.efrisReceiptNo;
+      const canClaim = !!item.claimInputTax;
 
       if (taxCategory.includes('STANDARD')) {
         billStandardPurchases += itemTotal - itemVAT;
@@ -226,8 +225,7 @@ export async function generateUgandaVATReturn(
       vendor: bill.vendor.companyName,
       amount: Number(bill.subtotal),
       vatAmount: Number(bill.taxAmount),
-      efrisReceipt: bill.efrisReceiptNo || undefined,
-      claimable: !!bill.efrisReceiptNo,
+      claimable: !!bill.items?.some((item: any) => item.claimInputTax),
     });
   }
 

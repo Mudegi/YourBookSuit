@@ -12,7 +12,7 @@ export class UgandaLocalizationStrategy extends BaseLocalizationStrategy {
     return {
       apiEndpoints: {
         taxAuthority: 'https://ursb.go.ug',
-        eInvoicing: 'https://efris.ursb.go.ug',
+        eInvoicing: 'https://ursb.go.ug/e-invoicing',
         taxReturns: 'https://ursb.go.ug/tax-returns',
         compliance: 'https://ursb.go.ug/compliance',
       },
@@ -30,7 +30,6 @@ export class UgandaLocalizationStrategy extends BaseLocalizationStrategy {
       },
       translationKeys: {},
       complianceDrivers: {
-        efrisIntegration: true,
         realTimeInvoicing: true,
         qrCodeGeneration: true,
         digitalSignatures: true,
@@ -51,7 +50,6 @@ export class UgandaLocalizationStrategy extends BaseLocalizationStrategy {
           contact: '+256 414 301 000',
           website: 'https://ursb.go.ug',
           requirements: [
-            'EFRIS e-Invoicing mandatory',
             'Digital signatures required',
             'QR codes on all invoices',
             'Real-time tax reporting',
@@ -63,7 +61,7 @@ export class UgandaLocalizationStrategy extends BaseLocalizationStrategy {
 
   async getTaxAuthorityEndpoints() {
     return {
-      baseUrl: 'https://efris.ursb.go.ug',
+      baseUrl: 'https://ursb.go.ug',
       endpoints: {
         authenticate: '/api/v1/authenticate',
         submitInvoice: '/api/v1/invoices',
@@ -142,8 +140,8 @@ export class UgandaLocalizationStrategy extends BaseLocalizationStrategy {
     return {
       eInvoicing: {
         required: true,
-        format: 'EFRIS_JSON',
-        provider: 'URA_EFRIS',
+        format: 'URA_JSON',
+        provider: 'URA',
         metadata: {
           version: '1.0',
           requiresRealTime: true,
@@ -153,7 +151,7 @@ export class UgandaLocalizationStrategy extends BaseLocalizationStrategy {
       },
       qrCodes: {
         required: true,
-        format: 'EFRIS_QR',
+        format: 'URA_QR',
         data: [
           'invoiceNumber',
           'date',
@@ -185,8 +183,6 @@ export class UgandaLocalizationStrategy extends BaseLocalizationStrategy {
         'invoice.tax': 'Tax Amount',
         'invoice.total': 'Total Amount',
         'ura.tin': 'URA TIN',
-        'efris.fdn': 'EFRIS FDN',
-        'efris.qr': 'EFRIS QR Code',
         'compliance.status': 'Compliance Status',
       },
       // Add other languages as needed
@@ -202,19 +198,6 @@ export class UgandaLocalizationStrategy extends BaseLocalizationStrategy {
     // Validate URA TIN format
     if (config.uraTin && !/^[A-Z0-9]{10}$/.test(config.uraTin)) {
       errors.push('Invalid URA TIN format. Must be 10 alphanumeric characters.');
-    }
-
-    // Validate EFRIS configuration
-    if (config.efrisEnabled) {
-      if (!config.efrisUsername) {
-        errors.push('EFRIS username is required when EFRIS is enabled.');
-      }
-      if (!config.efrisPassword) {
-        errors.push('EFRIS password is required when EFRIS is enabled.');
-      }
-      if (!config.privateKeyPath) {
-        warnings.push('Private key path not configured. Digital signatures may not work.');
-      }
     }
 
     // Validate tax period

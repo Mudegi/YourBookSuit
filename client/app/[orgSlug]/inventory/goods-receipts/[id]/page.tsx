@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Package, CheckCircle, Calendar, User, FileText } from 'lucide-react';
+import { ArrowLeft, Package, Calendar, User, FileText } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
@@ -30,9 +30,6 @@ interface GoodsReceipt {
   taxAmount: number;
   total: number;
   status: string;
-  efrisSubmitted: boolean;
-  efrisStatus?: string;
-  efrisReference?: string;
   createdAt: string;
   items: GoodsReceiptItem[];
 }
@@ -111,12 +108,6 @@ export default function GoodsReceiptDetailPage() {
               <p className="text-gray-600 mt-1">Goods Receipt Details</p>
             </div>
             <div className="flex gap-2">
-              {receipt.efrisSubmitted && (
-                <span className="px-3 py-1 text-sm font-semibold rounded-full bg-green-100 text-green-700 flex items-center gap-1">
-                  <CheckCircle className="w-4 h-4" />
-                  EFRIS Registered
-                </span>
-              )}
               <span className="px-3 py-1 text-sm font-semibold rounded-full bg-blue-100 text-blue-700">
                 {receipt.status}
               </span>
@@ -164,32 +155,6 @@ export default function GoodsReceiptDetailPage() {
               )}
             </CardContent>
           </Card>
-
-          {/* EFRIS Information */}
-          {receipt.efrisSubmitted && (
-            <Card>
-              <CardHeader className="bg-green-50 border-b border-green-100">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                  EFRIS Registration
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <p className="text-sm text-gray-500">Status</p>
-                    <p className="font-semibold text-gray-900">{receipt.efrisStatus || 'SUBMITTED'}</p>
-                  </div>
-                  {receipt.efrisReference && (
-                    <div>
-                      <p className="text-sm text-gray-500">EFRIS Reference</p>
-                      <p className="font-mono text-sm font-semibold text-gray-900">{receipt.efrisReference}</p>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
 
           {/* Items */}
           <Card>

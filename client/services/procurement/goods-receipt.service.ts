@@ -38,7 +38,6 @@ export interface GoodsReceiptInput {
   
   postToGL?: boolean;
   createAPBill?: boolean;
-  submitToEfris?: boolean;
 }
 
 export interface GoodsReceiptResult {
@@ -46,7 +45,6 @@ export interface GoodsReceiptResult {
   stockMovements: any[];
   glTransaction?: any;
   apBill?: any;
-  efrisResponse?: any;
   warnings: string[];
 }
 
@@ -332,7 +330,6 @@ export class GoodsReceiptService {
         stockMovements,
         glTransaction,
         apBill,
-        efrisResponse: null, // EFRIS handled separately
         warnings,
       };
     }, {

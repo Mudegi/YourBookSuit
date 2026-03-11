@@ -1,7 +1,7 @@
 /**
  * Tax Exemption Service
  * Handles certificate management, validation, and compliance for global tax exemptions
- * Special focus on Uganda URA WHT exemptions and EFRIS integration
+ * Special focus on Uganda URA WHT exemptions
  */
 
 import prisma from '@/lib/prisma';
@@ -159,27 +159,6 @@ export class TaxExemptionService {
       console.error('Error checking WHT exemption:', error);
       return { shouldExempt: false };
     }
-  }
-
-  /**
-   * Get EFRIS exemption reason for Uganda compliance
-   */
-  static getEFRISExemptionReason(exemption: any): string {
-    // Map exemption types to EFRIS reason codes
-    const efrisReasonMap: Record<string, string> = {
-      'VAT_EXEMPTION': 'EXEMPT',
-      'ZERO_RATED': 'ZERO_RATED',
-      'EXPORT': 'EXPORT',
-      'MEDICAL_SUPPLIES': 'MEDICAL',
-      'EDUCATION': 'EDUCATION',
-      'AGRICULTURE': 'AGRICULTURE',
-      'MANUFACTURING': 'MANUFACTURING'
-    };
-
-    return exemption.efrisReason ||
-           efrisReasonMap[exemption.exemptionType] ||
-           exemption.reason ||
-           'OTHER';
   }
 
   /**

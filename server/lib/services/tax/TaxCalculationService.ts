@@ -284,7 +284,7 @@ export class TaxCalculationService {
   }
 
   /**
-   * Get tax breakdown for EFRIS/e-Invoicing submission
+   * Get tax breakdown for e-Invoicing submission
    * Returns structured data with separate net and tax for each tax rate
    */
   static getTaxBreakdown(items: TaxCalculationResult[]): {

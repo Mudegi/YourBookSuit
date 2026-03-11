@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ArrowLeft, CheckCircle, XCircle, DollarSign, FileText, Clock,
-  Package, Calendar, User, Hash, AlertTriangle, Upload, Shield, Loader2,
+  Package, Calendar, User, Hash, AlertTriangle,
 } from 'lucide-react';
 import { useOrganization } from '@/hooks/useOrganization';
 import { formatCurrency } from '@/lib/utils';
@@ -45,25 +45,11 @@ export default function CreditNoteDetailPage() {
   const [loading, setLoading] = useState(true);
   const [note, setNote] = useState<any>(null);
   const [showApplicationModal, setShowApplicationModal] = useState(false);
-  const [efrisEnabled, setEfrisEnabled] = useState(false);
-  const [efrisSubmitting, setEfrisSubmitting] = useState(false);
-  const [efrisResult, setEfrisResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
     fetchNote();
-    checkEfris();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
-
-  const checkEfris = async () => {
-    try {
-      const res = await fetch(`/api/orgs/${orgSlug}/settings/efris`);
-      const data = await res.json();
-      setEfrisEnabled(data.success && data.config?.isActive);
-    } catch {
-      setEfrisEnabled(false);
-    }
-  };
 
   const fetchNote = async () => {
     try {
@@ -91,30 +77,6 @@ export default function CreditNoteDetailPage() {
       else alert('Error: ' + data.error);
     } catch (e) {
       console.error(e);
-    }
-  };
-
-  const submitToEfris = async () => {
-    if (!confirm('Submit this credit note to EFRIS? This cannot be undone.')) return;
-    try {
-      setEfrisSubmitting(true);
-      setEfrisResult(null);
-      const res = await fetch(`/api/orgs/${orgSlug}/credit-notes/${id}/efris`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      const data = await res.json();
-      if (data.success) {
-        const ref = data.referenceNo || data.fdn || '';
-        setEfrisResult({ type: 'success', message: ref ? `Submitted to EFRIS — Reference: ${ref}` : 'Credit note submitted to EFRIS successfully' });
-        fetchNote();
-      } else {
-        setEfrisResult({ type: 'error', message: data.error || 'EFRIS submission failed' });
-      }
-    } catch (e: any) {
-      setEfrisResult({ type: 'error', message: e.message || 'Network error' });
-    } finally {
-      setEfrisSubmitting(false);
     }
   };
 
@@ -153,11 +115,6 @@ export default function CreditNoteDetailPage() {
     ['APPROVED', 'PARTIALLY_APPLIED'].includes(note.status) &&
     parseFloat(note.remainingAmount) > 0;
 
-  const canSubmitEfris =
-    efrisEnabled &&
-    note.status === 'APPROVED' &&
-    !note.efrisFDN;
-
   // ═══════════════════════════════════════════════════════════════════════════
   //  RENDER
   // ═══════════════════════════════════════════════════════════════════════════
@@ -193,20 +150,6 @@ export default function CreditNoteDetailPage() {
                   Approve &amp; Post
                 </button>
               )}
-              {canSubmitEfris && (
-                <button
-                  onClick={submitToEfris}
-                  disabled={efrisSubmitting}
-                  className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5"
-                >
-                  {efrisSubmitting ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Upload className="w-4 h-4" />
-                  )}
-                  {efrisSubmitting ? 'Submitting...' : 'Submit to EFRIS'}
-                </button>
-              )}
               {canApply && (
                 <button
                   onClick={() => setShowApplicationModal(true)}
@@ -223,49 +166,6 @@ export default function CreditNoteDetailPage() {
 
       {/* ── Main Content ── */}
       <div className="max-w-[1400px] mx-auto px-6 py-6 space-y-5">
-        {/* ── EFRIS Submission Result Banner ── */}
-        {efrisResult && (
-          <div
-            className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm ${
-              efrisResult.type === 'success'
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                : 'bg-red-50 border-red-200 text-red-800'
-            }`}
-          >
-            {efrisResult.type === 'success' ? (
-              <Shield className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-            ) : (
-              <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
-            )}
-            <p className="flex-1 font-medium">{efrisResult.message}</p>
-            <button
-              onClick={() => setEfrisResult(null)}
-              className="text-gray-400 hover:text-gray-600 p-1"
-            >
-              <XCircle className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
-        {/* ── EFRIS Submitted Badge ── */}
-        {note.efrisFDN && (
-          <div className="flex items-center gap-3 px-4 py-3 bg-purple-50 border border-purple-200 rounded-xl">
-            <Shield className="w-5 h-5 text-purple-600 flex-shrink-0" />
-            <div className="text-sm">
-              <span className="font-semibold text-purple-700">EFRIS Submitted</span>
-              <span className="mx-2 text-purple-300">|</span>
-              <span className="text-purple-600">Ref: </span>
-              <span className="font-mono text-purple-800">{note.efrisFDN}</span>
-              {note.efrisVerificationCode && (
-                <>
-                  <span className="mx-2 text-purple-300">|</span>
-                  <span className="text-purple-600">Code: </span>
-                  <span className="font-mono text-purple-800">{note.efrisVerificationCode}</span>
-                </>
-              )}
-            </div>
-          </div>
-        )}
         {/* ── Summary Cards ── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">

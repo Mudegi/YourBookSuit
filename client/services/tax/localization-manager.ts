@@ -16,7 +16,6 @@ export interface TaxReturnTemplate {
   // Validation rules
   validation: {
     allowNegativeVAT: boolean;
-    requireEFRIS: boolean;
     minimumComplianceRate: number; // percentage
     requiredDocuments: string[];
   };
@@ -223,12 +222,10 @@ export class LocalizationManager {
       
       validation: {
         allowNegativeVAT: true, // Uganda allows VAT refunds
-        requireEFRIS: true, // EFRIS integration is mandatory
-        minimumComplianceRate: 95, // 95% of transactions must be fiscalized
+        minimumComplianceRate: 95,
         requiredDocuments: [
           'Sales Register',
           'Purchases Register',
-          'EFRIS Fiscal Device Reports',
           'Bank Statements',
         ],
       },
@@ -335,7 +332,6 @@ export class LocalizationManager {
       
       validation: {
         allowNegativeVAT: true,
-        requireEFRIS: false, // Kenya uses different system (eTIMS)
         minimumComplianceRate: 90,
         requiredDocuments: [
           'Sales Book',
@@ -433,7 +429,6 @@ export class LocalizationManager {
       
       validation: {
         allowNegativeVAT: true,
-        requireEFRIS: false,
         minimumComplianceRate: 85,
         requiredDocuments: [
           'Sales Register',
@@ -460,16 +455,6 @@ export class LocalizationManager {
   ): { isValid: boolean; errors: string[] } {
     const template = this.getTaxReturnTemplate(countryCode);
     const errors: string[] = [];
-
-    // Check EFRIS compliance if required
-    if (template.validation.requireEFRIS) {
-      if (taxReturn.efrisCompliance.complianceRate < template.validation.minimumComplianceRate) {
-        errors.push(
-          `EFRIS compliance rate (${taxReturn.efrisCompliance.complianceRate.toFixed(1)}%) ` +
-          `is below minimum required (${template.validation.minimumComplianceRate}%)`
-        );
-      }
-    }
 
     // Check negative VAT if not allowed
     if (!template.validation.allowNegativeVAT && taxReturn.boxes.box4_netTaxPayable.isNegative()) {

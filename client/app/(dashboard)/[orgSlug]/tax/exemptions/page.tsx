@@ -23,7 +23,6 @@ interface TaxExemption {
   validFrom: string;
   validTo?: string;
   documentUrl?: string;
-  efrisReason?: string;
   reason?: string;
   createdAt?: string;
 }
@@ -44,7 +43,6 @@ const SAMPLE_EXEMPTIONS: TaxExemption[] = [
     validFrom: new Date('2024-01-15').toISOString(),
     validTo: new Date(Date.now() + 1000 * 60 * 60 * 24 * 90).toISOString(),
     taxRule: { name: 'WHT 6% Professional Services', jurisdiction: { name: 'Uganda', code: 'UG' } },
-    efrisReason: 'MEDICAL_SUPPLIES',
     reason: 'Supply of medical goods and services',
     documentUrl: '/documents/exemptions/ura-wht-2024-001.pdf',
   },
@@ -63,7 +61,6 @@ const SAMPLE_EXEMPTIONS: TaxExemption[] = [
     validFrom: new Date('2023-06-01').toISOString(),
     validTo: new Date('2023-12-31').toISOString(),
     taxRule: { name: 'VAT Exemption for NGOs', jurisdiction: { name: 'California', code: 'US-CA' } },
-    efrisReason: 'NONPROFIT',
     reason: 'Non-profit organization exemption',
   },
   {
@@ -81,7 +78,6 @@ const SAMPLE_EXEMPTIONS: TaxExemption[] = [
     validFrom: new Date('2024-03-01').toISOString(),
     validTo: new Date(Date.now() + 1000 * 60 * 60 * 24 * 60).toISOString(),
     taxRule: { name: 'Manufacturing VAT Reduced Rate', jurisdiction: { name: 'Kenya', code: 'KE' } },
-    efrisReason: 'MANUFACTURING',
     reason: 'Manufacturing exemption - reduced rate',
     documentUrl: '/documents/exemptions/kra-vat-2024-045.pdf',
   },

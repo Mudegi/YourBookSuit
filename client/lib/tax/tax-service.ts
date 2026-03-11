@@ -228,10 +228,9 @@ export class UgandaURATaxStrategy extends BaseTaxStrategy {
           taxRate: rule.taxRate.toNumber(),
           taxType: rule.taxType,
           isWithholding: false,
-          requiresEInvoicing: true, // Uganda requires EFRIS
+          requiresEInvoicing: true,
           metadata: {
             ruleId: rule.id,
-            requiresEFRIS: true,
           },
         });
       }

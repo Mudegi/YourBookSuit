@@ -351,7 +351,7 @@ export default function NewGoodsReceiptPage() {
             <Package className="w-10 h-10 text-blue-600" />
             New Goods Receipt / Stock Purchase
           </h1>
-          <p className="text-gray-600 mt-1">Receive stock from vendor and register with EFRIS</p>
+          <p className="text-gray-600 mt-1">Receive stock from vendor</p>
         </div>
 
         {error && <Alert variant="error" className="mb-6">{error}</Alert>}

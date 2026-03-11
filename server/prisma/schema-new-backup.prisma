@@ -61,8 +61,6 @@ model Organization {
   discounts               Discount[]
   documents               Document[]
   documentSequences       DocumentSequence[]
-  efrisExcisableList      EFRISExcisableList[]
-  eInvoiceConfig          EInvoiceConfig?
   employees               Employee[]
   eventLogs               EventLog[]
   fiscalPeriods           FiscalPeriod[]
@@ -682,15 +680,7 @@ model Invoice {
   whtAmount     Decimal @default(0) @db.Decimal(19, 4)
   whtRate       Decimal @default(0) @db.Decimal(5, 2)
 
-  // E-Invoicing & Fiscalization
   transactionId          String? // GL Transaction reference
-  efrisFDN               String? // Fiscal Document Number
-  efrisVerificationCode  String? // EFRIS Verification Code
-  efrisQRCode            String? // QR Code from tax authority
-  eInvoiceStatus         String? // PENDING, SUBMITTED, ACCEPTED, REJECTED
-  eInvoiceSubmittedAt    DateTime?
-  eInvoiceResponse       Json? // Full response from tax authority API
-  digitalSignature       String? // Digital signature if required
 
   // Inventory Commitment
   inventoryCommitted   Boolean   @default(false)
@@ -729,11 +719,9 @@ model Invoice {
   @@unique([organizationId, invoiceNumber])
   @@index([organizationId, status])
   @@index([customerId])
-  @@index([efrisFDN])
   @@index([branchId])
   @@index([createdById])
   @@index([salespersonId])
-  @@index([eInvoiceStatus])
 }
 
 model InvoiceItem {
@@ -916,9 +904,6 @@ model GoodsReceipt {
   landedCostMethod  LandedCostAllocation?
   glTransactionId   String?
   apBillId          String?
-  efrisSubmitted    Boolean             @default(false)
-  efrisStatus       String?
-  efrisReference    String?
   createdById       String
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
@@ -984,7 +969,6 @@ model Bill {
   whtAmount           Decimal              @default(0) @db.Decimal(19, 4)
   whtRate             Decimal              @default(0) @db.Decimal(5, 2)
   whtCertificateNo    String?
-  efrisReceiptNo      String?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   branchId            String?
@@ -999,7 +983,6 @@ model Bill {
   @@unique([organizationId, billNumber])
   @@index([organizationId, status])
   @@index([vendorId])
-  @@index([efrisReceiptNo])
 }
 
 model BillItem {
@@ -1733,7 +1716,6 @@ model TaxRate {
   description     String?
   taxCode         String?
   claimable       Boolean          @default(true)
-  requiresEFRIS   Boolean          @default(false)
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   billItems       BillItem[]
@@ -1866,7 +1848,7 @@ model TaxAgency {
   // E-Filing Integration
   apiEndpoint      String?
   apiCredentials   Json? // Encrypted API keys/credentials
-  externalSystemId String? // ID in external system (EFRIS, etc.)
+  externalSystemId String? // ID in external system
 
   // Status
   isActive Boolean @default(true)
@@ -1909,7 +1891,7 @@ model TaxAgencyRate {
   effectiveTo   DateTime?
 
   // Tax Authority Integration
-  externalTaxCode   String? // Code used by tax authority API (EFRIS, eTIMS)
+  externalTaxCode   String? // Code used by tax authority API
   reportingCategory String? // Category for tax return reporting
 
   // Exemption Support
@@ -2006,7 +1988,7 @@ model TaxExemptionReason {
   country        String? // Country-specific reasons
 
   // External Reporting
-  externalCode          String? // Code for tax authority (EFRIS, etc.)
+  externalCode          String? // Code for tax authority
   requiresDocumentation Boolean @default(false)
 
   isActive  Boolean  @default(true)
@@ -3620,29 +3602,6 @@ model EventLog {
   @@index([createdAt])
 }
 
-model EInvoiceConfig {
-  id              String       @id @default(cuid())
-  organizationId  String       @unique
-  country         String
-  provider        String       // EFRIS, eTIMS, etc.
-  apiEndpoint     String
-  credentials     Json
-  certificatePath String?
-  isActive        Boolean      @default(true)
-  lastSyncAt      DateTime?
-  
-  // EFRIS Specific Fields
-  efrisApiKey     String?      // API key for EFRIS backend
-  efrisApiSecret  String?      // API secret (encrypted)
-  efrisDeviceNo   String?      // EFRIS device number
-  efrisTIN        String?      // Tax Identification Number
-  efrisTestMode   Boolean      @default(false) // Test vs Production mode
-  
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-}
-
 model RowLevelSecurityRule {
   id             String       @id @default(cuid())
   organizationId String
@@ -4416,9 +4375,9 @@ model TaxJurisdiction {
   jurisdictionType      JurisdictionType
   taxAuthority          String?
   taxLiabilityAccountId String? // GL account for tax liability
-  eInvoiceFormat        String? // EFRIS, eTIMS, etc.
+  eInvoiceFormat        String? // E-invoice format (eTIMS, etc.)
   requiresEInvoicing    Boolean           @default(false)
-  metadata              Json? // Store EFRIS/eTIMS config, API keys, etc.
+  metadata              Json? // Store e-invoicing config, API keys, etc.
   isActive              Boolean           @default(true)
   notes                 String?
   parentJurisdictionId  String?
@@ -4489,7 +4448,6 @@ model TaxExemption {
   validTo           DateTime? // Made optional
   documentUrl       String? // New: URL to uploaded PDF certificate
   documentPath      String? // New: File system path
-  efrisReason       String? // New: EFRIS exemption reason code
   reason            String? // Human readable reason
   isActive          Boolean      @default(true)
   notes             String?
@@ -4523,7 +4481,7 @@ model LocalizationConfig {
   customFields          Json?
 
   // Enhanced localization metadata for global design with localized configuration
-  apiEndpoints         Json? // API endpoints for tax authorities (EFRIS, URA, HMRC, etc.)
+  apiEndpoints         Json? // API endpoints for tax authorities
   taxReturnTemplates   Json? // Tax return form templates and requirements
   digitalFiscalization Json? // Digital fiscalization settings (e-invoicing, QR codes, etc.)
   translationKeys      Json? // Translation keys for tax labels and messages
@@ -4642,10 +4600,6 @@ model UGExcisableDuty {
   inputVATOnMaterials   Decimal              @db.Decimal(19, 4)
   outputVATOnFinished   Decimal              @db.Decimal(19, 4)
   netVATPosition        Decimal              @db.Decimal(19, 4)
-  efrisReportingStatus  EFRISReportingStatus @default(PENDING)
-  efrisTransmissionNo   String?
-  efrisReportedAt       DateTime?
-  whtApplies            Boolean              @default(false)
   whtRate               Decimal              @default(0) @db.Decimal(5, 2)
   whtAmount             Decimal              @default(0) @db.Decimal(19, 4)
   exciseDutyAccountId   String?
@@ -4655,7 +4609,6 @@ model UGExcisableDuty {
   assemblyTransaction   AssemblyTransaction  @relation(fields: [assemblyTransactionId], references: [id], onDelete: Cascade)
 
   @@index([assemblyTransactionId])
-  @@index([efrisReportingStatus])
 }
 
 model ManufacturingLaborCost {
@@ -4690,25 +4643,6 @@ model ManufacturingOverhead {
 
   @@index([organizationId])
   @@index([allocationMethod])
-}
-
-model EFRISExcisableList {
-  id             String       @id @default(cuid())
-  organizationId String
-  categoryCode   String
-  categoryName   String
-  description    String?
-  exciseRate     Decimal      @db.Decimal(5, 2)
-  lastSyncedAt   DateTime?
-  effectiveFrom  DateTime
-  effectiveTo    DateTime?
-  isActive       Boolean      @default(true)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@unique([organizationId, categoryCode])
-  @@index([organizationId, isActive])
 }
 
 enum BranchType {
@@ -5755,14 +5689,6 @@ enum AssemblyStatus {
   APPROVED
   POSTED
   REVERSED
-}
-
-enum EFRISReportingStatus {
-  PENDING
-  TRANSMITTED
-  ACCEPTED
-  REJECTED
-  AMENDED
 }
 
 enum LaborCostType {

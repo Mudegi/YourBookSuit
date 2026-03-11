@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import { useOrganization } from '@/hooks/useOrganization';
 import { formatCurrency } from '@/lib/utils';
-import { EfrisStatusBadge, EfrisStatusDetails } from '@/components/efris/EfrisStatus';
 import { toast } from 'sonner';
 
 interface PaymentAllocation {
@@ -40,11 +39,7 @@ interface Invoice {
   terms: string | null;
   reference?: string | null;
   taxCalculationMethod: string;
-  efrisFDN: string | null;
-  efrisVerificationCode: string | null;
-  efrisQRCode: string | null;
-  eInvoiceStatus: string | null;
-  eInvoiceSubmittedAt: string | null;
+
   transaction?: {
     transactionDate: string;
     reference: string;
@@ -105,7 +100,6 @@ export default function InvoiceDetailsPage() {
   const [invoice, setInvoice]                     = useState<Invoice | null>(null);
   const [loading, setLoading]                     = useState(true);
   const [updating, setUpdating]                   = useState(false);
-  const [submittingToEfris, setSubmittingToEfris] = useState(false);
   const { currency } = useOrganization();
 
   useEffect(() => { fetchInvoice(); }, [invoiceId]);
@@ -132,26 +126,6 @@ export default function InvoiceDetailsPage() {
       else alert(data.error || 'Failed to update invoice');
     } catch { alert('Failed to update invoice'); }
     finally { setUpdating(false); }
-  };
-
-  const handleSubmitToEfris = async () => {
-    if (!confirm('Submit this invoice to EFRIS for fiscalization?')) return;
-    setSubmittingToEfris(true);
-    const tid = toast.loading('Submitting invoice to EFRIS...');
-    try {
-      const res  = await fetch(`/api/orgs/${orgSlug}/invoices/${invoiceId}/efris`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-      });
-      const data = await res.json();
-      if (data.success) {
-        toast.success(`Invoice fiscalized! FDN: ${data.fdn}`, { id: tid, duration: 8000 });
-        fetchInvoice();
-      } else {
-        toast.error(`EFRIS failed: ${data.error || 'Unknown error'}`, { id: tid, duration: 10000 });
-      }
-    } catch (e: any) {
-      toast.error(e.name === 'AbortError' ? 'EFRIS request timed out' : 'Failed to submit to EFRIS', { id: tid });
-    } finally { setSubmittingToEfris(false); }
   };
 
   /* ── Loading ── */
@@ -223,27 +197,10 @@ export default function InvoiceDetailsPage() {
               </button>
             </>
           )}
-          {!invoice.efrisFDN && invoice.status !== 'DRAFT' && (
-            <button onClick={handleSubmitToEfris} disabled={submittingToEfris}
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors">
-              <Send className="h-4 w-4" />
-              {submittingToEfris ? 'Submitting…' : 'Submit to EFRIS'}
-            </button>
-          )}
         </div>
       </div>
 
-      {/* ── EFRIS status strip ── */}
-      {invoice.eInvoiceStatus && (
-        <EfrisStatusDetails
-          status={invoice.eInvoiceStatus}
-          fdn={invoice.efrisFDN}
-          verificationCode={invoice.efrisVerificationCode}
-          submittedAt={invoice.eInvoiceSubmittedAt}
-        />
-      )}
-
-      {/* ── Amount summary cards ── */}
+      {/* ── Amount summary cards ── */
       <div className="grid grid-cols-3 gap-4">
         {[
           { label: 'Invoice Total',  value: invoice.total,  color: 'text-gray-900' },
@@ -273,9 +230,6 @@ export default function InvoiceDetailsPage() {
             <span className={`px-3 py-1 text-sm font-semibold rounded-full ring-1 ${st.pill}`}>
               {st.label}
             </span>
-            {invoice.eInvoiceStatus && (
-              <EfrisStatusBadge status={invoice.eInvoiceStatus} />
-            )}
           </div>
         </div>
 

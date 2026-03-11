@@ -13,8 +13,6 @@ export default function NewDebitNotePage() {
   const [loading, setLoading] = useState(false);
   const [customers, setCustomers] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
-  const [efrisEnabled, setEfrisEnabled] = useState(false);
-  const [sendToEfris, setSendToEfris] = useState(false);
   const [formData, setFormData] = useState({
     customerId: '',
     invoiceId: '',
@@ -29,21 +27,8 @@ export default function NewDebitNotePage() {
 
   useEffect(() => { 
     fetchCustomers(); 
-    checkEfrisConfig();
   }, []);
   useEffect(() => { if (formData.customerId) fetchInvoices(); }, [formData.customerId]);
-
-  const checkEfrisConfig = async () => {
-    try {
-      const res = await fetch(`/api/orgs/${orgSlug}/settings/efris`);
-      if (res.ok) {
-        const data = await res.json();
-        setEfrisEnabled(data.config?.isActive === true);
-      }
-    } catch (err) {
-      console.error('Error checking EFRIS config:', err);
-    }
-  };
 
   const fetchCustomers = async () => {
     const res = await fetch(`/api/${orgSlug}/customers`);
@@ -72,7 +57,7 @@ export default function NewDebitNotePage() {
     return '';
   };
 
-  const handleSubmit = async (e: React.FormEvent, shouldSendToEfris = false) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const err = validate(); if (err) { alert(err); return; }
     try {
@@ -91,29 +76,7 @@ export default function NewDebitNotePage() {
       });
       const data = await res.json();
       if (data.success) {
-        const debitNoteId = data.data.id;
-
-        // Submit to EFRIS if requested
-        if (shouldSendToEfris) {
-          try {
-            const efrisRes = await fetch(`/api/${orgSlug}/debit-notes/${debitNoteId}/efris`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-            });
-
-            if (!efrisRes.ok) {
-              const efrisError = await efrisRes.json();
-              alert(`⚠️ Debit Note created but EFRIS submission failed: ${efrisError.error || 'Unknown error'}\n\nYou can submit to EFRIS later from the debit note detail page.`);
-            } else {
-              alert('✅ Debit Note created and submitted to EFRIS successfully!');
-            }
-          } catch (efrisErr) {
-            console.error('EFRIS submission error:', efrisErr);
-            alert('⚠️ Debit Note created but EFRIS submission failed. You can submit to EFRIS later from the debit note detail page.');
-          }
-        }
-
-        router.push(`/${orgSlug}/debit-notes/${debitNoteId}`);
+        router.push(`/${orgSlug}/debit-notes/${data.data.id}`);
       }
       else alert('Error: ' + data.error);
     } catch (err) { console.error(err); alert('Failed to create debit note'); }
@@ -206,19 +169,6 @@ export default function NewDebitNotePage() {
           <button type="submit" disabled={loading} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 flex items-center gap-2">
             <Save className="w-4 h-4" /> {loading ? 'Saving...' : 'Create Debit Note'}
           </button>
-          {efrisEnabled && (
-            <button 
-              type="button" 
-              onClick={(e: any) => {
-                setSendToEfris(true);
-                handleSubmit(e, true);
-              }}
-              disabled={loading} 
-              className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 flex items-center gap-2"
-            >
-              <Save className="w-4 h-4" /> {loading ? 'Saving...' : 'Save and Send to EFRIS'}
-            </button>
-          )}
         </div>
       </form>
     </div>

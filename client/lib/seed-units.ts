@@ -5,7 +5,7 @@
  */
 import prisma from '@/lib/prisma';
 
-const officialEfrisUnits = [
+const standardUnits = [
   { code: '101', name: 'Box', abbreviation: 'Bx', category: 'packaging' },
   { code: '102', name: 'Piece', abbreviation: 'Pc', category: 'quantity' },
   { code: '103', name: 'Kilogram', abbreviation: 'kg', category: 'weight' },
@@ -28,19 +28,9 @@ const officialEfrisUnits = [
   { code: '120', name: 'Bottle', abbreviation: 'Bt', category: 'packaging' },
 ];
 
-// Dynamically load the comprehensive 528+ unit list from the JS seed file
-let comprehensiveUnits: Array<{ code: string; name: string; abbreviation: string; category: string }> = [];
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { efrisUnits } = require('../../scripts/seed-efris-units');
-  comprehensiveUnits = efrisUnits;
-} catch {
-  console.warn('[seedUnits] Could not load comprehensive units from seed-efris-units.js');
-}
-
 export async function seedUnitsForOrganization(organizationId: string): Promise<void> {
   try {
-    const allUnits = [...officialEfrisUnits, ...comprehensiveUnits];
+    const allUnits = standardUnits;
 
     const BATCH_SIZE = 50;
     for (let i = 0; i < allUnits.length; i += BATCH_SIZE) {
