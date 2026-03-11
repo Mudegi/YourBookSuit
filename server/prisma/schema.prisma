@@ -372,6 +372,7 @@ model User {
   avatar                     String?
   isActive                   Boolean                 @default(true)
   emailVerified              Boolean                 @default(false)
+  preferences                Json?                   // {theme, fontFamily, density}
   lastLoginAt                DateTime?
   createdAt                  DateTime                @default(now())
   updatedAt                  DateTime                @updatedAt

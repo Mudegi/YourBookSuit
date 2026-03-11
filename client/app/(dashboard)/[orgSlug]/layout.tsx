@@ -46,6 +46,7 @@ import {
 import { getBusinessModelProfile, isFeatureEnabledForBusiness, type BusinessModel } from '@/lib/business-models';
 import { fetchWithAuth } from '@/lib/fetch-client';
 import BranchSwitcher from '@/components/branch-switcher';
+import { ThemeProvider, useTheme } from '@/hooks/useTheme';
 
 interface User {
   id: string;
@@ -72,6 +73,18 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  return (
+    <ThemeProvider>
+      <DashboardLayoutInner>{children}</DashboardLayoutInner>
+    </ThemeProvider>
+  );
+}
+
+function DashboardLayoutInner({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const params = useParams();
   const pathname = usePathname();
   const router = useRouter();
@@ -86,28 +99,11 @@ export default function DashboardLayout({
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    if (typeof window !== 'undefined') {
-      return (localStorage.getItem('theme') as 'light' | 'dark') || 'light';
-    }
-    return 'light';
-  });
-  const [fontFamily, setFontFamily] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('app-font') || "'Inter', sans-serif";
-    }
-    return "'Inter', sans-serif";
-  });
+  const { theme, setTheme, fontFamily, setFontFamily, density, setDensity } = useTheme();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
-  const [density, setDensity] = useState<'comfortable' | 'compact' | 'cozy'>(() => {
-    if (typeof window !== 'undefined') {
-      return (localStorage.getItem('app-density') as any) || 'comfortable';
-    }
-    return 'comfortable';
-  });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('sidebar-collapsed') === 'true';
@@ -211,25 +207,6 @@ export default function DashboardLayout({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [orgSlug, router, shortcutsOpen]);
 
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark');
-    document.documentElement.style.backgroundColor = theme === 'dark' ? '#0f172a' : '#ffffff';
-    localStorage.setItem('theme', theme);
-  }, [theme]);
-
-  useEffect(() => {
-    document.documentElement.style.setProperty('--app-font', fontFamily);
-    localStorage.setItem('app-font', fontFamily);
-  }, [fontFamily]);
-
-
-
-  // Density: apply CSS class to html element
-  useEffect(() => {
-    document.documentElement.setAttribute('data-density', density);
-    localStorage.setItem('app-density', density);
-  }, [density]);
-
   // Sidebar collapse: persist
   useEffect(() => {
     localStorage.setItem('sidebar-collapsed', String(sidebarCollapsed));
@@ -242,7 +219,15 @@ export default function DashboardLayout({
         const data = await response.json();
         setUser(data.data.user);
         setOrganization(data.data.organization);
-        
+
+        // Hydrate theme preferences from server if present
+        const prefs = data.data.user?.preferences as Record<string, string> | undefined;
+        if (prefs) {
+          if (prefs.theme && prefs.theme !== theme) setTheme(prefs.theme as 'light' | 'dark');
+          if (prefs.fontFamily && prefs.fontFamily !== fontFamily) setFontFamily(prefs.fontFamily);
+          if (prefs.density && prefs.density !== density) setDensity(prefs.density as any);
+        }
+
         // If onboarding not completed, redirect and keep loading state
         // so the dashboard UI never flashes
         if (data.data.organization && !data.data.organization.onboardingCompleted) {

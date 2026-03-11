@@ -391,6 +391,7 @@ model User {
   isActive                   Boolean                 @default(true)
   emailVerified              Boolean                 @default(false)
   isSystemAdmin              Boolean                 @default(false) // Platform-level admin (system owner)
+  preferences                Json?                   // {theme, fontFamily, density}
   lastLoginAt                DateTime?
   createdAt                  DateTime                @default(now())
   updatedAt                  DateTime                @updatedAt

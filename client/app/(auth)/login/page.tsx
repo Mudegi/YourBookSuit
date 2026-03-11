@@ -38,6 +38,15 @@ function LoginForm() {
       // Check if user is a system admin — redirect to admin panel
       const sessionRes = await fetch('/api/auth/session');
       const sessionData = await sessionRes.json();
+
+      // Apply saved preferences to localStorage so theme loads instantly
+      const prefs = sessionData?.data?.user?.preferences;
+      if (prefs && typeof prefs === 'object') {
+        if (prefs.theme) localStorage.setItem('theme', prefs.theme);
+        if (prefs.fontFamily) localStorage.setItem('app-font', prefs.fontFamily);
+        if (prefs.density) localStorage.setItem('app-density', prefs.density);
+      }
+
       if (sessionData?.data?.user?.isSystemAdmin) {
         router.push('/system-admin');
         return;
