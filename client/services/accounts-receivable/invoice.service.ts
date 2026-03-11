@@ -46,6 +46,7 @@ export interface CreateInvoiceInput {
   exchangeRate?: number;
   taxCalculationMethod?: 'EXCLUSIVE' | 'INCLUSIVE';
   items: InvoiceItemInput[];
+  revenueAccountId?: string;
   reference?: string;
   notes?: string;
   terms?: string;
@@ -101,7 +102,7 @@ export class InvoiceService {
     const invoiceNumber = await this.generateInvoiceNumber(input.organizationId, input.branchId);
 
     // Get account mappings from organization settings
-    const accountMappings = await this.getAccountMappings(input.organizationId);
+    const accountMappings = await this.getAccountMappings(input.organizationId, input.revenueAccountId);
 
     // Auto-fetch exchange rate if foreign currency and no rate provided
     const organization = await prisma.organization.findUnique({
@@ -581,7 +582,7 @@ export class InvoiceService {
    * Get account mappings for GL posting
    * In a real system, these would be configured per organization
    */
-  private static async getAccountMappings(organizationId: string) {
+  private static async getAccountMappings(organizationId: string, revenueAccountIdOverride?: string) {
     const accounts = await prisma.chartOfAccount.findMany({
       where: {
         organizationId,
@@ -593,19 +594,27 @@ export class InvoiceService {
     const accountsReceivable = accounts.find(a => a.code === '1200' && a.accountType === 'ASSET')
       || accounts.find(a => a.accountType === 'ASSET' && a.name.toLowerCase().includes('receivable'));
 
-    // Sales Revenue: code 4000 (preferred) or any revenue account
-    const salesRevenue = accounts.find(a => a.code === '4000' && a.accountType === 'REVENUE')
-      || accounts.find(a => a.accountType === 'REVENUE');
+    // Sales Revenue: use override if provided, else code 4000 (preferred) or any revenue account
+    let salesRevenue;
+    if (revenueAccountIdOverride) {
+      salesRevenue = accounts.find(a => a.id === revenueAccountIdOverride && a.accountType === 'REVENUE');
+    }
+    if (!salesRevenue) {
+      salesRevenue = accounts.find(a => a.code === '4000' && a.accountType === 'REVENUE')
+        || accounts.find(a => a.accountType === 'REVENUE');
+    }
 
     // Tax Payable: code 2100 (preferred) or any liability with 'tax' or 'vat'
     const taxPayable = accounts.find(a => a.code === '2100' && a.accountType === 'LIABILITY')
       || accounts.find(a => a.accountType === 'LIABILITY' && (a.name.toLowerCase().includes('tax') || a.name.toLowerCase().includes('vat')));
 
+    // WHT Receivable: code 1310 or name containing 'withholding'
+    // Note: code 1300 is excluded because it's typically Inventory Asset
     const withholdingReceivable = accounts.find((a) => {
       const lowerName = a.name?.toLowerCase() || '';
       return (
         a.accountType === 'ASSET' &&
-        (a.code === '1300' || a.code === '1310' || lowerName.includes('withholding'))
+        (a.code === '1310' || lowerName.includes('withholding'))
       );
     });
 

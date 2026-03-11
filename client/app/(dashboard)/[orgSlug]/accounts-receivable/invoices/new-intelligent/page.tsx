@@ -116,6 +116,8 @@ export default function IntelligentInvoicePage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [taxRates, setTaxRates] = useState<TaxRate[]>([]);
+  const [currencies, setCurrencies] = useState<{ code: string; name: string; symbol: string; isBase: boolean }[]>([]);
+  const [revenueAccounts, setRevenueAccounts] = useState<{ id: string; code: string; name: string }[]>([]);
   const [resolvedWarehouseId, setResolvedWarehouseId] = useState<string | null>(null);
   
   // Form state
@@ -123,7 +125,9 @@ export default function IntelligentInvoicePage() {
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [dueDate, setDueDate] = useState('');
   const [currency, setCurrency] = useState(baseCurrency);
+  const [exchangeRate, setExchangeRate] = useState<number>(1);
   const [taxCalculationMethod, setTaxCalculationMethod] = useState<'EXCLUSIVE' | 'INCLUSIVE'>('EXCLUSIVE');
+  const [revenueAccountId, setRevenueAccountId] = useState<string>('');
   const [reference, setReference] = useState('');
 
   const [notes, setNotes] = useState('');
@@ -235,9 +239,91 @@ export default function IntelligentInvoicePage() {
     fetchProducts();
     fetchServices();
     fetchTaxRates();
+    fetchCurrencies();
+    fetchRevenueAccounts();
     resolveDefaultWarehouse();
     checkEfrisConfig();
   }, [orgSlug]);
+
+  const fetchCurrencies = async () => {
+    try {
+      const res = await fetch(`/api/${orgSlug}/currencies`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.data) {
+          setCurrencies(data.data);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching currencies:', err);
+    }
+  };
+
+  const fetchRevenueAccounts = async () => {
+    try {
+      const res = await fetch(`/api/orgs/${orgSlug}/chart-of-accounts?type=REVENUE`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.data) {
+          setRevenueAccounts(data.data.map((a: any) => ({ id: a.id, code: a.code, name: a.name })));
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching revenue accounts:', err);
+    }
+  };
+
+  const fetchExchangeRate = async (fromCurrency: string) => {
+    if (!baseCurrency || fromCurrency === baseCurrency) {
+      setExchangeRate(1);
+      return;
+    }
+    try {
+      // 1. Try org's stored exchange rates first
+      let found = false;
+      const res = await fetch(`/api/${orgSlug}/exchange-rates?date=${invoiceDate || new Date().toISOString().split('T')[0]}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.data) {
+          const rate = data.data.find(
+            (r: any) => r.fromCurrencyCode === fromCurrency && r.toCurrencyCode === baseCurrency
+          ) || data.data.find(
+            (r: any) => r.fromCurrencyCode === baseCurrency && r.toCurrencyCode === fromCurrency
+          );
+          if (rate) {
+            const rateValue = rate.fromCurrencyCode === fromCurrency
+              ? Number(rate.rate)
+              : 1 / Number(rate.rate);
+            setExchangeRate(rateValue);
+            found = true;
+          }
+        }
+      }
+
+      // 2. Fallback: fetch live rate from free API
+      if (!found) {
+        const liveRes = await fetch(`https://open.er-api.com/v6/latest/${fromCurrency}`);
+        if (liveRes.ok) {
+          const liveData = await liveRes.json();
+          if (liveData.result === 'success' && liveData.rates?.[baseCurrency]) {
+            setExchangeRate(Number(liveData.rates[baseCurrency]));
+            return;
+          }
+        }
+        // 3. Try reverse lookup (base -> foreign)
+        const reverseRes = await fetch(`https://open.er-api.com/v6/latest/${baseCurrency}`);
+        if (reverseRes.ok) {
+          const reverseData = await reverseRes.json();
+          if (reverseData.result === 'success' && reverseData.rates?.[fromCurrency]) {
+            setExchangeRate(Number((1 / reverseData.rates[fromCurrency]).toFixed(6)));
+            return;
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching exchange rate:', err);
+    }
+  };
 
   const checkEfrisConfig = async () => {
     try {
@@ -265,6 +351,7 @@ export default function IntelligentInvoicePage() {
     // Update currency when baseCurrency loads
     if (baseCurrency && !selectedCustomer) {
       setCurrency(baseCurrency);
+      setExchangeRate(1);
     }
   }, [baseCurrency]);
 
@@ -272,9 +359,11 @@ export default function IntelligentInvoicePage() {
     // Set currency from customer if available
     if (selectedCustomer?.currency) {
       setCurrency(selectedCustomer.currency);
+      fetchExchangeRate(selectedCustomer.currency);
     } else if (baseCurrency) {
       // Reset to base currency if customer is cleared
       setCurrency(baseCurrency);
+      setExchangeRate(1);
     }
   }, [selectedCustomer, baseCurrency]);
 
@@ -1020,8 +1109,10 @@ export default function IntelligentInvoicePage() {
           invoiceDate,
           dueDate,
           currency,
+          exchangeRate: currency !== baseCurrency ? exchangeRate : 1,
           branchId: branchId || undefined,
           taxCalculationMethod,
+          revenueAccountId: revenueAccountId || undefined,
           reference,
           notes,
           attachments: attachmentUrls,
@@ -1422,13 +1513,68 @@ export default function IntelligentInvoicePage() {
                     <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
                       Currency
                     </label>
-                    <input
-                      type="text"
-                      value={currency}
-                      onChange={(e) => setCurrency(e.target.value.toUpperCase())}
-                      maxLength={3}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
-                    />
+                    {currencies.length > 0 ? (
+                      <select
+                        value={currency}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setCurrency(val);
+                          fetchExchangeRate(val);
+                        }}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                      >
+                        {currencies.map((c) => (
+                          <option key={c.code} value={c.code}>
+                            {c.code} — {c.name} ({c.symbol})
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={currency}
+                        onChange={(e) => setCurrency(e.target.value.toUpperCase())}
+                        maxLength={3}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase"
+                      />
+                    )}
+                  </div>
+                  {currency && baseCurrency && currency !== baseCurrency && (
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                        Exchange Rate
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          value={exchangeRate}
+                          onChange={(e) => setExchangeRate(parseFloat(e.target.value) || 1)}
+                          min="0.000001"
+                          step="0.0001"
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-1">
+                        1 {currency} = {exchangeRate} {baseCurrency} (live rate — editable)
+                      </p>
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                      Revenue Account
+                    </label>
+                    <select
+                      value={revenueAccountId}
+                      onChange={(e) => setRevenueAccountId(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                    >
+                      <option value="">Default — Sales Revenue (4000)</option>
+                      {revenueAccounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.code} — {a.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               </div>
@@ -1828,6 +1974,11 @@ export default function IntelligentInvoicePage() {
                         <span className="text-2xl font-bold text-gray-900 tabular-nums">{formatCurrency(total, currency)}</span>
                       </div>
                       <p className="text-[10px] text-gray-400 text-right mt-0.5 uppercase">{currency}</p>
+                      {currency !== baseCurrency && exchangeRate !== 1 && (
+                        <p className="text-[10px] text-gray-400 text-right mt-1">
+                          ≈ {formatCurrency(total * exchangeRate, baseCurrency)} {baseCurrency}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>

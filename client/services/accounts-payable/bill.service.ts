@@ -186,8 +186,15 @@ export class BillService {
     const isOpeningStock = data.stockInType === '104';
 
     // 1. DR: Inventory Asset (for inventory items) OR Expense Account (for non-inventory items)
+    // When VAT is non-claimable (or opening stock), include tax in the cost to keep entries balanced
     for (const item of data.items) {
       const lineNetAmount = item.quantity * item.unitPrice;
+      const itemTax = item.taxAmount || 0;
+
+      // Non-claimable VAT gets absorbed into inventory/expense cost
+      // Opening stock never has claimable VAT
+      const isVatClaimable = !isOpeningStock && item.claimInputTax !== false;
+      const debitAmount = isVatClaimable ? lineNetAmount : lineNetAmount + itemTax;
       
       // Determine which account to debit
       let accountToDebit: string;
@@ -212,7 +219,7 @@ export class BillService {
       ledgerEntries.push({
         accountId: accountToDebit,
         entryType: EntryType.DEBIT,
-        amount: lineNetAmount,
+        amount: debitAmount,
         description: item.description,
         currency: organization.baseCurrency,
       });

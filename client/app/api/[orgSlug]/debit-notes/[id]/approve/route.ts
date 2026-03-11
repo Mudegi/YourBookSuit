@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
+import { DoubleEntryService } from '@/services/accounting/double-entry.service';
+import { EntryType, TransactionType } from '@prisma/client';
 
 // POST /api/[orgSlug]/debit-notes/[id]/approve - Approve debit note
 export async function POST(
@@ -62,60 +64,71 @@ export async function POST(
 
     // Auto-post to GL if requested
     if (autoPost) {
-      const lastTransaction = await prisma.transaction.findFirst({
-        where: { organizationId: org.id },
-        orderBy: { transactionNumber: 'desc' },
+      // Look up required GL accounts
+      const arAccount = await prisma.chartOfAccount.findFirst({
+        where: { organizationId: org.id, code: { startsWith: '1200' }, accountType: 'ASSET', isActive: true },
+        orderBy: { code: 'asc' },
+      });
+      const revenueAccount = await prisma.chartOfAccount.findFirst({
+        where: { organizationId: org.id, code: { startsWith: '4' }, accountType: 'REVENUE', isActive: true },
+        orderBy: { code: 'asc' },
+      });
+      const taxAccount = await prisma.chartOfAccount.findFirst({
+        where: { organizationId: org.id, code: { startsWith: '2100' }, accountType: 'LIABILITY', isActive: true },
+        orderBy: { code: 'asc' },
       });
 
-      const lastNumber = lastTransaction
-        ? parseInt(lastTransaction.transactionNumber.split('-').pop() || '0')
-        : 0;
-      const transactionNumber = `TXN-${new Date().getFullYear()}-${String(lastNumber + 1).padStart(6, '0')}`;
+      if (!arAccount || !revenueAccount) {
+        return NextResponse.json(
+          { success: false, error: 'Required GL accounts (AR, Revenue) not found. Please configure Chart of Accounts.' },
+          { status: 400 }
+        );
+      }
 
-      const transaction = await prisma.transaction.create({
-        data: {
-          organizationId: org.id,
-          transactionNumber,
-          transactionDate: debitNote.debitDate,
-          transactionType: 'JOURNAL_ENTRY',
-          referenceType: 'DebitNote',
-          referenceId: debitNote.id,
-          description: `Debit Note ${debitNote.debitNoteNumber} - ${debitNote.description}`,
-          status: 'POSTED',
-          createdById: user.id,
-          ledgerEntries: {
-            create: [
-              // Debit: Accounts Receivable (increase customer balance)
-              {
-                accountId: '', // TODO: Get AR account
-                description: `${debitNote.customer.firstName} ${debitNote.customer.lastName}`,
-                debitAmount: debitNote.totalAmount,
-                creditAmount: 0,
-                entryType: 'DEBIT',
-              },
-              // Credit: Revenue/Other Income (record additional income)
-              ...debitNote.lineItems.map((item: any) => ({
-                accountId: item.accountId || '',
-                description: item.description,
-                debitAmount: 0,
-                creditAmount: item.subtotal,
-                entryType: 'CREDIT' as const,
-              })),
-              // Credit: Tax Liability (record tax owed)
-              ...(debitNote.taxAmount > 0
-                ? [
-                    {
-                      accountId: '', // TODO: Get tax liability account
-                      description: 'Tax on debit note',
-                      debitAmount: 0,
-                      creditAmount: debitNote.taxAmount,
-                      entryType: 'CREDIT' as const,
-                    },
-                  ]
-                : []),
-            ],
-          },
-        },
+      // Debit Note increases customer balance (additional charge):
+      // DR: Accounts Receivable (increase customer balance)
+      // CR: Revenue (record additional income)
+      // CR: Tax Liability (record tax owed) - if applicable
+      const entries: Array<{ accountId: string; entryType: EntryType; amount: number; description: string }> = [];
+
+      // DR Accounts Receivable
+      entries.push({
+        accountId: arAccount.id,
+        entryType: EntryType.DEBIT,
+        amount: Number(debitNote.totalAmount),
+        description: `Debit Note ${debitNote.debitNoteNumber} - ${debitNote.customer.firstName} ${debitNote.customer.lastName}`,
+      });
+
+      // CR Revenue for the subtotal
+      const subtotal = debitNote.lineItems.reduce((sum: number, item: any) => sum + Number(item.subtotal || 0), 0);
+      if (subtotal > 0) {
+        entries.push({
+          accountId: revenueAccount.id,
+          entryType: EntryType.CREDIT,
+          amount: subtotal,
+          description: `Debit Note ${debitNote.debitNoteNumber} - Additional income`,
+        });
+      }
+
+      // CR Tax Liability if applicable
+      if (Number(debitNote.taxAmount) > 0 && taxAccount) {
+        entries.push({
+          accountId: taxAccount.id,
+          entryType: EntryType.CREDIT,
+          amount: Number(debitNote.taxAmount),
+          description: `Debit Note ${debitNote.debitNoteNumber} - Tax`,
+        });
+      }
+
+      const transaction = await DoubleEntryService.createTransaction({
+        organizationId: org.id,
+        transactionDate: debitNote.debitDate,
+        transactionType: TransactionType.JOURNAL_ENTRY,
+        description: `Debit Note ${debitNote.debitNoteNumber} - ${debitNote.description || ''}`,
+        referenceType: 'DebitNote',
+        referenceId: debitNote.id,
+        createdById: user.id,
+        entries,
       });
 
       await prisma.debitNote.update({

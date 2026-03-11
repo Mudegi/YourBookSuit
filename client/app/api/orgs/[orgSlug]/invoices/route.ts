@@ -236,6 +236,7 @@ export async function POST(
       currency: body.currency,
       exchangeRate: body.exchangeRate,
       taxCalculationMethod: body.taxCalculationMethod || 'EXCLUSIVE',
+      revenueAccountId: body.revenueAccountId || undefined,
       reference: body.reference,
       notes: body.notes,
       items: mappedItems,

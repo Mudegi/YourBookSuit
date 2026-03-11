@@ -162,6 +162,8 @@ export async function GET(
       subtotalAmount: Number(b.subtotal),
       taxAmount: Number(b.taxAmount),
       totalAmount: Number(b.total),
+      amountPaid: Number(b.amountPaid || 0),
+      amountDue: Number(b.amountDue || b.total),
       status: mapStatusToUi(b.status),
       vendor: { id: b.vendor.id, name: b.vendor.companyName },
       _count: b._count,

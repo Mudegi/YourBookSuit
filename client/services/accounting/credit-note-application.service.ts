@@ -13,6 +13,8 @@
 
 import prisma from '@/lib/prisma';
 import { Decimal } from 'decimal.js';
+import { DoubleEntryService } from './double-entry.service';
+import { EntryType, TransactionType } from '@prisma/client';
 
 export interface ApplyCreditNoteInput {
   creditNoteId: string;
@@ -268,20 +270,20 @@ export class CreditNoteApplicationService {
 
         if (!warehouseId) continue;
 
-        // Get current inventory balance
-        const inventory = await prisma.inventoryBalance.findUnique({
+        // Get current warehouse stock level
+        const warehouseStock = await prisma.warehouseStockLevel.findUnique({
           where: {
-            productId_warehouseId: {
+            warehouseId_productId: {
               productId: item.productId!,
               warehouseId,
             },
           },
         });
 
-        if (inventory) {
+        if (warehouseStock) {
           // Increase quantity on hand
-          await prisma.inventoryBalance.update({
-            where: { id: inventory.id },
+          await prisma.warehouseStockLevel.update({
+            where: { id: warehouseStock.id },
             data: {
               quantityOnHand: {
                 increment: Number(item.quantity),
@@ -289,23 +291,23 @@ export class CreditNoteApplicationService {
               quantityAvailable: {
                 increment: Number(item.quantity),
               },
+              lastMovementDate: new Date(),
             },
           });
 
-          // Create inventory transaction
-          await prisma.inventoryTransaction.create({
+          // Create stock movement record
+          await prisma.stockMovement.create({
             data: {
-              organizationId: creditNote.organizationId,
               productId: item.productId!,
-              warehouseId,
-              transactionType: 'STOCK_RETURN',
+              movementType: 'RETURN',
               quantity: Number(item.quantity),
               unitCost: Number(item.unitPrice),
               totalCost: Number(item.subtotal),
+              warehouseId,
               referenceType: 'CREDIT_NOTE',
               referenceId: creditNote.id,
               referenceNumber: creditNote.creditNoteNumber,
-              transactionDate: new Date(),
+              movementDate: new Date(),
               notes: `Return from Credit Note ${creditNote.creditNoteNumber}`,
             },
           });
@@ -321,6 +323,8 @@ export class CreditNoteApplicationService {
 
   /**
    * Generate GL Entry for credit note application
+   * DR: Accounts Receivable (reducing liability to customer)
+   * CR: Sales Returns / Revenue (reducing income)
    */
   private static async generateGLEntry(
     creditNote: any,
@@ -329,37 +333,67 @@ export class CreditNoteApplicationService {
     try {
       const totalAmount = applications.reduce((sum, app) => sum + app.amount, 0);
 
-      // Create GL transaction
-      const transaction = await prisma.transaction.create({
-        data: {
+      // Look up required GL accounts
+      const arAccount = await prisma.chartOfAccount.findFirst({
+        where: {
           organizationId: creditNote.organizationId,
-          transactionDate: new Date(),
-          reference: `Credit Note Application - ${creditNote.creditNoteNumber}`,
-          description: `Application of Credit Note ${creditNote.creditNoteNumber}`,
-          transactionType: 'CREDIT_NOTE_APPLICATION',
-          currency: creditNote.organization.baseCurrency,
-          exchangeRate: 1,
-          status: 'POSTED',
-          isReversed: false,
-          journalEntries: {
-            create: [
-              // Debit: Accounts Receivable (reducing liability to customer)
-              {
-                accountId: creditNote.organization.arAccountId || '',
-                debit: totalAmount,
-                credit: 0,
-                description: `Credit Note Application - ${creditNote.creditNoteNumber}`,
-              },
-              // Credit: Sales Returns (reducing income)
-              {
-                accountId: '', // Should be configured sales returns account
-                debit: 0,
-                credit: totalAmount,
-                description: `Credit Note Application - ${creditNote.creditNoteNumber}`,
-              },
-            ],
-          },
+          code: { startsWith: '1200' },
+          accountType: 'ASSET',
+          isActive: true,
         },
+        orderBy: { code: 'asc' },
+      });
+
+      // Sales Returns account — try specific "Sales Returns" first, fall back to any Revenue account
+      let salesReturnsAccount = await prisma.chartOfAccount.findFirst({
+        where: {
+          organizationId: creditNote.organizationId,
+          isActive: true,
+          OR: [
+            { name: { contains: 'Sales Returns' } },
+            { name: { contains: 'Sales Return' } },
+          ],
+        },
+      });
+      if (!salesReturnsAccount) {
+        salesReturnsAccount = await prisma.chartOfAccount.findFirst({
+          where: {
+            organizationId: creditNote.organizationId,
+            code: { startsWith: '4' },
+            accountType: 'REVENUE',
+            isActive: true,
+          },
+          orderBy: { code: 'asc' },
+        });
+      }
+
+      if (!arAccount || !salesReturnsAccount) {
+        console.error('Cannot post credit note application GL: AR or Revenue account not found');
+        return undefined;
+      }
+
+      const transaction = await DoubleEntryService.createTransaction({
+        organizationId: creditNote.organizationId,
+        transactionDate: new Date(),
+        transactionType: TransactionType.JOURNAL_ENTRY,
+        description: `Application of Credit Note ${creditNote.creditNoteNumber}`,
+        referenceType: 'CreditNoteApplication',
+        referenceId: creditNote.id,
+        createdById: creditNote.organization?.createdById || 'system',
+        entries: [
+          {
+            accountId: arAccount.id,
+            entryType: EntryType.DEBIT,
+            amount: totalAmount,
+            description: `Credit Note Application - ${creditNote.creditNoteNumber}`,
+          },
+          {
+            accountId: salesReturnsAccount.id,
+            entryType: EntryType.CREDIT,
+            amount: totalAmount,
+            description: `Credit Note Application - ${creditNote.creditNoteNumber}`,
+          },
+        ],
       });
 
       return transaction.id;

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/auth';
+import { DoubleEntryService } from '@/services/accounting/double-entry.service';
+import { EntryType, TransactionType } from '@prisma/client';
 
 // POST /api/[orgSlug]/credit-notes/[id]/approve - Approve credit note
 export async function POST(
@@ -64,62 +66,71 @@ export async function POST(
 
     // Auto-post to GL if requested
     if (autoPost) {
-      // Create GL transaction
-      const lastTransaction = await prisma.transaction.findFirst({
-        where: { organizationId: org.id },
-        orderBy: { transactionNumber: 'desc' },
+      // Look up required GL accounts
+      const arAccount = await prisma.chartOfAccount.findFirst({
+        where: { organizationId: org.id, code: { startsWith: '1200' }, accountType: 'ASSET', isActive: true },
+        orderBy: { code: 'asc' },
+      });
+      const revenueAccount = await prisma.chartOfAccount.findFirst({
+        where: { organizationId: org.id, code: { startsWith: '4' }, accountType: 'REVENUE', isActive: true },
+        orderBy: { code: 'asc' },
+      });
+      const taxAccount = await prisma.chartOfAccount.findFirst({
+        where: { organizationId: org.id, code: { startsWith: '2100' }, accountType: 'LIABILITY', isActive: true },
+        orderBy: { code: 'asc' },
       });
 
-      const lastNumber = lastTransaction
-        ? parseInt(lastTransaction.transactionNumber.split('-').pop() || '0')
-        : 0;
-      const transactionNumber = `TXN-${new Date().getFullYear()}-${String(lastNumber + 1).padStart(6, '0')}`;
+      if (!arAccount || !revenueAccount) {
+        return NextResponse.json(
+          { success: false, error: 'Required GL accounts (AR, Revenue) not found. Please configure Chart of Accounts.' },
+          { status: 400 }
+        );
+      }
 
-      // Create transaction with ledger entries
-      const transaction = await prisma.transaction.create({
-        data: {
-          organizationId: org.id,
-          transactionNumber,
-          transactionDate: creditNote.creditDate,
-          transactionType: 'JOURNAL_ENTRY',
-          referenceType: 'CreditNote',
-          referenceId: creditNote.id,
-          description: `Credit Note ${creditNote.creditNoteNumber} - ${creditNote.description}`,
-          status: 'POSTED',
-          createdById: user.id,
-          ledgerEntries: {
-            create: [
-              // Debit: Sales Revenue (reduce revenue)
-              ...creditNote.lineItems.map((item: any) => ({
-                accountId: item.accountId || '', // Revenue account
-                description: item.description,
-                debitAmount: item.subtotal,
-                creditAmount: 0,
-                entryType: 'DEBIT',
-              })),
-              // Debit: Tax Liability (reduce tax owed)
-              ...(creditNote.taxAmount > 0
-                ? [
-                    {
-                      accountId: '', // TODO: Get tax liability account
-                      description: 'Tax on credit note',
-                      debitAmount: creditNote.taxAmount,
-                      creditAmount: 0,
-                      entryType: 'DEBIT' as const,
-                    },
-                  ]
-                : []),
-              // Credit: Accounts Receivable (reduce customer balance)
-              {
-                accountId: '', // TODO: Get AR account
-                description: `${creditNote.customer.firstName} ${creditNote.customer.lastName}`,
-                debitAmount: 0,
-                creditAmount: creditNote.totalAmount,
-                entryType: 'CREDIT' as const,
-              },
-            ],
-          },
-        },
+      // Credit Note reverses the original invoice:
+      // DR: Sales Revenue (reduce revenue)
+      // DR: Tax Liability (reduce tax owed) - if applicable
+      // CR: Accounts Receivable (reduce customer balance)
+      const entries: Array<{ accountId: string; entryType: EntryType; amount: number; description: string }> = [];
+
+      // DR Revenue for each line item
+      const subtotal = creditNote.lineItems.reduce((sum: number, item: any) => sum + Number(item.subtotal || 0), 0);
+      if (subtotal > 0) {
+        entries.push({
+          accountId: revenueAccount.id,
+          entryType: EntryType.DEBIT,
+          amount: subtotal,
+          description: `Credit Note ${creditNote.creditNoteNumber} - Revenue reversal`,
+        });
+      }
+
+      // DR Tax Liability if applicable
+      if (Number(creditNote.taxAmount) > 0 && taxAccount) {
+        entries.push({
+          accountId: taxAccount.id,
+          entryType: EntryType.DEBIT,
+          amount: Number(creditNote.taxAmount),
+          description: `Credit Note ${creditNote.creditNoteNumber} - Tax reversal`,
+        });
+      }
+
+      // CR Accounts Receivable
+      entries.push({
+        accountId: arAccount.id,
+        entryType: EntryType.CREDIT,
+        amount: Number(creditNote.totalAmount),
+        description: `Credit Note ${creditNote.creditNoteNumber} - ${creditNote.customer.firstName} ${creditNote.customer.lastName}`,
+      });
+
+      const transaction = await DoubleEntryService.createTransaction({
+        organizationId: org.id,
+        transactionDate: creditNote.creditDate,
+        transactionType: TransactionType.JOURNAL_ENTRY,
+        description: `Credit Note ${creditNote.creditNoteNumber} - ${creditNote.description || ''}`,
+        referenceType: 'CreditNote',
+        referenceId: creditNote.id,
+        createdById: user.id,
+        entries,
       });
 
       // Link transaction to credit note

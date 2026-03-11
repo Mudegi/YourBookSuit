@@ -130,7 +130,9 @@ export default function VendorPaymentPage() {
 
       const billsWithAmounts = allBills.map((bill: any) => {
         const totalAmount = Number(bill.totalAmount || 0);
-        return { ...bill, totalAmount, amountPaid: 0, amountDue: totalAmount };
+        const amountPaid = Number(bill.amountPaid || 0);
+        const amountDue = Number(bill.amountDue || totalAmount - amountPaid);
+        return { ...bill, totalAmount, amountPaid, amountDue };
       });
 
       const unpaid = billsWithAmounts.filter(
