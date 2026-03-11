@@ -200,7 +200,7 @@ export default function InvoiceDetailsPage() {
         </div>
       </div>
 
-      {/* ── Amount summary cards ── */
+      {/* ── Amount summary cards ── */}
       <div className="grid grid-cols-3 gap-4">
         {[
           { label: 'Invoice Total',  value: invoice.total,  color: 'text-gray-900' },
